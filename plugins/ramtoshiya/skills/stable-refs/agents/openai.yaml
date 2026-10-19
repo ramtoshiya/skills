@@ -1,0 +1,4 @@
+interface:
+  display_name: "Stable References"
+  short_description: "Keep identifiers and references stable through change"
+  default_prompt: "Use $stable-refs to keep this document's cross-references — or this plan's task ids — stable through renames, reordering and re-planning."

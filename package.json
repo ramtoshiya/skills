@@ -1,0 +1,20 @@
+{
+  "name": "ramtoshiya-agent-pack",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Personal skills, a package and Python guard, and a Git hygiene stop check for Pi, Claude Code, and Codex",
+  "keywords": ["pi-package"],
+  "files": ["plugins/ramtoshiya/", "docs/agent-pack.md", "docs/hooks.md"],
+  "pi": {
+    "extensions": ["./plugins/ramtoshiya/hooks/pi.ts"],
+    "skills": ["./plugins/ramtoshiya/skills"],
+    "prompts": [],
+    "themes": []
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs && uv run --no-project --managed-python --python '>=3.11' python -m unittest discover -s test -p 'test_*.py'"
+  },
+  "engines": { "node": ">=22.19.0" },
+  "peerDependencies": { "@earendil-works/pi-coding-agent": "*" }
+}

@@ -1,0 +1,5 @@
+interface:
+  display_name: "Reorganize Commits"
+  short_description: "Reshape branch history into reviewable commits"
+policy:
+  allow_implicit_invocation: false

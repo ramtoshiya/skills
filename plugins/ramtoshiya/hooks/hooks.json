@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Monitor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python \"${CLAUDE_PLUGIN_ROOT}/hooks/global-package-guard.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python \"${CLAUDE_PLUGIN_ROOT}/hooks/git-hygiene-guard.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
