@@ -55,6 +55,19 @@
       "author": { "name": "Fatih C. Akyon" },
       "repository": "https://github.com/ramtoshiya/claude-codex-settings",
       "license": "Apache-2.0"
+    },
+    {
+      "name": "ouroboros-interview",
+      "description": "Ouroboros's Socratic requirements interview with bundled questioning and closure-review prompts, without its server or execution workflow.",
+      "source": {
+        "source": "git-subdir",
+        "url": "ramtoshiya/ouroboros",
+        "path": "plugins/ouroboros-interview",
+        "sha": "8aab374343bbca5863c0c4674fee921aba4c7c4d"
+      },
+      "author": { "name": "Q00" },
+      "repository": "https://github.com/ramtoshiya/ouroboros",
+      "license": "MIT"
     }
   ]
 }

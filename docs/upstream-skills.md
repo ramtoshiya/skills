@@ -13,6 +13,7 @@ those repositories. This repository holds none of them.
 | `mattpocock-productivity` | `grilling`, `grill-me`, `handoff` | `skills/productivity` in the fork [ramtoshiya/mattpocock-skills](https://github.com/ramtoshiya/mattpocock-skills) | MIT |
 | `fcakyon-test-audit` | `test-audit` | `plugins/test-audit/skills` in [fcakyon/claude-codex-settings](https://github.com/fcakyon/claude-codex-settings) | MIT |
 | `humanize` | `humanize` and its hook | `plugins/humanize` in the fork [ramtoshiya/claude-codex-settings](https://github.com/ramtoshiya/claude-codex-settings) | Apache-2.0 |
+| `ouroboros-interview` | `interview` | `plugins/ouroboros-interview` in the fork [ramtoshiya/ouroboros](https://github.com/ramtoshiya/ouroboros) | MIT |
 
 `grill-me` and `handoff` run only when you invoke them, so the agent's own
 skill list shows only `grilling`. Installed skills carry the entry name as a
@@ -27,6 +28,14 @@ and [the list-and-veto preference](https://github.com/mattpocock/skills/issues/1
 Return the entry to `mattpocock/skills` after issue #1249 closes, reviewing the
 upstream diff and validating the replacement pin before updating installed
 copies.
+
+`ouroboros-interview` packages only the interview skill and its bundled
+questioning and closure-review prompts. It uses the host's native tools, needs
+no additional runtime or server, and ends with an agreed requirements summary.
+It does not load the fork's root plugin, start implementation, change agent
+configuration, or check for updates. Results stay in the conversation unless
+you request a summary file. Invoke `/ouroboros-interview:interview` in Claude
+Code after installing the entry.
 
 The two `fcakyon/claude-codex-settings` entries have different licenses. The
 repository is Apache-2.0, and the `test-audit` folder has its own MIT
