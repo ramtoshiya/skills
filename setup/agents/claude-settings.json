@@ -4,6 +4,7 @@
   "includeGitInstructions": false,
   "promptSuggestionEnabled": false,
   "awaySummaryEnabled": false,
+  "idleCompaction": false,
   "statusLine": {
     "type": "command",
     "command": "~/.claude/status-line.sh",
