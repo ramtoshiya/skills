@@ -31,16 +31,16 @@
     },
     {
       "name": "fcakyon-test-audit",
-      "description": "Test authoring gate and low-value test pruning from fcakyon's claude-codex-settings.",
+      "description": "Test authoring and test-quality audits from fcakyon's claude-codex-settings, patched to skip incidental test reads during research.",
       "source": {
         "source": "git-subdir",
-        "url": "fcakyon/claude-codex-settings",
+        "url": "ramtoshiya/claude-codex-settings",
         "path": "plugins/test-audit/skills",
-        "sha": "216ec221fb9899dfaa5371413583b9e08ca89085"
+        "sha": "b62abd96e98ce0201d7f79f12ab84ae2172716cd"
       },
       "skills": ["./test-audit"],
       "author": { "name": "Fatih C. Akyon" },
-      "repository": "https://github.com/fcakyon/claude-codex-settings",
+      "repository": "https://github.com/ramtoshiya/claude-codex-settings",
       "license": "MIT"
     },
     {

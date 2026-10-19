@@ -11,7 +11,7 @@ those repositories. This repository holds none of them.
 | Entry | Skills | Source | License |
 | --- | --- | --- | --- |
 | `mattpocock-productivity` | `grilling`, `grill-me`, `handoff` | `skills/productivity` in the fork [ramtoshiya/mattpocock-skills](https://github.com/ramtoshiya/mattpocock-skills) | MIT |
-| `fcakyon-test-audit` | `test-audit` | `plugins/test-audit/skills` in [fcakyon/claude-codex-settings](https://github.com/fcakyon/claude-codex-settings) | MIT |
+| `fcakyon-test-audit` | `test-audit` | `plugins/test-audit/skills` in the fork [ramtoshiya/claude-codex-settings](https://github.com/ramtoshiya/claude-codex-settings) | MIT |
 | `humanize` | `humanize` and its hook | `plugins/humanize` in the fork [ramtoshiya/claude-codex-settings](https://github.com/ramtoshiya/claude-codex-settings) | Apache-2.0 |
 | `ouroboros-interview` | `interview` | `plugins/ouroboros-interview` in the fork [ramtoshiya/ouroboros](https://github.com/ramtoshiya/ouroboros) | MIT |
 
@@ -29,6 +29,12 @@ Return the entry to `mattpocock/skills` after issue #1249 closes, reviewing the
 upstream diff and validating the replacement pin before updating installed
 copies.
 
+`test-audit` runs automatically when writing or changing tests and when the
+requested work assesses test quality, including read-only audits. The fork
+excludes test reads used as evidence for research, diagnosis, source review,
+packaging, and validation planning. A research assignment does not become a
+test audit because its parent workflow will later change tests.
+
 `ouroboros-interview` packages only the interview skill and its bundled
 questioning and closure-review prompts. It uses the host's native tools, needs
 no additional runtime or server, and ends with an agreed requirements summary.
@@ -37,7 +43,7 @@ configuration, or check for updates. Results stay in the conversation unless
 you request a summary file. Invoke `/ouroboros-interview:interview` in Claude
 Code after installing the entry.
 
-The two `fcakyon/claude-codex-settings` entries have different licenses. The
+The two `claude-codex-settings` entries have different licenses. The
 repository is Apache-2.0, and the `test-audit` folder has its own MIT
 `LICENSE`.
 
