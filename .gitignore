@@ -1,0 +1,22 @@
+# Local agent state and settings; reviewed reusable sources live under setup/.
+/.claude/
+/.codex/
+.credentials.json
+auth.json
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Authentication stores and private key material must remain external.
+.ssh/
+.gnupg/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Generated files.
+__pycache__/
+*.pyc
+.DS_Store
