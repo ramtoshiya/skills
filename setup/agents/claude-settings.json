@@ -1,5 +1,6 @@
 {
   "autoMemoryEnabled": false,
+  "enableArtifact": false,
   "includeGitInstructions": false,
   "promptSuggestionEnabled": false,
   "awaySummaryEnabled": false,
