@@ -22,7 +22,12 @@ The two `fcakyon/claude-codex-settings` entries have different licenses. The
 repository is Apache-2.0, and the `test-audit` folder has its own MIT
 `LICENSE`.
 
-`humanize` checks file writes, commits, pull requests, and Slack or Linear
+The `humanize` skill applies before creating or modifying any file, including
+code and configuration, and when preparing or publishing content such as
+commits and pull requests. Ordinary chat, research, explanations, and read-only
+reviews do not invoke it unless you explicitly request the skill.
+
+Its hook checks file writes, commits, pull requests, and Slack or Linear
 posts for AI-sounding wording. Findings are advisory warnings and do not block
 the call or override normal permissions. The fork runs the hook through
 uv-managed Python instead of a bare `python3` and includes a Pi adapter

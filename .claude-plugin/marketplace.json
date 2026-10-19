@@ -50,7 +50,7 @@
         "source": "git-subdir",
         "url": "ramtoshiya/claude-codex-settings",
         "path": "plugins/humanize",
-        "sha": "6bf7091a7ab5429337de15b8d9769c0eae68c730"
+        "sha": "4c01fce91c6be0c5a762b000f820319dc5295574"
       },
       "author": { "name": "Fatih C. Akyon" },
       "repository": "https://github.com/ramtoshiya/claude-codex-settings",
