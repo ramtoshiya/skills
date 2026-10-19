@@ -1,5 +1,6 @@
 {
   "autoMemoryEnabled": false,
+  "disableBundledSkills": true,
   "enableArtifact": false,
   "includeGitInstructions": false,
   "promptSuggestionEnabled": false,

@@ -111,6 +111,9 @@ pushing, publishing, or destructive history changes.
 - `EnterPlanMode` is also denied, so Claude cannot enter plan mode on its own.
   You can still enter plan mode manually.
 - `enableArtifact` is false, which disables the Artifact tool.
+- `disableBundledSkills` is true, which removes bundled skills and workflows
+  and hides built-in slash commands from the model. Built-in commands remain
+  typable. Plugin skills and local skills and commands are unaffected.
 - Automatic memory, prompt suggestions, away summaries, and feedback surveys
   are off.
 - `attribution.commit` and `attribution.pr` are empty and
