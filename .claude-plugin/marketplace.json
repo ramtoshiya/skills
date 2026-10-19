@@ -1,0 +1,60 @@
+{
+  "name": "ramtoshiya",
+  "owner": { "name": "ramtoshiya" },
+  "description": "Personal agent plugins and selected third-party skills, pinned by commit.",
+  "plugins": [
+    {
+      "name": "ramtoshiya",
+      "description": "Personal skills, a package and Python guard, and a Git hygiene stop check for Claude Code and Codex.",
+      "source": "./plugins/ramtoshiya",
+      "author": { "name": "ramtoshiya" }
+    },
+    {
+      "name": "ramtoshiya-cc",
+      "description": "Personal skills and hooks that only work in Claude Code. Do not install in other agents.",
+      "source": "./plugins/ramtoshiya-cc",
+      "author": { "name": "ramtoshiya" }
+    },
+    {
+      "name": "mattpocock-productivity",
+      "description": "Grilling interviews and conversation handoff from Matt Pocock's skills.",
+      "source": {
+        "source": "git-subdir",
+        "url": "mattpocock/skills",
+        "path": "skills/productivity",
+        "sha": "49dd158d1076134a641b33efb035946536778336"
+      },
+      "skills": ["./grilling", "./grill-me", "./handoff"],
+      "author": { "name": "Matt Pocock" },
+      "repository": "https://github.com/mattpocock/skills",
+      "license": "MIT"
+    },
+    {
+      "name": "fcakyon-test-audit",
+      "description": "Test authoring gate and low-value test pruning from fcakyon's claude-codex-settings.",
+      "source": {
+        "source": "git-subdir",
+        "url": "fcakyon/claude-codex-settings",
+        "path": "plugins/test-audit/skills",
+        "sha": "216ec221fb9899dfaa5371413583b9e08ca89085"
+      },
+      "skills": ["./test-audit"],
+      "author": { "name": "Fatih C. Akyon" },
+      "repository": "https://github.com/fcakyon/claude-codex-settings",
+      "license": "MIT"
+    },
+    {
+      "name": "humanize",
+      "description": "Natural-writing skill and advisory AI-wording warnings from fcakyon's claude-codex-settings, patched in a personal fork to run through uv-managed Python with a Pi adapter.",
+      "source": {
+        "source": "git-subdir",
+        "url": "ramtoshiya/claude-codex-settings",
+        "path": "plugins/humanize",
+        "sha": "6bf7091a7ab5429337de15b8d9769c0eae68c730"
+      },
+      "author": { "name": "Fatih C. Akyon" },
+      "repository": "https://github.com/ramtoshiya/claude-codex-settings",
+      "license": "Apache-2.0"
+    }
+  ]
+}
