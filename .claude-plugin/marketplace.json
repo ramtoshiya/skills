@@ -17,16 +17,16 @@
     },
     {
       "name": "mattpocock-productivity",
-      "description": "Grilling interviews and conversation handoff from Matt Pocock's skills.",
+      "description": "Grilling interviews and conversation handoff from Matt Pocock's skills, patched to state obvious defaults and ask actual questions.",
       "source": {
         "source": "git-subdir",
-        "url": "mattpocock/skills",
+        "url": "ramtoshiya/mattpocock-skills",
         "path": "skills/productivity",
-        "sha": "49dd158d1076134a641b33efb035946536778336"
+        "sha": "660effa621300eb6c388c7e9347fbf1d4cb3ba4f"
       },
       "skills": ["./grilling", "./grill-me", "./handoff"],
       "author": { "name": "Matt Pocock" },
-      "repository": "https://github.com/mattpocock/skills",
+      "repository": "https://github.com/ramtoshiya/mattpocock-skills",
       "license": "MIT"
     },
     {

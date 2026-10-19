@@ -10,13 +10,23 @@ those repositories. This repository holds none of them.
 
 | Entry | Skills | Source | License |
 | --- | --- | --- | --- |
-| `mattpocock-productivity` | `grilling`, `grill-me`, `handoff` | `skills/productivity` in [mattpocock/skills](https://github.com/mattpocock/skills) | MIT |
+| `mattpocock-productivity` | `grilling`, `grill-me`, `handoff` | `skills/productivity` in the fork [ramtoshiya/mattpocock-skills](https://github.com/ramtoshiya/mattpocock-skills) | MIT |
 | `fcakyon-test-audit` | `test-audit` | `plugins/test-audit/skills` in [fcakyon/claude-codex-settings](https://github.com/fcakyon/claude-codex-settings) | MIT |
 | `humanize` | `humanize` and its hook | `plugins/humanize` in the fork [ramtoshiya/claude-codex-settings](https://github.com/ramtoshiya/claude-codex-settings) | Apache-2.0 |
 
 `grill-me` and `handoff` run only when you invoke them, so the agent's own
 skill list shows only `grilling`. Installed skills carry the entry name as a
 prefix, for example `mattpocock-productivity:grilling`.
+
+The productivity fork preserves decision-tree rounds while recording obvious
+defaults under **Assumed (override if wrong)** instead of asking for individual
+approval. Questions must ask something explicitly. Only yes/no questions use
+"yes" to accept the recommendation, and multiple-choice recommendations name
+the option. The patches follow [the upstream question-format fix](https://github.com/mattpocock/skills/issues/1249#issuecomment-6120835958)
+and [the list-and-veto preference](https://github.com/mattpocock/skills/issues/1112#issuecomment-6186224765).
+Return the entry to `mattpocock/skills` after issue #1249 closes, reviewing the
+upstream diff and validating the replacement pin before updating installed
+copies.
 
 The two `fcakyon/claude-codex-settings` entries have different licenses. The
 repository is Apache-2.0, and the `test-audit` folder has its own MIT
@@ -50,16 +60,16 @@ Pi does not read the marketplace. Clone each repository at the pinned commit
 and list the skill folders in `~/.pi/agent/settings.json`. For example:
 
 ```sh
-sha=49dd158d1076134a641b33efb035946536778336
-dir=~/.pi/agent/skill-sources/mattpocock/skills/$sha
-git clone https://github.com/mattpocock/skills.git "$dir"
+sha=660effa621300eb6c388c7e9347fbf1d4cb3ba4f
+dir=~/.pi/agent/skill-sources/ramtoshiya/mattpocock-skills/$sha
+git clone https://github.com/ramtoshiya/mattpocock-skills.git "$dir"
 git -C "$dir" checkout --detach "$sha"
 ```
 
 ```json
 {
   "skills": [
-    "skill-sources/mattpocock/skills/49dd158d1076134a641b33efb035946536778336/skills/productivity/grilling"
+    "skill-sources/ramtoshiya/mattpocock-skills/660effa621300eb6c388c7e9347fbf1d4cb3ba4f/skills/productivity/grilling"
   ]
 }
 ```
