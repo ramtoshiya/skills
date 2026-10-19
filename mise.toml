@@ -1,0 +1,39 @@
+# macOS machine setup, applied with `mise bootstrap`.
+# docs/setup.md explains every entry. Preview with `mise bootstrap --dry-run`.
+
+[bootstrap.packages]
+"brew:jq" = "latest"                  # used by the Claude Code status line
+"brew:uv" = "latest"                  # runs the agent hooks
+"brew:zsh-autosuggestions" = "latest" # loaded by interactive.zsh
+
+[bootstrap.mise_shell_activate]
+zsh = true
+
+[dotfiles]
+# Shell
+"~/.config/shell/environment.zsh" = { source = "setup/shell/environment.zsh", mode = "copy" }
+"~/.config/shell/interactive.zsh" = { source = "setup/shell/interactive.zsh", mode = "copy" }
+"~/.zshenv/shell" = { block = 'source "$HOME/.config/shell/environment.zsh"' }
+"~/.zshrc/shell" = { block = 'source "$HOME/.config/shell/interactive.zsh"' }
+
+# Package managers: skip releases newer than three days
+"~/.npmrc/release-age" = { line = "min-release-age=3" }
+"~/Library/Preferences/pnpm/config.yaml/release-age" = { source = "setup/packages/pnpm.yaml", merge = true }
+"~/.config/uv/uv.toml/release-age" = { source = "setup/packages/uv.toml", merge = true }
+"~/.config/mise/config.toml/release-age" = { source = "setup/packages/mise-settings.toml", merge = true }
+
+# Git
+"~/.config/git/shared.gitconfig" = { source = "setup/git/shared.gitconfig", mode = "copy" }
+"~/.gitconfig/shared" = { block = '''
+[include]
+    path = ~/.config/git/shared.gitconfig
+''' }
+"~/.gitignore/ds-store" = { line = ".DS_Store" }
+"~/.gitignore/claude-local-settings" = { line = "**/.claude/settings.local.json" }
+
+# Coding agents
+"~/.claude/CLAUDE.md" = { source = "setup/agents/preferences.md", mode = "copy" }
+"~/.codex/AGENTS.md" = { source = "setup/agents/preferences.md", mode = "copy" }
+"~/.pi/agent/AGENTS.md" = { source = "setup/agents/preferences.md", mode = "copy" }
+"~/.claude/settings.json/preferences" = { source = "setup/agents/claude-settings.json", merge = true }
+"~/.claude/status-line.sh" = { source = "setup/agents/claude-statusline.sh", mode = "copy" }

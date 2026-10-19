@@ -1,0 +1,29 @@
+{
+  "autoMemoryEnabled": false,
+  "includeGitInstructions": false,
+  "promptSuggestionEnabled": false,
+  "awaySummaryEnabled": false,
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/status-line.sh",
+    "refreshInterval": 1
+  },
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
+  },
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "deny": [
+      "AskUserQuestion",
+      "EnterPlanMode",
+      "SendFeedback"
+    ]
+  },
+  "env": {
+    "CLAUDE_CODE_ENABLE_AWAY_SUMMARY": "0",
+    "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
+    "CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL": "1"
+  }
+}
