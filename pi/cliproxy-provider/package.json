@@ -1,0 +1,14 @@
+{
+  "name": "pi-cliproxy-native-provider",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Dynamic Claude and GPT discovery through CLIProxyAPI using Pi native transports",
+  "keywords": ["pi-package"],
+  "pi": { "extensions": ["./index.ts"] },
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*"
+  }
+}
