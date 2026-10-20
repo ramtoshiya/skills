@@ -57,6 +57,42 @@ function launch(args, env = process.env) {
   });
 }
 
+function startupModel(args, selected) {
+  let model = selected.main;
+  for (let i = 0; i < args.length && args[i] !== '--'; i++) {
+    if (args[i] === '--model' && args[i + 1]) model = args[++i];
+    else if (args[i].startsWith('--model=')) model = args[i].slice(8);
+  }
+  return { fable: selected.fable, opus: selected.main,
+    sonnet: selected.standard, haiku: selected.light }[model] || model;
+}
+
+function advertisedContext(entry) {
+  const positive = value => Number.isSafeInteger(value) && value > 0;
+  const context = [entry?.context_window, entry?.context_length].find(positive);
+  if (!context) return undefined;
+  return positive(entry.max_context_window) ? Math.min(context, entry.max_context_window) : context;
+}
+
+async function contextLimit(baseUrl, key, catalog, model) {
+  try {
+    const response = await fetch(baseUrl + '/v1/models?client_version=0.155.0', {
+      headers: { Authorization: 'Bearer ' + key },
+      signal: AbortSignal.timeout(5000), redirect: 'error',
+    });
+    if (response.ok) {
+      const entries = (await response.json()).models;
+      const context = Array.isArray(entries)
+        ? advertisedContext(entries.find(entry => entry?.slug === model)) : undefined;
+      if (context) return context;
+    }
+  } catch {}
+  const context = advertisedContext(catalog.find(entry => entry?.id === model));
+  if (context) return context;
+  console.error('claudex: Context metadata unavailable. Using a 250,000-token limit.');
+  return 250000;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   if (args.length === 1 && ['--version', '-v', '--help', '-h'].includes(args[0])) {
@@ -69,7 +105,9 @@ async function main() {
     signal: AbortSignal.timeout(5000), redirect: 'error',
   });
   if (!response.ok) throw new Error('Proxy model lookup returned HTTP ' + response.status);
-  const selected = selectModels((await response.json()).data);
+  const catalog = (await response.json()).data;
+  const selected = selectModels(catalog);
+  const context = await contextLimit(baseUrl, key, catalog, startupModel(args, selected));
   const settings = {
     model: selected.main,
     autoCompactEnabled: true,
@@ -80,7 +118,7 @@ async function main() {
       ANTHROPIC_DEFAULT_SONNET_MODEL: selected.standard,
       ANTHROPIC_DEFAULT_HAIKU_MODEL: selected.light,
       CLAUDE_CODE_SUBAGENT_MODEL: selected.standard,
-      CLAUDE_CODE_MAX_CONTEXT_TOKENS: '500000',
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(context),
       CLAUDE_CODE_ALWAYS_ENABLE_EFFORT: '1',
       CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY: '3',
       ENABLE_TOOL_SEARCH: 'false',

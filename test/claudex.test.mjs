@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process';
 
 const command = resolve('cli/claudex/claudex.cjs');
 
-async function fixture(t, catalog, status = 200) {
+async function fixture(t, catalog, status = 200, codex = { models: [], status: 200 }) {
   const dir = await mkdtemp(join(tmpdir(), 'claudex-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const capture = join(dir, 'capture.json');
@@ -22,8 +22,12 @@ process.exitCode = 7;
   const requests = [];
   const server = createServer((req, res) => {
     requests.push({ url: req.url, authorization: req.headers.authorization });
-    res.writeHead(status, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ data: catalog }));
+    const native = req.url === '/v1/models?client_version=0.155.0';
+    res.writeHead(native ? codex.status : status, {
+      'Content-Type': 'application/json',
+      ...(native && codex.status === 302 ? { Location: '/redirected' } : {}),
+    });
+    res.end(JSON.stringify(native ? { models: codex.models } : { data: catalog }));
   });
   await new Promise(done => server.listen(0, '127.0.0.1', done));
   t.after(() => new Promise(done => { server.close(done); server.closeAllConnections(); }));
@@ -57,8 +61,8 @@ test('discovers role models and forwards CLI arguments, credentials, and exit st
     { id: 'gpt-9-sol', owned_by: 'other' },
     ...['gpt-5.1-astra', 'gpt-6-astra', 'gpt-6.1-sol', 'gpt-6.1-mini', 'gpt-image-9']
       .map(id => ({ id, owned_by: 'openai' })),
-  ]);
-  const args = ['--model', 'custom-model', '-p', 'a prompt with spaces'];
+  ], 200, { status: 200, models: [{ slug: 'gpt-6.1-sol', context_window: 500000, max_context_window: 872000 }] });
+  const args = ['--model', 'gpt-6.1-sol', '-p', 'a prompt with spaces'];
   assert.equal((await f.run(args)).code, 7);
   const child = await f.capture();
   const settings = JSON.parse(child.args[1]);
@@ -73,7 +77,40 @@ test('discovers role models and forwards CLI arguments, credentials, and exit st
   assert.equal(child.key, 'test-client-key');
   assert.equal(child.token, '');
   assert.ok(!JSON.stringify(child.args).includes('test-client-key'));
-  assert.deepEqual(f.requests, [{ url: '/v1/models', authorization: 'Bearer test-client-key' }]);
+  assert.deepEqual(f.requests, ['/v1/models', '/v1/models?client_version=0.155.0']
+    .map(url => ({ url, authorization: 'Bearer test-client-key' })));
+});
+
+test('resolves startup context from route metadata and falls back when unavailable', async t => {
+  const models = [
+    { slug: 'gpt-6.1-sol', context_window: 500000, max_context_window: 872000 },
+    { slug: 'gpt-6-astra', context_window: 272000 },
+  ];
+  const catalog = ['gpt-6.1-sol', 'gpt-6-astra'].map(id => ({ id, owned_by: 'openai' }));
+  for (const scenario of [
+    { name: 'explicit base model', args: ['--model', 'gpt-6-astra'], models, expected: 272000 },
+    { name: 'role alias', args: ['--model=fable'], models, expected: 272000 },
+    { name: 'last override wins', args: ['--model=fable', '--model', 'gpt-6.1-sol'], models, expected: 500000 },
+    { name: 'maximum caps the window', models: [{ slug: 'gpt-6.1-sol', context_window: 500000, max_context_window: 400000 }], expected: 400000 },
+    { name: 'ordinary catalog fallback', status: 404, catalog: [{ ...catalog[0], context_length: 320000 }], expected: 320000 },
+    { name: 'missing metadata', models: [], expected: 250000, warning: true },
+    { name: 'invalid metadata', models: [{ slug: 'gpt-6.1-sol', context_window: '500000' }], expected: 250000, warning: true },
+    { name: 'unknown override', args: ['--model=custom'], models, expected: 250000, warning: true },
+    { name: 'redirect is refused', status: 302, expected: 250000, warning: true },
+  ]) {
+    await t.test(scenario.name, async t => {
+      const f = await fixture(t, scenario.catalog ?? catalog, 200, {
+        status: scenario.status ?? 200, models: scenario.models ?? models,
+      });
+      const result = await f.run(scenario.args);
+      assert.equal(result.code, 7);
+      const settings = JSON.parse((await f.capture()).args[1]);
+      assert.equal(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, String(scenario.expected));
+      assert.equal(result.stderr.includes('Context metadata unavailable'), !!scenario.warning);
+      assert.ok(!result.stderr.includes('test-client-key'));
+      assert.equal(f.requests.length, 2);
+    });
+  }
 });
 
 test('uses the main model for missing roles and honors connection overrides', async t => {
