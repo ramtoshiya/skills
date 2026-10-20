@@ -73,9 +73,12 @@ the main model instead.
 `--help`, `-h`, `--version`, and `-v` alone run Claude Code without discovery.
 
 The wrapper enables auto-compact for `claudex` sessions without changing the
-saved preference used by regular `claude` launches. It sets a 250,000-token
+saved preference used by regular `claude` launches. It sets a 500,000-token
 context limit, enables effort controls, limits concurrent tool use to three,
 and disables tool search. Other Claude Code settings and hooks still apply.
+The proxy upstream must support this context size. Use base model IDs such as
+`gpt-6.1-sol`. Hermes's `-900k` suffix is a local alias that claudex does not
+translate.
 
 Tested with Claude Code 2.1.302 and a live CLIProxyAPI GPT response.
 

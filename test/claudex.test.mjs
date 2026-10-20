@@ -64,6 +64,7 @@ test('discovers role models and forwards CLI arguments, credentials, and exit st
   const settings = JSON.parse(child.args[1]);
   assert.equal(settings.model, 'gpt-6.1-sol');
   assert.equal(settings.autoCompactEnabled, true);
+  assert.equal(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '500000');
   assert.equal(settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL, 'gpt-6-astra');
   assert.equal(settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'gpt-6.1-sol');
   assert.equal(settings.env.CLAUDE_CODE_SUBAGENT_MODEL, 'gpt-6.1-sol');
