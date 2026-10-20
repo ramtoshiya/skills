@@ -68,7 +68,7 @@ test('discovers role models and forwards CLI arguments, credentials, and exit st
   const settings = JSON.parse(child.args[1]);
   assert.equal(settings.model, 'gpt-6.1-sol');
   assert.equal(settings.autoCompactEnabled, true);
-  assert.equal(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '500000');
+  assert.equal(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '872000');
   assert.equal(settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL, 'gpt-6-astra');
   assert.equal(settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'gpt-6.1-sol');
   assert.equal(settings.env.CLAUDE_CODE_SUBAGENT_MODEL, 'gpt-6.1-sol');
@@ -84,14 +84,21 @@ test('discovers role models and forwards CLI arguments, credentials, and exit st
 test('resolves startup context from route metadata and falls back when unavailable', async t => {
   const models = [
     { slug: 'gpt-6.1-sol', context_window: 500000, max_context_window: 872000 },
-    { slug: 'gpt-6-astra', context_window: 272000 },
+    { slug: 'gpt-6-astra', context_window: 272000, max_context_window: 872000 },
+    { slug: 'gpt-6-sol', context_window: 272000, max_context_window: 872000 },
+    { slug: 'gpt-6-luna', context_window: 272000, max_context_window: 872000 },
   ];
   const catalog = ['gpt-6.1-sol', 'gpt-6-astra'].map(id => ({ id, owned_by: 'openai' }));
   for (const scenario of [
-    { name: 'explicit base model', args: ['--model', 'gpt-6-astra'], models, expected: 272000 },
-    { name: 'role alias', args: ['--model=fable'], models, expected: 272000 },
-    { name: 'last override wins', args: ['--model=fable', '--model', 'gpt-6.1-sol'], models, expected: 500000 },
-    { name: 'maximum caps the window', models: [{ slug: 'gpt-6.1-sol', context_window: 500000, max_context_window: 400000 }], expected: 400000 },
+    { name: 'explicit base model', args: ['--model', 'gpt-6-astra'], models, expected: 872000 },
+    { name: 'role alias', args: ['--model=fable'], models, expected: 872000 },
+    { name: 'last override wins', args: ['--model=fable', '--model', 'gpt-6.1-sol'], models, expected: 872000 },
+    ...['gpt-6-sol', 'gpt-6-luna'].map(model => ({
+      name: model + ' maximum', args: ['--model', model], models, expected: 872000,
+    })),
+    { name: 'smaller maximum wins', models: [{ slug: 'gpt-6.1-sol', context_window: 500000, max_context_window: 400000 }], expected: 400000 },
+    { name: 'maximum without default window', models: [{ slug: 'gpt-6.1-sol', max_context_window: 872000 }], expected: 872000 },
+    { name: 'invalid maximum uses default window', models: [{ slug: 'gpt-6.1-sol', context_window: 500000, max_context_window: -1 }], expected: 500000 },
     { name: 'ordinary catalog fallback', status: 404, catalog: [{ ...catalog[0], context_length: 320000 }], expected: 320000 },
     { name: 'missing metadata', models: [], expected: 250000, warning: true },
     { name: 'invalid metadata', models: [{ slug: 'gpt-6.1-sol', context_window: '500000' }], expected: 250000, warning: true },

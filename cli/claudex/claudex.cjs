@@ -69,9 +69,7 @@ function startupModel(args, selected) {
 
 function advertisedContext(entry) {
   const positive = value => Number.isSafeInteger(value) && value > 0;
-  const context = [entry?.context_window, entry?.context_length].find(positive);
-  if (!context) return undefined;
-  return positive(entry.max_context_window) ? Math.min(context, entry.max_context_window) : context;
+  return [entry?.max_context_window, entry?.context_window, entry?.context_length].find(positive);
 }
 
 async function contextLimit(baseUrl, key, catalog, model) {

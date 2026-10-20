@@ -75,12 +75,13 @@ the main model instead.
 The wrapper enables auto-compact for `claudex` sessions without changing the
 saved preference used by regular `claude` launches. At startup it fetches
 `/v1/models?client_version=0.155.0` for the Codex catalog and uses the starting
-model's advertised `context_window`, capped by `max_context_window` when present.
-It does not opt into the larger maximum window. `--model` and `--model=...`
-overrides, including the role aliases in the table, select which model's limit
-to use. If the Codex catalog has no usable entry, it uses `context_window` or
-`context_length` from the ordinary `/v1/models` response. If neither catalog
-provides a positive integer limit, it prints a warning and uses 250,000 tokens.
+model's advertised `max_context_window`, falling back to `context_window` when
+the maximum is unavailable. `--model` and `--model=...` overrides, including the
+role aliases in the table, select which model's limit to use. If the Codex
+catalog has no usable entry, it uses `max_context_window`, `context_window`, or
+`context_length` from the ordinary `/v1/models` response, in that order. If
+neither catalog provides a positive integer limit, it prints a warning and uses
+250,000 tokens.
 The extra catalog request times out after five seconds and refuses redirects.
 
 The context setting applies to the whole Claude Code session. Restart claudex
@@ -91,7 +92,8 @@ that claudex does not translate.
 The wrapper also enables effort controls, limits concurrent tool use to three,
 and disables tool search. Other Claude Code settings and hooks still apply.
 
-Tested with Claude Code 2.1.304 and live CLIProxyAPI model discovery.
+Tested with Claude Code 2.1.304, live CLIProxyAPI model discovery, and 872k-input
+requests to GPT-6 Astra, GPT-6.1 Sol, GPT-6 Sol, and GPT-6 Luna.
 
 ## Checks
 
