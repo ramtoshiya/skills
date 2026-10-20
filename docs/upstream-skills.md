@@ -58,6 +58,8 @@ the call or override normal permissions. The fork runs the hook through
 uv-managed Python instead of a bare `python3` and includes a Pi adapter
 (`hooks/pi.ts`). These changes are included at the pinned commit.
 When the hook itself fails, it lets the call through, as upstream does.
+For Codex patches, the hook skips files it cannot read or reconstruct and
+checks the remaining files. Codex reports any patch errors.
 
 ## Install
 
