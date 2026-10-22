@@ -82,6 +82,19 @@
       "author": { "name": "Q00" },
       "repository": "https://github.com/ramtoshiya/ouroboros",
       "license": "MIT"
+    },
+    {
+      "name": "omd",
+      "description": "OmD design systems, preference learning, full quality gates, and copy humanization, packaged without its CLI or company reference catalog.",
+      "source": {
+        "source": "git-subdir",
+        "url": "ramtoshiya/oh-my-design",
+        "path": "plugins/omd",
+        "sha": "1fb7fdde381a0e4a7b6c3bf47790ba8d54ee9377"
+      },
+      "author": { "name": "kwakseongjae" },
+      "repository": "https://github.com/ramtoshiya/oh-my-design",
+      "license": "MIT"
     }
   ]
 }

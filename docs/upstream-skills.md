@@ -15,6 +15,7 @@ those repositories. This repository holds none of them.
 | `fcakyon-test-audit` | `test-audit` | `plugins/test-audit/skills` in the fork [ramtoshiya/claude-codex-settings](https://github.com/ramtoshiya/claude-codex-settings) | MIT |
 | `humanize` | `humanize` and its hook | `plugins/humanize` in the fork [ramtoshiya/claude-codex-settings](https://github.com/ramtoshiya/claude-codex-settings) | Apache-2.0 |
 | `ouroboros-interview` | `interview` | `plugins/ouroboros-interview` in the fork [ramtoshiya/ouroboros](https://github.com/ramtoshiya/ouroboros) | MIT |
+| `omd` | Design-system workflows, preference learning, design reviews, and `omd-humanize` | `plugins/omd` in the fork [ramtoshiya/oh-my-design](https://github.com/ramtoshiya/oh-my-design) | MIT |
 
 `grill-me` and `handoff` run only when you invoke them, so the agent's own
 skill list shows only `grilling`. Installed skills carry the entry name as a
@@ -62,6 +63,37 @@ Code after installing the entry.
 The two `claude-codex-settings` entries have different licenses. The
 repository is Apache-2.0, and the `test-audit` folder has its own MIT
 `LICENSE`.
+
+`omd` packages the design workflow from oh-my-design without its CLI or company
+reference catalog. It keeps `DESIGN.md`, the decision-to-token chain, component
+contracts, the full numbered slop gates, and `.omd/preferences.md`.
+`omd-apply` handles changes to an existing interface, `omd-autopilot` handles
+new surfaces, and `omd-harness` provides the guided workflow. `omd-feel`,
+`omd-restraint`, and `omd-slop-audit` provide focused reviews. The writing
+selection is only `omd-humanize`, including its locale playbooks. It does not
+include `omd-kr-writer`, `omd-locale-adapter`, or `hangul`.
+
+The preference loop records corrections through `omd-remember`, observes
+off-system edits through hooks, and proposes recurring corrections for review.
+`omd-learn` folds approved corrections into the system. The package includes
+the provider-free graph, review, compiler, and adoption helpers this needs.
+Those helpers do not install the OmD CLI. New systems start from the product
+brief, repository, and approved assets instead of choosing a company reference.
+
+The fork contains the selected skills, supporting roles, runtime helpers, and
+hook adapters. Its installed subtree includes the upstream MIT license. Review
+changes under `integration/` as well as the selected upstream sources when
+updating its pin. Invoke `/omd:omd-slop-audit` for a review or
+`/omd:omd-autopilot` for a new surface in Claude Code.
+
+The OmD package also has a Pi extension at `hooks/pi.ts` and a native Hermes
+plugin. Pi needs that extension alongside its selected skill paths. For Hermes,
+check out the marketplace's exact fork commit under the active profile's
+`skill-sources/`, link its `plugins/omd` directory into that profile's `plugins/`,
+and enable `omd` with the Hermes plugin commands. The plugin registers only the
+selected skills and translates preference hooks into native events. Restart
+Hermes to load the skills and prompt context into a new session. Browser-based
+measurements have separate local prerequisites described in the package README.
 
 The `humanize` skill applies before creating or modifying any file, including
 code and configuration, and when preparing or publishing content such as
