@@ -93,6 +93,19 @@ async function contextLimit(baseUrl, key, catalog, model) {
 
 async function main() {
   const args = process.argv.slice(2);
+  const fast = args[0] === '--fast';
+  let extraBody;
+  if (fast) {
+    args.shift();
+    try {
+      extraBody = JSON.parse(process.env.CLAUDE_CODE_EXTRA_BODY || '{}');
+      if (!extraBody || typeof extraBody !== 'object' || Array.isArray(extraBody)) throw new Error();
+    } catch {
+      console.error('claudex: --fast requires CLAUDE_CODE_EXTRA_BODY to be a JSON object when set.');
+      process.exitCode = 1;
+      return;
+    }
+  }
   if (args.length === 1 && ['--version', '-v', '--help', '-h'].includes(args[0])) {
     launch(args);
     return;
@@ -120,6 +133,7 @@ async function main() {
       CLAUDE_CODE_ALWAYS_ENABLE_EFFORT: '1',
       CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY: '3',
       ENABLE_TOOL_SEARCH: 'false',
+      ...(fast ? { CLAUDE_CODE_EXTRA_BODY: JSON.stringify({ ...extraBody, speed: 'fast' }) } : {}),
     },
   };
   launch(['--settings', JSON.stringify(settings), ...args], {

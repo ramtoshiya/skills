@@ -48,9 +48,18 @@ included in command arguments or written to a generated settings file.
 
 ```sh
 claudex
+claudex --fast
 claudex --model gpt-6.1-sol
 claudex -p 'Explain this project'
 ```
+
+Put `--fast` first to request GPT priority processing for the session. The wrapper
+sets `speed: "fast"` through `CLAUDE_CODE_EXTRA_BODY`, which CLIProxyAPI's Codex
+translator maps to `service_tier: "priority"`. Other extra-body fields are
+preserved. This does not lower reasoning effort or enable Claude Code's `/fast`
+toggle. Your upstream must support priority processing, which can have different
+billing or usage limits. Requesting it does not guarantee lower latency.
+Without `--fast`, the wrapper leaves the service tier unchanged.
 
 Only visible OpenAI models with IDs matching `gpt-<major>[.<minor>]` and an
 optional `astra`, `sol`, `terra`, `luna`, `codex`, `mini`, or `nano` suffix
@@ -92,8 +101,9 @@ that claudex does not translate.
 The wrapper also enables effort controls, limits concurrent tool use to three,
 and disables tool search. Other Claude Code settings and hooks still apply.
 
-Tested with Claude Code 2.1.304, live CLIProxyAPI model discovery, and 872k-input
-requests to GPT-6 Astra, GPT-6.1 Sol, GPT-6 Sol, and GPT-6 Luna.
+Tested with Claude Code 2.1.308 for fast request capture and a live GPT-6.1 Sol
+fast request, and 2.1.304 for live discovery and 872k-input requests to GPT-6
+Astra, GPT-6.1 Sol, GPT-6 Sol, and GPT-6 Luna.
 
 ## Checks
 

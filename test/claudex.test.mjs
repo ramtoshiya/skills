@@ -68,6 +68,7 @@ test('discovers role models and forwards CLI arguments, credentials, and exit st
   const settings = JSON.parse(child.args[1]);
   assert.equal(settings.model, 'gpt-6.1-sol');
   assert.equal(settings.autoCompactEnabled, true);
+  assert.equal(settings.env.CLAUDE_CODE_EXTRA_BODY, undefined);
   assert.equal(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '872000');
   assert.equal(settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL, 'gpt-6-astra');
   assert.equal(settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'gpt-6.1-sol');
@@ -147,4 +148,30 @@ test('version works without proxy configuration or discovery', async t => {
   assert.equal((await f.run(['--version'], { CLAUDEX_CONFIG: '/nonexistent/claudex.json' })).code, 7);
   assert.deepEqual((await f.capture()).args, ['--version']);
   assert.deepEqual(f.requests, []);
+});
+
+test('leading --fast requests fast processing without changing effort or forwarding the flag', async t => {
+  for (const body of ['', '{"metadata":{"user_id":"test-user"},"speed":"standard"}']) {
+    const f = await fixture(t, [{ id: 'gpt-6.1-sol', owned_by: 'openai' }]);
+    const args = ['--effort', 'high', '-p', '--fast'];
+    assert.equal((await f.run(['--fast', ...args], { CLAUDE_CODE_EXTRA_BODY: body })).code, 7);
+    const child = await f.capture();
+    const settings = JSON.parse(child.args[1]);
+    assert.deepEqual(child.args.slice(2), args);
+    assert.deepEqual(JSON.parse(settings.env.CLAUDE_CODE_EXTRA_BODY), {
+      ...(body ? { metadata: { user_id: 'test-user' } } : {}), speed: 'fast',
+    });
+  }
+});
+
+test('--fast rejects invalid extra bodies before discovery without exposing their contents', async t => {
+  for (const body of ['not-json-private-value', 'null', '[]', 'true']) {
+    const f = await fixture(t, []);
+    const result = await f.run(['--fast'], { CLAUDE_CODE_EXTRA_BODY: body });
+    assert.equal(result.code, 1);
+    assert.match(result.stderr, /requires CLAUDE_CODE_EXTRA_BODY to be a JSON object/);
+    assert.ok(!result.stderr.includes(body));
+    assert.deepEqual(f.requests, []);
+    await assert.rejects(f.capture(), { code: 'ENOENT' });
+  }
 });
