@@ -14,6 +14,7 @@ those repositories. This repository holds none of them.
 | `mattpocock-productivity` | `grilling`, `grill-me`, `handoff` | `skills/productivity` in the fork [ramtoshiya/mattpocock-skills](https://github.com/ramtoshiya/mattpocock-skills) | MIT |
 | `fcakyon-test-audit` | `test-audit` | `plugins/test-audit/skills` in the fork [ramtoshiya/claude-codex-settings](https://github.com/ramtoshiya/claude-codex-settings) | MIT |
 | `humanize` | `humanize` and its hook | `plugins/humanize` in the fork [ramtoshiya/claude-codex-settings](https://github.com/ramtoshiya/claude-codex-settings) | Apache-2.0 |
+| `humanize-korean` | Korean prose diagnosis, editing, and verification | `plugins/humanize-korean` in the fork [ramtoshiya/im-not-ai](https://github.com/ramtoshiya/im-not-ai) | MIT |
 | `ouroboros-interview` | `interview` | `plugins/ouroboros-interview` in the fork [ramtoshiya/ouroboros](https://github.com/ramtoshiya/ouroboros) | MIT |
 | `omd` | Design-system workflows, preference learning, design reviews, and `omd-humanize` | `plugins/omd` in the fork [ramtoshiya/oh-my-design](https://github.com/ramtoshiya/oh-my-design) | MIT |
 
@@ -109,6 +110,18 @@ When the hook itself fails, it lets the call through, as upstream does.
 For Codex patches, the hook skips files it cannot read or reconstruct and
 checks the remaining files. Codex reports any patch errors.
 
+`humanize-korean` adapts epoko77-ai's im-not-ai directly for Hermes. It keeps
+the upstream Korean rules, light/standard/heavy routing, diagnosis and finalizer
+roles, chunk reassembly, and deterministic verification scripts. It runs when
+you request Korean prose editing, not before every file change. The existing
+`humanize` skill and its advisory hook remain separate.
+
+The fork builds a self-contained package with the upstream MIT license.
+`scripts/build_hermes_plugin.py --check` checks the packaged copies against
+their source files. Run it after merging upstream changes, then exercise the
+packaged helpers and a fresh Hermes session before updating the marketplace
+pin. A matching rulebook alone does not prove that the workflow still works.
+
 ## Install
 
 Claude Code and Codex read the marketplace. After adding it as described in
@@ -146,6 +159,32 @@ new commit and change the paths.
 
 A loose copy of the same skill makes it load twice, as described in
 [Agent plugins](agent-pack.md).
+
+### Hermes
+
+For `humanize-korean`, install the whole package rather than copying its
+`SKILL.md`. From this repository, read its marketplace pin and create a detached
+checkout under the active Hermes profile:
+
+```sh
+home=${HERMES_HOME:-"$HOME/.hermes"}
+sha=$(uv run --no-project --managed-python --python '>=3.11' python -c 'import json; from pathlib import Path; entries=json.loads(Path(".claude-plugin/marketplace.json").read_text())["plugins"]; print(next(p["source"]["sha"] for p in entries if p["name"] == "humanize-korean"))')
+dir="$home/skill-sources/ramtoshiya/im-not-ai/$sha"
+git clone https://github.com/ramtoshiya/im-not-ai.git "$dir"
+git -C "$dir" checkout --detach "$sha"
+hermes plugins doctor "$dir/plugins/humanize-korean" --ci
+mkdir -p "$home/plugins"
+ln -s "$dir/plugins/humanize-korean" "$home/plugins/humanize-korean"
+hermes plugins enable humanize-korean --no-allow-tool-override
+hermes plugins list --plain --no-bundled
+```
+
+If that plugin path already exists, inspect it before replacing it. Do not use
+`ln -sf` to overwrite another installation. Start a new Hermes conversation to
+load `humanize-korean:humanize-korean`. Request Korean editing in natural
+language, with `정밀 모드` for the full diagnosis, rewrite, and finalizer route.
+Results stay in the working directory's `_workspace/`. On a pin update, verify
+the new checkout before changing the link and starting another conversation.
 
 ## Add an entry
 

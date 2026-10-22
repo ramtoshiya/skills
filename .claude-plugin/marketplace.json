@@ -84,6 +84,19 @@
       "license": "MIT"
     },
     {
+      "name": "humanize-korean",
+      "description": "Korean diagnosis, editing, and verification from epoko77-ai's im-not-ai, packaged in a personal fork with the full Hermes workflow and upstream runtime gates.",
+      "source": {
+        "source": "git-subdir",
+        "url": "ramtoshiya/im-not-ai",
+        "path": "plugins/humanize-korean",
+        "sha": "6586b4c04cf822b500cd18b768a92c5b32e2eb5e"
+      },
+      "author": { "name": "epoko77-ai" },
+      "repository": "https://github.com/ramtoshiya/im-not-ai",
+      "license": "MIT"
+    },
+    {
       "name": "omd",
       "description": "OmD design systems, preference learning, full quality gates, and copy humanization, packaged without its CLI or company reference catalog.",
       "source": {
