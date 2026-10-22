@@ -1,0 +1,5 @@
+name: ramtoshiya
+description: Shared coding skills, package and Python guard, and Git hygiene check
+provides_hooks:
+  - pre_tool_call
+  - pre_verify

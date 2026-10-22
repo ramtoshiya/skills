@@ -48,9 +48,9 @@ Human-facing docs are `README.md`, `docs/*.md`, and the READMEs under `pi/` and
 
 ## Layout and boundaries {:#layout}
 
-- `plugins/ramtoshiya/` serves Claude Code, Codex, and Pi. Hook rules live only in
-  the Python scripts. `hooks.json` and `pi.ts` translate each agent's events
-  and must not add or change rules.
+- `plugins/ramtoshiya/` serves Claude Code, Codex, Pi, and Hermes. Hook rules
+  live only in the guard scripts. `hooks.json`, `pi.ts`, and the Hermes
+  `__init__.py` translate each agent's events and must not add or change rules.
 - Hook scripts use only the Python standard library and run through the uv
   command shown in `docs/hooks.md`. The plugins take no third-party runtime
   dependencies and have no `version` field.

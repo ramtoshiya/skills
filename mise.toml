@@ -35,5 +35,6 @@ zsh = true
 "~/.claude/CLAUDE.md" = { source = "setup/agents/preferences.md", mode = "copy" }
 "~/.codex/AGENTS.md" = { source = "setup/agents/preferences.md", mode = "copy" }
 "~/.pi/agent/AGENTS.md" = { source = "setup/agents/preferences.md", mode = "copy" }
+"~/.hermes/AGENTS.md" = { source = "setup/agents/preferences.md", mode = "copy" }
 "~/.claude/settings.json/preferences" = { source = "setup/agents/claude-settings.json", merge = true }
 "~/.claude/status-line.sh" = { source = "setup/agents/claude-statusline.sh", mode = "copy" }

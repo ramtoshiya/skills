@@ -87,9 +87,12 @@ Coding agents:
 
 | Target | Change |
 | --- | --- |
-| `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.pi/agent/AGENTS.md` | Copies of `setup/agents/preferences.md`, the author's instructions for every agent |
+| `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.pi/agent/AGENTS.md`, `~/.hermes/AGENTS.md` | Copies of `setup/agents/preferences.md`, the author's instructions for every agent |
 | `~/.claude/settings.json` | The keys in `setup/agents/claude-settings.json` |
 | `~/.claude/status-line.sh` | Copy of `setup/agents/claude-statusline.sh` |
+
+Hermes reads its shared preferences through the `ramtoshiya` native plugin,
+which must be installed separately as described in [Agent plugins](agent-pack.md).
 
 The shared agent instructions authorize local commits of completed, validated
 task-owned changes on the current branch, including the default branch. They
@@ -147,7 +150,7 @@ Deleting an entry from `mise.toml` leaves the file as it is.
 block with its markers.
 
 Target paths are fixed. If you set `CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
-`NPM_CONFIG_USERCONFIG`, or `XDG_CONFIG_HOME` (pnpm then reads
+`HERMES_HOME`, `NPM_CONFIG_USERCONFIG`, or `XDG_CONFIG_HOME` (pnpm then reads
 `$XDG_CONFIG_HOME/pnpm/config.yaml`), change the matching targets in
 `mise.toml`.
 

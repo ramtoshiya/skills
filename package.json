@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Personal skills, a package and Python guard, and a Git hygiene stop check for Pi, Claude Code, and Codex",
+  "description": "Personal skills, a package and Python guard, and a Git hygiene stop check for Pi, Claude Code, Codex, and Hermes",
   "keywords": ["pi-package"],
   "files": ["plugins/ramtoshiya/", "docs/agent-pack.md", "docs/hooks.md"],
   "pi": {

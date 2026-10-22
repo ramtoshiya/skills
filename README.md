@@ -10,7 +10,7 @@ preferences, so fork the repository and edit it before you run it.
 
 | Part | What it does | Docs |
 | --- | --- | --- |
-| `ramtoshiya` plugin | Skills for Claude Code, Codex, and the [Pi](https://pi.dev) coding agent, plus two hooks: a guard that blocks global package installs, unpinned one-shot package runs, and bare `python`/`pip`, and a stop check that asks the agent to deal with uncommitted Git changes | [Agent plugins](docs/agent-pack.md), [Hooks](docs/hooks.md) |
+| `ramtoshiya` plugin | Skills for Claude Code, Codex, [Pi](https://pi.dev), and [Hermes](https://hermes-agent.nousresearch.com), plus two hooks: a guard that blocks global package installs, unpinned one-shot package runs, and bare `python`/`pip`, and a stop check that asks the agent to deal with uncommitted Git changes | [Agent plugins](docs/agent-pack.md), [Hooks](docs/hooks.md) |
 | `ramtoshiya-cc` plugin | Claude Code only: a skill for claude.ai/design projects and a hook that blocks AI attribution lines in commits and pull requests | [Agent plugins](docs/agent-pack.md) |
 | Third-party skills | Skills from other repositories, listed in this repository's marketplace and pinned to exact commits | [Third-party skills](docs/upstream-skills.md) |
 | Machine setup | A `mise.toml` that installs a few Homebrew packages and writes shell, Git, package manager, and agent settings | [Machine setup](docs/setup.md) |
@@ -48,6 +48,17 @@ Pi:
 pi install git:github.com/ramtoshiya/skills
 ```
 
+Hermes, from the root of a local clone:
+
+```sh
+mkdir -p ~/.hermes/plugins
+ln -s "$PWD/plugins/ramtoshiya" ~/.hermes/plugins/ramtoshiya
+hermes plugins enable ramtoshiya
+```
+
+Restart Hermes after enabling. [Agent plugins](docs/agent-pack.md) describes
+its hook limits and shared preferences.
+
 ## Set up a Mac
 
 Fork and clone the repository, edit `mise.toml` and the files in `setup/`, then
@@ -59,7 +70,7 @@ every file the setup changes and the settings it applies.
 ```text
 .claude-plugin/marketplace.json   Claude Code and Codex marketplace: both plugins and the third-party entries
 package.json                      Pi package manifest for the ramtoshiya plugin
-plugins/ramtoshiya/                   Skills and hooks for Claude Code, Codex, and Pi
+plugins/ramtoshiya/                   Skills and hooks for Claude Code, Codex, Pi, and Hermes
 plugins/ramtoshiya-cc/                Claude Code-only skill and hook
 mise.toml, setup/                 Machine setup and the files it copies into place
 pi/cliproxy-provider/             Pi provider package, installed separately
@@ -78,5 +89,5 @@ claude plugin validate ./.claude-plugin/marketplace.json
 ```
 
 `npm test` needs Node.js 22.19 or newer and uv. It runs the Pi adapter tests
-and the Python tests for all three hooks. `AGENTS.md` holds the rules for
-changing this repository.
+and the Python tests for all three hooks and the Hermes adapter. `AGENTS.md`
+holds the rules for changing this repository.

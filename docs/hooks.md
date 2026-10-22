@@ -1,7 +1,7 @@
 # Hooks
 
 The plugins add three hooks. Two come with `ramtoshiya` and run in Claude Code,
-Codex, and Pi. One comes with `ramtoshiya-cc` and runs only in Claude Code.
+Codex, Pi, and Hermes. One comes with `ramtoshiya-cc` and runs only in Claude Code.
 
 | Hook | Runs | Plugin |
 | --- | --- | --- |
@@ -11,7 +11,8 @@ Codex, and Pi. One comes with `ramtoshiya-cc` and runs only in Claude Code.
 
 Each hook is a Python script that uses only the standard library. Claude Code
 and Codex run it through `hooks/hooks.json`. Pi runs the `ramtoshiya` hooks through
-the extension `hooks/pi.ts`. Every hook runs as:
+the extension `hooks/pi.ts`. Hermes uses the native plugin adapter
+`__init__.py`. Every hook runs as:
 
 ```sh
 uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python <hook>
@@ -54,12 +55,20 @@ heredoc bodies. A denial reaches the agent as the hook's reason.
 
 When the guard cannot run, the outcome depends on the agent. Pi blocks the
 command if uv fails, times out after five seconds, or returns output it cannot
-read. Claude Code and Codex apply their own rules for a failing hook process.
+read. Hermes does the same. Claude Code and Codex apply their own rules for a
+failing hook process.
 
 In Pi, the guard sees calls to the `bash` tool, including calls that other
 extensions make through `ctx.executeTool()`. It does not see commands you type
 with `!` or `!!`, processes that extensions start themselves, or shells hidden
 inside other tools.
+
+In Hermes, the package guard sees `terminal` tool calls. It checks an explicit
+`workdir` when supplied, otherwise `TERMINAL_CWD` or the Hermes process's working
+directory. It does not track persistent `cd` commands. The guards inspect the
+local host filesystem, so use them with the local terminal backend. They do not
+inspect remote or container package settings, interactive `process_manage`
+input, or processes started directly by another plugin.
 
 ## Git hygiene check
 
@@ -80,9 +89,16 @@ uncommitted still wins.
 | --- | --- | --- |
 | Claude Code, Codex | `Stop`, answered with `{"decision":"block","reason":...}` | `stop_hook_active` |
 | Pi | `agent_before_settle`, answered with a message and `continue: true` | One warning per run, reset on `agent_settled` |
+| Hermes | `pre_verify`, answered with the shared `decision: block` result | `attempt > 0` allows the retry |
 
 Pi skips runs that were aborted or failed. Every error allows the stop: no
 repository, no uv, a timeout after ten seconds, or unreadable output.
+
+Hermes fires `pre_verify` only after it records file edits and while its
+`agent.max_verify_nudges` budget remains. A turn with no recorded edits does not
+run the Git check, even if the repository was already dirty. The check uses
+`TERMINAL_CWD` or the Hermes process's working directory, not the last terminal
+`workdir` or `cd`. A previous verification continuation also allows the retry.
 
 Limits:
 
@@ -115,5 +131,7 @@ command, so a bug in the hook cannot block every shell call.
 
 `test/test_global_package_guard.py`, `test/test_git_hygiene_guard.py`, and
 `test/test_commit_trailer_guard.py` cover the rules. `test/*.test.mjs` cover the
-Pi extension, including its behavior when uv fails. Run them all with
+Pi extension, including its behavior when uv fails. The Hermes adapter has
+protocol and failure tests in `test/test_hermes.py`. Plugin Doctor checks its
+registration against an installed Hermes runtime. Run them all with
 `npm test`.

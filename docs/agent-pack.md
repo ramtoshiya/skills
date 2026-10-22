@@ -1,10 +1,10 @@
 # Agent plugins
 
-This repository has two plugins. `ramtoshiya` works in Claude Code, Codex, and Pi.
-`ramtoshiya-cc` works only in Claude Code. Both install from the marketplace file
-`.claude-plugin/marketplace.json`, which also lists the
+This repository has two plugins. `ramtoshiya` works in Claude Code, Codex, Pi,
+and Hermes. `ramtoshiya-cc` works only in Claude Code. Both install from the
+marketplace file `.claude-plugin/marketplace.json`, which also lists the
 [third-party skills](upstream-skills.md). Pi installs `ramtoshiya` as a Pi package
-instead.
+instead. Hermes loads the shared plugin from a local clone.
 
 ## What the plugins contain
 
@@ -53,13 +53,14 @@ A project's own config file can set them too. The
 [machine setup](setup.md) writes the npm, pnpm, and uv settings.
 
 The plugins have no third-party runtime dependencies. Tested with Claude Code
-2.1.301, Codex CLI 0.162.1, and Pi 1.2.0.
+2.1.301, Codex CLI 0.162.1, Pi 1.2.0, and Hermes 0.22.2.
 
 ## Install
 
 Install the agents themselves from their own instructions:
 [Claude Code](https://code.claude.com/docs/en/setup),
-[Codex CLI](https://github.com/openai/codex), and [Pi](https://pi.dev).
+[Codex CLI](https://github.com/openai/codex), [Pi](https://pi.dev), and
+[Hermes](https://hermes-agent.nousresearch.com/docs/getting-started/installation).
 
 Claude Code:
 
@@ -91,8 +92,33 @@ The Pi package contains the `ramtoshiya` skills and one extension, `hooks/pi.ts`
 which runs both hooks. Pi does not read the marketplace file, so it gets
 neither `ramtoshiya-cc` nor the third-party skills from this command.
 
-To install from a local clone instead, use its path in place of
-`ramtoshiya/skills` and `git:github.com/ramtoshiya/skills`. Claude Code and Pi
+Hermes, from the root of a local clone:
+
+```sh
+mkdir -p ~/.hermes/plugins
+ln -s "$PWD/plugins/ramtoshiya" ~/.hermes/plugins/ramtoshiya
+hermes plugins doctor ~/.hermes/plugins/ramtoshiya --ci
+hermes plugins enable ramtoshiya
+```
+
+Use an unused destination for the link. Hermes discovers `plugin.yaml` and
+`__init__.py`, which register the shared skills under `ramtoshiya:<name>` and
+translate the two guard protocols. It does not read the marketplace file or
+install third-party skills. This plugin uses the native
+[Hermes plugin API](https://hermes-agent.nousresearch.com/docs/developer-guide/plugins).
+
+The optional [machine setup](setup.md) copies shared preferences to
+`~/.hermes/AGENTS.md`. The plugin adds that file to new sessions as a system
+prompt section. Hermes does not load this global `AGENTS.md` on its own.
+`HERMES_HOME` selects the home used by the plugin, so change the mise target
+if you use a custom home or profile.
+
+Restart Hermes after installing or changing the plugin or its preferences.
+Its Git check runs through `pre_verify` after file edits, subject to Hermes's
+`agent.max_verify_nudges` setting. [Hooks](hooks.md) lists the other limits.
+
+To install Claude Code, Codex, or Pi from a local clone instead, use its path
+in place of `ramtoshiya/skills` and `git:github.com/ramtoshiya/skills`. Claude Code and Pi
 then load the plugin from the checkout, so edits apply after a reload.
 
 Restart the agent after installing, or run `/reload-plugins` in Claude Code and
@@ -106,6 +132,9 @@ In each agent, ask it to run these commands:
 2. `pip --version` is blocked with a message about bare Python and pip commands.
 3. In a repository with an uncommitted change, the agent's first attempt to
    stop is blocked with a list of the changes. A second attempt is allowed.
+
+For Hermes's stop check, have the agent edit a disposable file in a temporary
+Git repository first. Its `pre_verify` event requires recorded file edits.
 
 In Claude Code, `/plugin` lists the installed plugins. Each skill should appear
 once in the agent's skill list. A loose copy of the same skill, for example in
@@ -121,6 +150,7 @@ marketplace repository as a new version.
 | Claude Code | `claude plugin marketplace update ramtoshiya`, then `claude plugin update ramtoshiya@ramtoshiya` (and `ramtoshiya-cc@ramtoshiya`) and a restart |
 | Codex | Follow the source refresh, installation, and restart steps below. Changed hooks need your trust again in `/hooks` |
 | Pi | `pi update --extensions`, then `/reload` |
+| Hermes | Update the linked checkout, run `hermes plugins doctor ~/.hermes/plugins/ramtoshiya --ci`, then restart Hermes |
 
 For Codex, finish active turns and close sessions that use the plugin before
 updating it. Updating the installed copy can remove a version directory that a
@@ -144,8 +174,6 @@ Do not repair a missing plugin version with cache edits or links to another
 version. Use the install and runtime lifecycle above. For versioned third-party
 plugins such as `humanize`, also follow [Third-party skills](upstream-skills.md).
 
-Tested with Codex CLI 0.162.1.
-
 ## How the files fit together
 
 ```text
@@ -157,11 +185,13 @@ plugins/ramtoshiya/hooks/global-package-guard.py   Package and Python rules
 plugins/ramtoshiya/hooks/git-hygiene-guard.py      Stop check
 plugins/ramtoshiya/hooks/hooks.json            Hook registration for Claude Code and Codex
 plugins/ramtoshiya/hooks/pi.ts                 Pi extension that runs both Python hooks
+plugins/ramtoshiya/plugin.yaml                 Hermes native plugin manifest
+plugins/ramtoshiya/__init__.py                 Hermes skills, preferences, and hook adapter
 plugins/ramtoshiya-cc/                         Claude Code-only skill and hook
 ```
 
-The rules live only in the Python files. `hooks.json` and `pi.ts` pass each
-agent's event to them and translate the answer. The `files` list in
-`package.json` limits the Pi package to `plugins/ramtoshiya/`, `README.md`, and the
+The rules live only in the guard scripts. `hooks.json`, `pi.ts`, and the Hermes
+adapter pass each agent's event to them and translate the answer. The `files`
+list in `package.json` limits the Pi package to `plugins/ramtoshiya/`, `README.md`, and the
 plugin docs. `npm test` checks that a packed copy contains nothing else and that
 its guard runs without the rest of the repository.
