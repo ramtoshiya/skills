@@ -16,6 +16,20 @@
       "author": { "name": "ramtoshiya" }
     },
     {
+      "name": "open-pencil",
+      "description": "Official OpenPencil skill for inspecting, editing, and exporting designs through the CLI or the running editor.",
+      "source": {
+        "source": "git-subdir",
+        "url": "open-pencil/open-pencil",
+        "path": "skills",
+        "sha": "806380c6d0a3fa032f17827262f8880e747a406f"
+      },
+      "skills": ["./open-pencil"],
+      "author": { "name": "Danila Poyarkov" },
+      "repository": "https://github.com/open-pencil/open-pencil",
+      "license": "MIT"
+    },
+    {
       "name": "mattpocock-productivity",
       "description": "Grilling interviews and conversation handoff from Matt Pocock's skills, patched to state obvious defaults and ask actual questions.",
       "source": {

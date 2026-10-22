@@ -152,9 +152,9 @@ marketplace repository as a new version.
 | Pi | `pi update --extensions`, then `/reload` |
 | Hermes | Update the linked checkout, run `hermes plugins doctor ~/.hermes/plugins/ramtoshiya --ci`, then restart Hermes |
 
-For Codex, finish active turns and close sessions that use the plugin before
-updating it. Updating the installed copy can remove a version directory that a
-running session still uses for hooks.
+Refreshing Codex's installed plugin does not reload active sessions. Use a fresh
+process to load the changed skills. If a session reports a missing plugin file
+after an update, restart that session rather than repairing the cache.
 
 1. Refresh the marketplace source. For a Git-backed marketplace, run
    `codex plugin marketplace upgrade ramtoshiya`. For a marketplace added from a
