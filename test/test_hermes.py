@@ -4,9 +4,11 @@ import importlib.util
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 SOURCE = Path(__file__).resolve().parents[1] / "plugins/ramtoshiya/__init__.py"
 SPEC = importlib.util.spec_from_file_location("hermes_adapter", SOURCE)
@@ -15,6 +17,20 @@ SPEC.loader.exec_module(adapter)
 
 
 class HermesAdapterTests(unittest.TestCase):
+    def test_registers_every_shipped_skill(self):
+        with tempfile.TemporaryDirectory() as directory:
+            context = SimpleNamespace(register_hook=Mock(), register_skill=Mock())
+            constants = SimpleNamespace(get_hermes_home=lambda: Path(directory))
+            with patch.dict(sys.modules, {"hermes_constants": constants}):
+                adapter.register(context)
+            registered = {call.args[1] for call in context.register_skill.call_args_list}
+            shipped = set((adapter.ROOT / "skills").glob("*/SKILL.md"))
+            self.assertTrue(shipped)
+            self.assertEqual(registered, shipped)
+            for call in context.register_skill.call_args_list:
+                self.assertEqual(call.args[0], call.args[1].parent.name)
+                self.assertTrue(call.args[2].strip())
+
     def test_terminal_protocol_and_unrelated_tools(self):
         with tempfile.TemporaryDirectory() as directory:
             args = {"command": "git status", "workdir": directory}

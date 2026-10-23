@@ -192,7 +192,9 @@ plugins/ramtoshiya-cc/                         Claude Code-only skill and hook
 ```
 
 The rules live only in the guard scripts. `hooks.json`, `pi.ts`, and the Hermes
-adapter pass each agent's event to them and translate the answer. The `files`
+adapter pass each agent's event to them and translate the answer. Each skill
+under `skills/` also needs an entry in the Hermes adapter's `SKILLS` map.
+The registration test checks that every shipped skill is included. The `files`
 list in `package.json` limits the Pi package to `plugins/ramtoshiya/`, `README.md`, and the
 plugin docs. `npm test` checks that a packed copy contains nothing else and that
 its guard runs without the rest of the repository.

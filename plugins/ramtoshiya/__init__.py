@@ -16,6 +16,7 @@ UNAVAILABLE = (
 )
 SKILLS = {
     "codex-session-reader": "Find and read local Codex CLI session transcripts.",
+    "excalidraw-board": "Read and draw on shared Excalidraw rooms.",
     "figma-rest": "Read Figma designs through the REST API.",
     "imagegen": "Generate and edit raster images with GPT Image or Grok Imagine.",
     "mermaid-check": "Validate Mermaid diagrams with the real parser before delivery.",
