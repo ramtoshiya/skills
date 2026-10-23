@@ -38,20 +38,19 @@ Human-facing docs are `README.md`, `docs/*.md`, and the READMEs under `pi/` and
 
 | Topic | Owner |
 | --- | --- |
-| Plugin contents, install, update, checks | `docs/agent-pack.md` |
+| Plugin contents, host support, install, update, checks | `docs/agent-pack.md` |
 | Hook rules and limits | `docs/hooks.md` |
 | Marketplace entries for third-party skills, forks, pin updates | `docs/upstream-skills.md` |
 | `mise.toml` and `setup/` | `docs/setup.md` |
-| CLIProxyAPI provider | `pi/cliproxy-provider/README.md` |
-| `sidecar` | `cli/sidecar/README.md` |
-| `claudex` | `cli/claudex/README.md` |
-| `excalidraw-board` | `cli/excalidraw-board/README.md` |
+| Each package under `pi/` | `pi/<package>/README.md` |
+| Each standalone CLI under `cli/` | `cli/<tool>/README.md` |
 
 ## Layout and boundaries {:#layout}
 
-- `plugins/ramtoshiya/` serves Claude Code, Codex, Pi, and Hermes. Hook rules
-  live only in the guard scripts. `hooks.json`, `pi.ts`, and the Hermes
-  `__init__.py` translate each agent's events and must not add or change rules.
+- `plugins/ramtoshiya/` is shared across supported hosts, documented in
+  `docs/agent-pack.md`. Hook rules live only in the shared guard scripts.
+  Host adapters only translate events and guard responses and must not add or
+  change rules.
 - Hook scripts use only the Python standard library and run through the uv
   command shown in `docs/hooks.md`. The plugins take no third-party runtime
   dependencies and have no `version` field.
