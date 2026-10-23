@@ -16,7 +16,7 @@ those repositories. This repository holds none of them.
 | `humanize` | `humanize` and its hook | `plugins/humanize` in the fork [ramtoshiya/claude-codex-settings](https://github.com/ramtoshiya/claude-codex-settings) | Apache-2.0 |
 | `humanize-korean` | Korean prose diagnosis, editing, and verification | `plugins/humanize-korean` in the fork [ramtoshiya/im-not-ai](https://github.com/ramtoshiya/im-not-ai) | MIT |
 | `ouroboros-interview` | `interview` | `plugins/ouroboros-interview` in the fork [ramtoshiya/ouroboros](https://github.com/ramtoshiya/ouroboros) | MIT |
-| `omd` | Design-system workflows, preference learning, design reviews, and `omd-humanize` | `plugins/omd` in the fork [ramtoshiya/oh-my-design](https://github.com/ramtoshiya/oh-my-design) | MIT |
+| `omd` | Design-system workflows, preference learning, design reviews, and `omd-kr-writer` | `plugins/omd` in the fork [ramtoshiya/oh-my-design](https://github.com/ramtoshiya/oh-my-design) | MIT |
 
 `grill-me` and `handoff` run only when you invoke them, so the agent's own
 skill list shows only `grilling`. Installed skills carry the entry name as a
@@ -71,8 +71,11 @@ contracts, the full numbered slop gates, and `.omd/preferences.md`.
 `omd-apply` handles changes to an existing interface, `omd-autopilot` handles
 new surfaces, and `omd-harness` provides the guided workflow. `omd-feel`,
 `omd-restraint`, and `omd-slop-audit` provide focused reviews. The writing
-selection is only `omd-humanize`, including its locale playbooks. It does not
-include `omd-kr-writer`, `omd-locale-adapter`, or `hangul`.
+selection is `omd-kr-writer`, which writes or revises Korean text with 12 voice
+presets and defaults to `toss-tech-design`. Explicit instructions and project
+voice override presets. It uses the caller's output paths and document schema.
+Other locales remain caller-owned. The package does not include `omd-humanize`,
+`omd-locale-adapter`, or `hangul`.
 
 The preference loop records corrections through `omd-remember`, observes
 off-system edits through hooks, and proposes recurring corrections for review.

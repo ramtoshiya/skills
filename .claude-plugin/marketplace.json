@@ -98,12 +98,12 @@
     },
     {
       "name": "omd",
-      "description": "OmD design systems, preference learning, full quality gates, and copy humanization, packaged without its CLI or company reference catalog.",
+      "description": "OmD design systems, preference learning, full quality gates, and Korean writing with 12 voice presets, packaged without its CLI or company reference catalog.",
       "source": {
         "source": "git-subdir",
         "url": "ramtoshiya/oh-my-design",
         "path": "plugins/omd",
-        "sha": "1fb7fdde381a0e4a7b6c3bf47790ba8d54ee9377"
+        "sha": "46ebebcabd24d7af695b74402275d6d640d2e379"
       },
       "author": { "name": "kwakseongjae" },
       "repository": "https://github.com/ramtoshiya/oh-my-design",
