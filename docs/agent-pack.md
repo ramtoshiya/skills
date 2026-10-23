@@ -14,6 +14,7 @@ instead. Hermes loads the shared plugin from a local clone.
 | --- | --- | --- |
 | `codex-session-reader` | Finds and reads Codex CLI session transcripts under `~/.codex/sessions/` | Nothing |
 | `figma-rest` | Reads Figma files, tokens, and rendered nodes through the REST API instead of the Figma MCP server | A Figma personal access token in the `FIGMA_TOKEN` environment variable, or as a `FIGMA_TOKEN=<token>` line in `~/.config/agent-secrets/figma.env` |
+| `excalidraw-board` | Reads and draws on shared excalidraw.com rooms through a proof-of-concept CLI | The separately installed `excalidraw-board` command on `PATH`, described in [its README](../cli/excalidraw-board/README.md) |
 | `imagegen` | Generates and edits images with OpenAI GPT Image or xAI Grok Imagine through an OpenAI-compatible Images API | uv, and an API key or proxy in the environment (see the skill's `SKILL.md`) |
 | `mermaid-check` | Runs the Mermaid parser over diagrams before the agent delivers them | Node.js. The first run downloads `@mermaid-js/mermaid-cli` 12.0.0 through `npx` |
 | `reorganize-commits` | Rewrites the current branch's commits into reviewable chunks. Runs only when you invoke it | Git |

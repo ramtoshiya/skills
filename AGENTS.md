@@ -45,6 +45,7 @@ Human-facing docs are `README.md`, `docs/*.md`, and the READMEs under `pi/` and
 | CLIProxyAPI provider | `pi/cliproxy-provider/README.md` |
 | `sidecar` | `cli/sidecar/README.md` |
 | `claudex` | `cli/claudex/README.md` |
+| `excalidraw-board` | `cli/excalidraw-board/README.md` |
 
 ## Layout and boundaries {:#layout}
 

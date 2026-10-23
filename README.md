@@ -17,6 +17,7 @@ preferences, so fork the repository and edit it before you run it.
 | CLIProxyAPI provider | A Pi extension that lists the Claude and GPT models of a [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) server and talks to each in its native protocol | [README](pi/cliproxy-provider/README.md) |
 | `sidecar` | A macOS command that connects an iPad as a Sidecar display, and an iPad shortcut that runs it over SSH | [README](cli/sidecar/README.md) |
 | `claudex` | Runs Claude Code with GPT models discovered from CLIProxyAPI | [README](cli/claudex/README.md) |
+| `excalidraw-board` | Proof-of-concept command for reading and editing shared Excalidraw rooms | [README](cli/excalidraw-board/README.md) |
 
 ## Install the agent plugins
 
@@ -76,6 +77,7 @@ mise.toml, setup/                 Machine setup and the files it copies into pla
 pi/cliproxy-provider/             Pi provider package, installed separately
 cli/sidecar/                      Standalone macOS command
 cli/claudex/                      Claude Code launcher for CLIProxyAPI GPT models
+cli/excalidraw-board/              Standalone shared-board command
 test/                             Tests for the hooks and the Pi package
 docs/                             Documentation
 ```
