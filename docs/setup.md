@@ -89,10 +89,15 @@ Coding agents:
 | --- | --- |
 | `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.pi/agent/AGENTS.md`, `~/.hermes/AGENTS.md` | Copies of `setup/agents/preferences.md`, the author's instructions for every agent |
 | `~/.claude/settings.json` | The keys in `setup/agents/claude-settings.json` |
+| `~/.hermes/config.yaml` | The keys in `setup/agents/hermes-config.yaml` |
 | `~/.claude/status-line.sh` | Copy of `setup/agents/claude-statusline.sh` |
 
 Hermes reads its shared preferences through the `ramtoshiya` native plugin,
 which must be installed separately as described in [Agent plugins](agent-pack.md).
+
+`hermes-config.yaml` sets `security.protected_instruction_files` to `false`,
+which disables Hermes' approval gate for writes to agent instruction files.
+mise merges this setting without replacing other Hermes configuration.
 
 The shared agent instructions authorize local commits of completed, validated
 task-owned changes on the current branch, including the default branch. They
