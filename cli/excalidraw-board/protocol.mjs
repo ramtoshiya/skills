@@ -1,6 +1,7 @@
 import { webcrypto } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { reconcile, applyBatch, revision } from "./scene.mjs";
+import { request } from "./request.mjs";
 
 const sceneEndpoint = "https://firestore.googleapis.com/v1/projects/excalidraw-room-persistence/databases/(default)/documents/scenes/";
 const relayEndpoint = "wss://oss-collab.excalidraw.com/socket.io/?EIO=4&transport=websocket";
@@ -22,8 +23,8 @@ export async function decrypt(key, ciphertext, iv) {
   } catch { throw new Error("Cannot decrypt room data. Check the room key or saved scene format."); }
 }
 
-export async function loadScene(room, { missing = false } = {}) {
-  const response = await fetch(sceneEndpoint + encodeURIComponent(room.id), { signal: AbortSignal.timeout(15000) });
+export async function loadScene(room, { missing = false, onRetry } = {}) {
+  const response = await request(sceneEndpoint + encodeURIComponent(room.id), {}, { onRetry });
   if (response.status === 404) {
     if (missing) return null;
     throw new Error("room is gone");
@@ -162,10 +163,10 @@ export async function writeScene(room, input, options = {}) {
   const socket = new RoomSocket(room);
   let saved;
   try {
-    await loadScene(room);
+    await loadScene(room, { onRetry: options.onRetry });
     await socket.open();
     for (let attempt = 0; attempt < 6; attempt++) {
-      const current = await loadScene(room);
+      const current = await loadScene(room, { onRetry: options.onRetry });
       const merged = reconcile(current.elements, socket.elements);
       const result = applyBatch(merged, batch, options);
       if (!result.changed.length) return { revision: current.revision, changed: [], saved: true, notified: false };
@@ -173,7 +174,7 @@ export async function writeScene(room, input, options = {}) {
       if (!receipt) { await sleep(40 + Math.random() * 100 * (attempt + 1)); continue; }
       saved = { ...receipt, changed: result.changed, attempts: attempt + 1, saved: true, notified: false };
       // Verify exact authored elements survived a readback, even if another writer already advanced the revision.
-      const verified = await loadScene(room);
+      const verified = await loadScene(room, { onRetry: options.onRetry });
       for (const id of result.changed) {
         const expected = JSON.parse(JSON.stringify(result.elements.find(element => element.id === id)));
         const actual = verified.elements.find(element => element.id === id);

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inflateSync } from "node:zlib";
 import { decrypt, encrypt, writeScene } from "../cli/excalidraw-board/protocol.mjs";
-import { uploadImage } from "../cli/excalidraw-board/images.mjs";
+import { uploadImage, uploadImages } from "../cli/excalidraw-board/images.mjs";
 
 const room = { id: "offline-protocol", key: "AAAAAAAAAAAAAAAAAAAAAA" };
 const before = "2026-01-01T00:00:00.000001Z";
@@ -56,6 +56,7 @@ function transport(t, steps) {
     const request = { url: new URL(url), method: options.method || "GET", headers: options.headers,
       body: Buffer.isBuffer(options.body) ? options.body : options.body && JSON.parse(options.body) };
     requests.push(request);
+    if (typeof steps === "function") return steps(request, requests);
     const step = steps.shift();
     assert.ok(step, `Unexpected ${request.method}`);
     assert.equal(request.method, step[0]);
@@ -64,7 +65,7 @@ function transport(t, steps) {
   t.after(() => {
     if (previousWebSocket) Object.defineProperty(globalThis, "WebSocket", previousWebSocket);
     else delete globalThis.WebSocket;
-    assert.equal(steps.length, 0, "All scripted responses must be consumed");
+    if (Array.isArray(steps)) assert.equal(steps.length, 0, "All scripted responses must be consumed");
     assert.ok(sockets.every(socket => socket.readyState === 3), "Sockets must close on success and failure");
   });
   return {
@@ -262,6 +263,111 @@ test("image upload uses the browser's encrypted file format before persisting an
   assert.equal(fixture.requests.filter(request => request.method === "PATCH").length, 1);
 });
 
+test("transient file upload failures retry identical encrypted bytes and publish once", async t => {
+  const file = imageFixture(t);
+  const initial = await document([]);
+  let encrypted, firstBody, authored;
+  const fixture = transport(t, [
+    ["GET", initial], ["GET", () => new Response(null, { status: 404 })],
+    ["POST", request => { firstBody = request.body; return new Response(null, { status: 503 }); }],
+    ["POST", request => {
+      assert.deepEqual(request.body, firstBody);
+      encrypted = uploadedBytes(request);
+      return Response.json({});
+    }],
+    ["GET", () => new Response(encrypted)], ["GET", initial], ["GET", initial],
+    ["PATCH", async request => { authored = await elementsIn(request); return Response.json({ updateTime: after }); }],
+    ["GET", async () => Response.json(await document(authored, after))],
+  ]);
+  const receipt = await uploadImage(room, { file, elementId: "capture" });
+  assert.equal(receipt.retries, 1);
+  assert.equal(receipt.fileSaved, true);
+  assert.equal(fixture.requests.filter(request => request.method === "PATCH").length, 1);
+  assert.equal(fixture.broadcasts().length, 1);
+});
+
+test("image batches bound parallel file work, deduplicate bytes and publish once after all readbacks", { timeout: 5000 }, async t => {
+  const paths = [0, 1, 2].map(value => imageFixture(t, Buffer.concat([png, Buffer.from([value])])));
+  const images = [...paths, paths[0]].map((file, index) => ({ file, elementId: `capture-${index}`, x: index * 20 }));
+  const gate = Promise.withResolvers();
+  t.after(() => gate.resolve());
+  let active = 0, peak = 0, readbacks = 0, sceneReads = 0, authored;
+  let scene = await document([]);
+  const files = new Map();
+  const fixture = transport(t, async request => {
+    if (request.url.hostname === "firestore.googleapis.com") {
+      if (request.method === "GET") { sceneReads++; return Response.json(scene); }
+      assert.equal(request.method, "PATCH");
+      assert.equal(readbacks, 3, "Publish only after every unique file has been downloaded");
+      authored = await elementsIn(request);
+      scene = await document(authored, after);
+      return Response.json({ updateTime: after });
+    }
+    if (request.method === "POST") {
+      files.set(request.url.searchParams.get("name").split("/").at(-1), uploadedBytes(request));
+      return Response.json({});
+    }
+    const id = decodeURIComponent(request.url.pathname).split("/").at(-1);
+    if (files.has(id)) { readbacks++; return new Response(files.get(id)); }
+    active++;
+    peak = Math.max(peak, active);
+    if (active === 2) gate.resolve();
+    await gate.promise;
+    active--;
+    return new Response(null, { status: 404 });
+  });
+  const receipt = await uploadImages(room, images, { concurrency: 2 });
+  assert.equal(peak, 2, "Two concurrent file operations, never three");
+  assert.deepEqual(receipt.files, { unique: 3, verified: 3, uploaded: 3 });
+  assert.equal(receipt.images.length, 4);
+  assert.equal(receipt.images[0].fileId, receipt.images[3].fileId);
+  assert.deepEqual(authored.map(element => element.id), images.map(image => image.elementId));
+  assert.equal(sceneReads, 4);
+  assert.equal(fixture.requests.filter(request => request.method === "POST").length, 3);
+  assert.equal(fixture.requests.filter(request => request.method === "PATCH").length, 1);
+  assert.equal(fixture.sockets.length, 1);
+  assert.equal(fixture.broadcasts().length, 1);
+  assert.deepEqual(await fixture.broadcastElements(), authored);
+  for (const value of Object.values(receipt.timings)) assert.ok(Number.isFinite(value) && value >= 0);
+});
+
+test("failed image batches settle active uploads, stop scheduling and never publish partial scenes", { timeout: 5000 }, async t => {
+  const bytes = [0, 1, 2].map(value => Buffer.concat([png, Buffer.from([value])]));
+  const images = bytes.map((data, index) => ({ file: imageFixture(t, data), elementId: `capture-${index}` }));
+  const hashes = bytes.map(data => createHash("sha1").update(data).digest("hex"));
+  const started = Promise.withResolvers(), finish = Promise.withResolvers();
+  t.after(() => finish.resolve());
+  const initial = await document([]);
+  let encrypted;
+  const fixture = transport(t, async request => {
+    if (request.url.hostname === "firestore.googleapis.com") return Response.json(initial);
+    if (request.method === "POST") { encrypted = uploadedBytes(request); return Response.json({}); }
+    const id = decodeURIComponent(request.url.pathname).split("/").at(-1);
+    assert.notEqual(id, hashes[2], "Do not schedule another file after failure");
+    if (id === hashes[0]) return new Response(null, { status: 403 });
+    if (encrypted) return new Response(encrypted);
+    started.resolve();
+    await finish.promise;
+    return new Response(null, { status: 404 });
+  });
+  let settled = false;
+  const work = uploadImages(room, images, { concurrency: 2 });
+  work.then(() => { settled = true; }, () => { settled = true; });
+  await started.promise;
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(settled, false, "Wait for active work before returning failure");
+  finish.resolve();
+  await assert.rejects(work, error => {
+    assert.match(error.message, /No image elements were saved/);
+    assert.equal(error.receipt.saved, false);
+    assert.equal(error.receipt.files.verified, 1);
+    assert.equal(error.receipt.images[0].elementId, "capture-1");
+    return true;
+  });
+  assert.equal(fixture.requests.some(request => request.method === "PATCH"), false);
+  assert.equal(fixture.sockets.length, 0);
+});
+
 test("image retry rejects a concurrent replacement before overwriting its file identity", async t => {
   const file = imageFixture(t);
   const image = { id: "capture", type: "image", fileId: createHash("sha1").update(png).digest("hex"),
@@ -308,6 +414,17 @@ test("image validation rejects unsupported, oversized and unbounded inputs befor
     const file = imageFixture(t, bytes);
     await assert.rejects(uploadImage(room, { file, ...options }), error);
   }
+  const file = imageFixture(t);
+  for (const [images, options, error] of [
+    [[], {}, /1 to 128/], [Array(129).fill({ file }), {}, /1 to 128/],
+    [[{ file }], { concurrency: 0 }, /Concurrency/], [[{ file }], { concurrency: 9 }, /Concurrency/],
+    [[{ file }], { concurrency: 1.5 }, /Concurrency/],
+    [[{ file, unknown: true }], {}, /Invalid image entry/],
+    [[{ file, elementId: "" }], {}, /elementId/], [[{ file, elementId: null }], {}, /elementId/],
+    [[{ file, elementId: false }], {}, /elementId/], [[{ file, frame: 12 }], {}, /frame/],
+    [[{ file }, { file }], {}, /Repeated image element id/],
+    [[{ file }, { file: imageFixture(t, Buffer.from("invalid")) }], {}, /PNG or JPEG/],
+  ]) await assert.rejects(uploadImages(room, images, options), error);
   assert.equal(fixture.requests.length, 0);
 });
 
@@ -315,6 +432,15 @@ test("ordinary scene writes cannot create an image without uploading its file", 
   const initial = await document([]);
   const fixture = transport(t, [["GET", initial], ["GET", initial]]);
   await assert.rejects(writeScene(room, { add: [{ id: "image", type: "image", fileId: "missing", status: "saved" }] }), /image command/);
+  assert.equal(fixture.broadcasts().length, 0);
+});
+
+test("scene save errors are not blindly retried by HTTP backoff", async t => {
+  const initial = await document(original);
+  const fixture = transport(t, [["GET", initial], ["GET", initial],
+    ["PATCH", () => Response.json({ error: { status: "UNAVAILABLE" } }, { status: 503 })]]);
+  await assert.rejects(writeScene(room, batch), /Room save failed/);
+  assert.equal(fixture.requests.filter(request => request.method === "PATCH").length, 1);
   assert.equal(fixture.broadcasts().length, 0);
 });
 
