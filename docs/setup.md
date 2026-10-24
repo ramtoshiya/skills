@@ -101,7 +101,11 @@ Its `skills.disabled` list hides development and product-design workflows,
 plus selected personal-service skills that are not in use. It retains the
 shared Excalidraw, Mermaid validation, and Codex session-reading skills.
 Image generation uses Hermes' native `image_generate` tool instead of the
-shared image skill. Configure its backend through `hermes tools` if needed.
+shared image skill. The `openai-codex` provider uses ChatGPT/Codex OAuth with
+`gpt-image-2-medium`, not an OpenAI API key. Sign in with
+`hermes auth add openai-codex` if needed. Subscription limits apply, and the
+backend can return a different quality or size from the request. Credentials
+stay in Hermes' local authentication store, outside this repository.
 The config also disables the Orca lifecycle plugin `orca-status`.
 
 mise merges these keys without replacing other Hermes configuration. Lists

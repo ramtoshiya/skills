@@ -1,5 +1,8 @@
 security:
   protected_instruction_files: true
+image_gen:
+  provider: openai-codex
+  model: gpt-image-2-medium
 skills:
   disabled:
     - airtable
