@@ -32,10 +32,15 @@ browser tab without permission. Use a separate tab for rendering checks.
 2. Run `excalidraw-board read --id <prefix> --outline` first, then read the
    relevant frame or element ids. Reads show persisted state, not every
    unsaved browser edit.
-3. Put each idea in a named frame. Add shapes and text as separate elements
-   with `frame` set to that frame's id. Supply text width and height yourself.
-   Keep batches small. Use `image` for existing PNG/JPEG files, not an image
-   element in a `write` batch. Path creation is unsupported.
+3. Outline each idea with a plain, transparent rectangle and a separate title
+   text element. Keep images, text, annotations, and connectors at board level
+   without `frame` membership. Real frames clip their members, which can hide
+   arrows between screenshots. Use a real frame only when the user explicitly
+   requests its clipping behavior. To replace existing frames, add rectangle
+   boundaries, clear members' `frame` fields to null, and delete only the frames.
+   Preserve content positions and connector bindings. Supply text width and
+   height yourself. Keep batches small. Use `image` for existing PNG/JPEG files,
+   not an image element in a `write` batch. Path creation is unsupported.
 4. Write a single batch on stdin. Use explicit, unique element ids when a
    retry must not duplicate an add. Send only changed fields in updates, not
    stale whole elements. Never supply managed version, nonce, seed, index,
@@ -59,7 +64,7 @@ excalidraw-board read --id <prefix> --outline
 excalidraw-board read --id <prefix> --frame <frame-id>
 excalidraw-board read --id <prefix> --group <group-id>
 excalidraw-board read --id <prefix> --ids a1,b2 --full
-excalidraw-board image --id <prefix> --file screenshot.png --element-id capture-home --x 40 --y 80 --width 406 --frame review-frame
+excalidraw-board image --id <prefix> --file screenshot.png --element-id capture-home --x 40 --y 80 --width 406
 ```
 
 Write input is one JSON object, for example:
@@ -67,9 +72,10 @@ Write input is one JSON object, for example:
 ```json
 {
   "add": [
-    {"id":"idea-frame","type":"frame","name":"Login idea","x":0,"y":0,"w":600,"h":400},
-    {"id":"a1","type":"rectangle","frame":"idea-frame","x":40,"y":80,"w":240,"h":120},
-    {"id":"b2","type":"text","frame":"idea-frame","x":60,"y":100,"w":200,"h":30,"text":"Login"}
+    {"id":"idea-boundary","type":"rectangle","x":0,"y":0,"w":600,"h":400,"backgroundColor":"transparent"},
+    {"id":"idea-title","type":"text","x":20,"y":16,"w":240,"h":30,"text":"Login idea"},
+    {"id":"a1","type":"rectangle","x":40,"y":80,"w":240,"h":120},
+    {"id":"b2","type":"text","x":60,"y":100,"w":200,"h":30,"text":"Login"}
   ],
   "update": [],
   "delete": []
@@ -90,10 +96,12 @@ Only upload files the user authorized for sharing. Files are encrypted with
 that room's key, but uploading sends them to an external service and anyone
 with the room link can decrypt them. The CLI does not generate or export images.
 
-Use `image --file` for PNG/JPEG uploads. Create the containing frame first and
-use an explicit, unique `--element-id` for each placement. Keep the same file
-and element id when retrying. Each file's base64 data URL must fit the service's
-4 MiB limit. `--width` changes display size, not the uploaded file's byte size.
+Use `image --file` for PNG/JPEG uploads with an explicit, unique `--element-id`
+for each placement. Use plain rectangle boundaries and separate captions for
+screenshot layouts. Omit `--frame` unless the user requested a real clipping
+frame. Keep the same file and element id when retrying. Each file's base64 data
+URL must fit the service's 4 MiB limit. `--width` changes display size, not the
+uploaded file's byte size.
 
 Check `fileSaved` as well as `saved`, `notified`, revision, and changed ids.
 The command verifies the uploaded file before creating its image element.
