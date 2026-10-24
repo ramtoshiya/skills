@@ -3,6 +3,7 @@ import { open } from "node:fs/promises";
 import { deflateSync, inflateSync } from "node:zlib";
 import { applyBatch } from "./scene.mjs";
 import { loadScene, writeScene } from "./protocol.mjs";
+import { request } from "./request.mjs";
 
 const maxBytes = 4 * 1024 * 1024;
 const storage = "https://firebasestorage.googleapis.com/v0/b/excalidraw-room-persistence.appspot.com/o";
@@ -121,24 +122,13 @@ async function fileBytes(response) {
   } finally { await reader.cancel(); }
 }
 
-export async function uploadImage(room, { file: path, elementId, x = 0, y = 0, width, frame = null }) {
-  for (const number of [x, y, width ?? 1]) if (typeof number !== "number" || !Number.isFinite(number)) throw new Error("Image coordinates and width must be finite numbers");
-  if (width !== undefined && width <= 0) throw new Error("Image width must be positive");
-  const file = await readImage(path);
-  const imageWidth = width ?? file.width;
-  const element = { id: elementId ?? `image-${file.id}`, type: "image", fileId: file.id, status: "saved", scale: [1, 1], crop: null,
-    x, y, width: imageWidth, height: imageWidth * file.height / file.width, frameId: frame };
-  const current = await loadScene(room);
-  if (frame !== null && !current.elements.some(item => item.id === frame && !item.isDeleted && ["frame", "magicframe"].includes(item.type))) throw new Error("Image frame not found");
-  const existing = current.elements.find(item => item.id === element.id);
-  if (existing && (existing.isDeleted || existing.type !== "image" || existing.fileId !== file.id)) throw new Error("Element id already belongs to another element");
-  const batch = existing ? { update: [element] } : { add: [element] };
-  applyBatch(current.elements, batch, { imageFiles: [file.id] });
+async function saveFile(room, file, onRetry) {
   const objectName = `files/rooms/${room.id}/${file.id}`;
   const url = `${storage}/${encodeURIComponent(objectName)}?alt=media`;
-  let response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  let response = await request(url, {}, { onRetry });
   let uploaded = false;
   if (response.status === 404) {
+    await response.body?.cancel();
     const encrypted = await encodeFile(room.key, file);
     const boundary = `excalidraw-${webcrypto.randomUUID()}`;
     const metadata = { name: objectName, contentType: "application/octet-stream", cacheControl: "public, max-age=31536000" };
@@ -146,20 +136,94 @@ export async function uploadImage(room, { file: path, elementId, x = 0, y = 0, w
       Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=utf-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`),
       encrypted, Buffer.from(`\r\n--${boundary}--\r\n`),
     ]);
-    const saved = await fetch(`${storage}?name=${encodeURIComponent(objectName)}`, {
-      method: "POST", signal: AbortSignal.timeout(30000),
+    const saved = await request(`${storage}?name=${encodeURIComponent(objectName)}`, {
+      method: "POST", timeout: 30000,
       headers: { "Content-Type": `multipart/related; boundary=${boundary}`, "X-Goog-Upload-Protocol": "multipart" }, body,
-    });
+    }, { onRetry });
     if (!saved.ok) throw new Error(`Image upload failed (HTTP ${saved.status}). No image element was saved.`);
+    await saved.body?.cancel();
     uploaded = true;
-    response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    response = await request(url, {}, { onRetry });
   }
   if (!response.ok) throw new Error(`Image read failed (HTTP ${response.status}). No image element was saved.`);
   await verifyFile(room.key, await fileBytes(response), file);
-  try {
-    const receipt = await writeScene(room, batch, { imageFiles: [file.id] });
-    return { ...receipt, elementId: element.id, fileId: file.id, fileSaved: true, uploaded };
-  } catch (error) {
-    throw new Error(`Image file saved, but scene update failed. Read the room before retrying. ${error.message}`);
+  return { fileId: file.id, fileSaved: true, uploaded };
+}
+
+export async function uploadImages(room, images, { concurrency = 4 } = {}) {
+  const started = performance.now();
+  let retries = 0;
+  const onRetry = () => { retries++; };
+  if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 8) throw new Error("Concurrency must be an integer from 1 to 8");
+  if (!Array.isArray(images) || images.length < 1 || images.length > 128) throw new Error("Expected 1 to 128 images");
+  const files = new Map(), elements = [], ids = new Set();
+  let bytes = 0;
+  for (const image of images) {
+    if (!image || typeof image !== "object" || Array.isArray(image)
+        || Object.keys(image).some(key => !["file", "elementId", "x", "y", "width", "frame"].includes(key))) throw new Error("Invalid image entry");
+    const { file: path, elementId, x = 0, y = 0, width, frame = null } = image;
+    if (elementId !== undefined && (typeof elementId !== "string" || !elementId || /[\x00-\x1f]/.test(elementId))) throw new Error("Image elementId must be a nonempty string without control characters");
+    if (frame !== null && (typeof frame !== "string" || !frame)) throw new Error("Image frame must be a nonempty string or null");
+    if (typeof path !== "string" || !path) throw new Error("Image needs a file path");
+    for (const number of [x, y, width ?? 1]) if (typeof number !== "number" || !Number.isFinite(number)) throw new Error("Image coordinates and width must be finite numbers");
+    if (width !== undefined && width <= 0) throw new Error("Image width must be positive");
+    const file = await readImage(path);
+    if (!files.has(file.id)) {
+      bytes += Buffer.byteLength(file.dataURL);
+      if (bytes > 128 * 1024 * 1024) throw new Error("Batch image data URLs exceed 128 MiB");
+      files.set(file.id, file);
+    }
+    const imageWidth = width ?? file.width;
+    const element = { id: elementId ?? `image-${file.id}`, type: "image", fileId: file.id, status: "saved", scale: [1, 1], crop: null,
+      x, y, width: imageWidth, height: imageWidth * file.height / file.width, frameId: frame };
+    if (ids.has(element.id)) throw new Error("Repeated image element id. Use a unique elementId for each placement.");
+    ids.add(element.id);
+    elements.push(element);
   }
+  const current = await loadScene(room, { onRetry });
+  const batch = { add: [], update: [] };
+  for (const element of elements) {
+    if (element.frameId !== null && !current.elements.some(item => item.id === element.frameId && !item.isDeleted && ["frame", "magicframe"].includes(item.type))) throw new Error("Image frame not found");
+    const existing = current.elements.find(item => item.id === element.id);
+    if (existing && (existing.isDeleted || existing.type !== "image" || existing.fileId !== element.fileId)) throw new Error("Element id already belongs to another element");
+    batch[existing ? "update" : "add"].push(element);
+  }
+  const imageFiles = [...files.keys()];
+  applyBatch(current.elements, batch, { imageFiles });
+  const prepared = performance.now();
+  const pending = files.values(), verified = new Map();
+  let failure;
+  // Stop taking new work after a failure, then settle active uploads before returning.
+  await Promise.all(Array.from({ length: Math.min(concurrency, files.size) }, async () => {
+    while (!failure) {
+      const next = pending.next();
+      if (next.done) return;
+      try { verified.set(next.value.id, await saveFile(room, next.value, onRetry)); }
+      catch (error) { failure ??= error; }
+    }
+  }));
+  const transferred = performance.now();
+  const progress = () => ({ images: elements.filter(element => verified.has(element.fileId))
+    .map(element => ({ elementId: element.id, ...verified.get(element.fileId) })),
+    files: { unique: files.size, verified: verified.size, uploaded: [...verified.values()].filter(file => file.uploaded).length },
+    concurrency, retries,
+    timings: { prepareMs: prepared - started, fileTransferMs: transferred - prepared,
+      sceneWriteMs: performance.now() - transferred, totalMs: performance.now() - started } });
+  if (failure) {
+    const error = new Error(`Image batch failed after ${verified.size}/${files.size} files verified. No image elements were saved. Retry the same manifest. ${failure.message}`);
+    error.receipt = { ...progress(), saved: false, notified: false };
+    throw error;
+  }
+  try {
+    const receipt = await writeScene(room, batch, { imageFiles, onRetry });
+    return { ...receipt, ...progress() };
+  } catch (error) {
+    // The scene writer reports ambiguous or verified saves. Do not turn them into saved:false.
+    throw new Error(`Image files saved, but scene update failed. Read the room before retrying. ${error.message}`);
+  }
+}
+
+export async function uploadImage(room, image) {
+  const receipt = await uploadImages(room, [image], { concurrency: 1 });
+  return { ...receipt, ...receipt.images[0] };
 }

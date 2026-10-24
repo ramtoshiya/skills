@@ -141,6 +141,59 @@ publication to an external service, even though the bytes are encrypted. Anyone
 with the room link can decrypt them. There is no file deletion command or
 expiry guarantee.
 
+## Batch image uploads
+
+Use one batch instead of running many `image` commands in parallel:
+
+```sh
+excalidraw-board images --id <room-prefix> --concurrency 4 < manifest.json
+```
+
+The manifest has this shape. Paths are relative to the command's working
+directory, not the manifest file:
+
+```json
+{
+  "images": [
+    {"file":"home.png","elementId":"capture-home","x":40,"y":80,"width":406},
+    {"file":"contest.png","elementId":"capture-contest","x":486,"y":80,"width":406}
+  ]
+}
+```
+
+Each entry accepts the same placement fields as `image`: `file`, `elementId`,
+`x`, `y`, `width`, and optional `frame`. The command validates every entry before
+uploading. It accepts 1 to 128 placements and at most 128 MiB of unique image
+data URLs. Repeated content is uploaded and verified once, even when it has
+several placements. Give each placement a unique `elementId`.
+
+The default concurrency is four, adjustable from one to eight. This is a local
+bound, not a measured service limit. Each worker checks, uploads, downloads,
+and verifies a file before taking another. Once all files are verified, one
+scene writer saves all elements together and sends one relay notification.
+Scene contention can still require the writer's existing compare-and-swap
+retries. There is no separate scene writer or socket per image.
+
+On a file failure, the command stops scheduling more files and waits for active
+workers to finish. It saves no image elements from that batch. Exit code 1
+includes a JSON progress receipt on stdout with `saved:false`, verified images,
+and file counts, plus an error on stderr. Unverified files can still have reached
+storage. Read the room and retry the same manifest, rather than assigning new
+ids. A later scene-save failure may be ambiguous, so read before retrying it.
+
+Successful receipts contain an ordered `images` array, `files` counts for
+`unique`, `verified`, and `uploaded`, the configured `concurrency`, and `retries`.
+`timings` reports `prepareMs`, `fileTransferMs`, `sceneWriteMs`, and `totalMs`.
+These are wall-clock phases, not sums of parallel workers' durations. The
+single-image command uses the same path and retains its top-level image fields.
+
+Scene reads and content-addressed file requests retry network failures and HTTP
+408, 429, 500, 502, 503, and 504 responses. Each request has at most four attempts
+within a 60-second budget, with exponential backoff and jitter. `Retry-After`
+can lengthen the delay. A requested wait above ten seconds or beyond the budget
+stops the command instead of retrying early. Scene writes are never blindly
+retried by this HTTP policy because a failed response can hide a successful save.
+
 ## Limits
 
 This is a small usable proof of concept, not the full handoff specification.
@@ -163,7 +216,8 @@ Tested with Node.js 24.21.0, encrypted persistence and socket delivery, a live
 browser update without reload, and independent Node processes writing ten
 shapes each into one room and into two rooms with no browser in those rooms.
 Image upload is checked against encrypted file storage with readback and an
-idempotent retry, not a browser render.
+idempotent retry. A synthetic comparison measures sequential versus four-worker
+batch uploads. Neither image check proves browser rendering.
 
 ## Run the checks
 
@@ -171,7 +225,7 @@ From the repository root, `node --test test/excalidraw*.test.mjs` runs offline
 checks. `node test/excalidraw-live.mjs --live` opts into a service integration
 check. It creates three disposable remote boards, runs concurrent installed
 CLI processes, verifies saved elements and no-op revisions, checks encrypted
-relay delivery, uploads a synthetic PNG with a verified retry, and checks
-per-room last-used timestamps. It does not open a
-browser or run coding agents. Its private test home is retained at the printed
+relay delivery, uploads synthetic PNGs with verified retries, compares sequential
+and batched image transfers, and checks per-room last-used timestamps. It does
+not open a browser or run coding agents. Its private test home is retained at the printed
 path, including room keys, so treat that directory as secret.

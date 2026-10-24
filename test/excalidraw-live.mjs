@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
+import { crc32, deflateSync } from "node:zlib";
 
 if (process.argv.length !== 3 || process.argv[2] !== "--live") {
   console.error("Pass --live to create three disposable Excalidraw rooms and write test elements.");
@@ -59,6 +60,30 @@ function checkIds(target) {
   const expected = new Set(["A", "B"].flatMap(agent => Array.from({ length: 10 }, (_, i) => `${agent}-${target}-${i}`)));
   assert.deepEqual(new Set(scene.elements.map(element => element.id)), expected);
   return scene;
+}
+function syntheticPNG(seed) {
+  const chunk = (name, data) => {
+    const type = Buffer.from(name), length = Buffer.alloc(4), checksum = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    checksum.writeUInt32BE(crc32(Buffer.concat([type, data])));
+    return Buffer.concat([length, type, data, checksum]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(256, 0);
+  header.writeUInt32BE(256, 4);
+  header[8] = 8;
+  header[9] = 6;
+  const pixels = Buffer.alloc(256 * (256 * 4 + 1));
+  let state = seed + 1;
+  for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
+    const offset = y * 1025 + 1 + x * 4;
+    for (let channel = 0; channel < 3; channel++) {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      pixels[offset + channel] = state >>> 24;
+    }
+    pixels[offset + 3] = 255;
+  }
+  return Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), chunk("IHDR", header), chunk("IDAT", deflateSync(pixels)), chunk("IEND", Buffer.alloc(0))]);
 }
 try {
   let at = Date.now() + 1000;
@@ -125,8 +150,46 @@ try {
   assert.equal(repeatedImage.revision, image.revision);
   assert.deepEqual(repeatedImage.changed, []);
 
+  let sourceBytes = 0;
+  const paths = Array.from({ length: 4 }, (_, index) => {
+    const bytes = syntheticPNG(index);
+    sourceBytes += bytes.length;
+    const path = join(home, `synthetic-${index}.png`);
+    writeFileSync(path, bytes);
+    return path;
+  });
+  const images = [...paths, paths[0]].map((file, index) => ({ file, elementId: `measure-${index}`, x: index * 160, width: 128 }));
+  let started = performance.now();
+  for (const entry of images) {
+    const receipt = JSON.parse(run(["image", "--id", rooms[1].id, "--file", entry.file,
+      "--element-id", entry.elementId, "--x", String(entry.x), "--width", "128"]));
+    assert.equal(receipt.saved, true);
+  }
+  const sequentialMs = performance.now() - started;
+  started = performance.now();
+  const parallel = JSON.parse(run(["images", "--id", rooms[2].id, "--concurrency", "4"], JSON.stringify({ images })));
+  const batchMs = performance.now() - started;
+  assert.deepEqual(parallel.files, { unique: 4, verified: 4, uploaded: 4 });
+  assert.equal(parallel.saved, true);
+  assert.equal(parallel.notified, true);
+  assert.equal(parallel.changed.length, 5);
+  const pictures = read(2).elements.filter(element => element.id.startsWith("measure-"));
+  assert.equal(pictures.length, 5);
+  for (const picture of pictures) {
+    assert.equal(picture.status, "saved");
+    assert.equal(picture.fileId, parallel.images.find(image => image.elementId === picture.id).fileId);
+    assert.equal(picture.width, 128);
+    assert.equal(picture.height, 128);
+  }
+  const batchRetry = JSON.parse(run(["images", "--id", rooms[2].id], JSON.stringify({ images })));
+  assert.deepEqual(batchRetry.changed, []);
+  assert.equal(batchRetry.files.uploaded, 0);
+  assert.equal(batchRetry.revision, parallel.revision);
+  const imageBatch = { placements: images.length, uniqueFiles: paths.length, sourceBytes, sequentialMs, batchMs,
+    speedup: sequentialMs / batchMs, timings: parallel.timings, retries: parallel.retries };
+
   assert.ok(!outputs.some(output => keys.some(key => output.includes(key))), "CLI output exposed a room key");
-  console.log(JSON.stringify({ sameRoom: { expected: 20, actual: before.elements.length }, multiRoom: { rooms: 2, elementsEach: 20 }, maxAttempts: Math.max(...sameRoom.concat(multiRoom).map(receipt => receipt.attempts)), staleSave: "HTTP 400 FAILED_PRECONDITION", noOp: "unchanged revision", relay: "received and decrypted", image: "encrypted upload/readback and idempotent retry", lastUsed: "correct room only", privateTestHome: home }));
+  console.log(JSON.stringify({ sameRoom: { expected: 20, actual: before.elements.length }, multiRoom: { rooms: 2, elementsEach: 20 }, maxAttempts: Math.max(...sameRoom.concat(multiRoom).map(receipt => receipt.attempts)), staleSave: "HTTP 400 FAILED_PRECONDITION", noOp: "unchanged revision", relay: "received and decrypted", image: "encrypted upload/readback and idempotent retry", imageBatch, lastUsed: "correct room only", privateTestHome: home }));
 } catch (error) {
   console.error(`Live check failed. Private test home retained at ${home}`);
   throw error;

@@ -15,7 +15,7 @@ test("installed board command runs without the checkout and rejects options with
   assert.match(install(), /0\.1\.0-poc/);
   assert.match(install(), /0\.1\.0-poc/);
   const command = join(home, ".local/bin/excalidraw-board");
-  const run = args => spawnSync(command, args, { env, encoding: "utf8", cwd: home });
+  const run = (args, input) => spawnSync(command, args, { env, input, encoding: "utf8", cwd: home });
   assert.match(run(["--help"]).stdout, /room create/);
   assert.equal(run(["room", "list"]).stdout.trim(), "NAME\tID\tLAST USED");
   const unknown = run(["read", "--secret-fixture-argument"]);
@@ -31,6 +31,11 @@ test("installed board command runs without the checkout and rejects options with
   assert.equal(badWidth.status, 1);
   assert.match(badWidth.stderr, /finite numbers/);
   assert.equal(badWidth.stderr.includes("private-image.png"), false);
+  assert.match(run(["--help"]).stdout, /images .*--concurrency/);
+  const malformed = run(["images", "--id", "abcd"], "private-invalid-manifest");
+  assert.equal(malformed.status, 1);
+  assert.match(malformed.stderr, /Expected an images manifest/);
+  assert.equal(malformed.stderr.includes("private-invalid-manifest"), false);
 });
 
 test("installer refuses to overwrite an unrelated command", t => {

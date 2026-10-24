@@ -5,7 +5,7 @@ import { parseArgs } from "node:util";
 import { openRooms } from "./rooms.mjs";
 import { createScene, loadScene, writeScene } from "./protocol.mjs";
 import { compact } from "./scene.mjs";
-import { uploadImage } from "./images.mjs";
+import { uploadImage, uploadImages } from "./images.mjs";
 
 const help = `excalidraw-board (proof of concept, Node.js 24.21+)
   room create <name>
@@ -16,6 +16,7 @@ const help = `excalidraw-board (proof of concept, Node.js 24.21+)
   read --name <name> | --id <prefix> [--full] [--outline | --frame <id> | --group <id> | --ids a,b]
   write --name <name> | --id <prefix>         read {add:[],update:[],delete:[]} from stdin
   image --name <name> | --id <prefix> --file <png-or-jpeg> [--element-id <id>] [--x <n>] [--y <n>] [--width <n>] [--frame <id>]
+  images --name <name> | --id <prefix> [--concurrency <1-8>]   read {images:[{file,elementId,x,y,width,frame}]} from stdin
 `;
 
 function input() {
@@ -112,6 +113,16 @@ async function main(args) {
         if (values.ids) { const ids = new Set(values.ids.split(",")); elements = elements.filter(element => ids.has(element.id)); }
         for (const element of elements) console.log(terminalJSON(values.full ? element : compact(element)));
       }
+    } else if (args[0] === "images") {
+      const { values } = argumentsFor(args.slice(1), { ...selectors, concurrency: { type: "string" } });
+      let manifest;
+      try { manifest = JSON.parse(input()); } catch { throw new Error("Expected an images manifest on stdin"); }
+      if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)
+          || Object.keys(manifest).some(key => key !== "images")) throw new Error("Expected an images manifest on stdin");
+      const receipt = await uploadImages(registry.resolve(selector(values)), manifest.images,
+        { concurrency: values.concurrency === undefined ? 4 : Number(values.concurrency) });
+      console.log(terminalJSON(receipt));
+      if (receipt.warning) { console.error(receipt.warning); process.exitCode = 2; }
     } else if (args[0] === "image") {
       const { values } = argumentsFor(args.slice(1), { ...selectors,
         file: { type: "string" }, "element-id": { type: "string" }, frame: { type: "string" },
@@ -142,6 +153,7 @@ async function main(args) {
 main(process.argv.slice(2)).catch(error => {
   // Never echo raw arguments, input, URLs, room keys, or network error objects.
   const message = error instanceof Error ? error.message : "Command failed";
+  if (error?.receipt) console.log(terminalJSON(error.receipt));
   console.error(terminalText(message.replace(/https?:\/\/\S+/g, "[URL omitted]")));
   process.exitCode = 1;
 });
