@@ -127,6 +127,12 @@ pin. A matching rulebook alone does not prove that the workflow still works.
 
 ## Install
 
+To keep all installed supported hosts on the marketplace's approved pins, use
+`mise run agents:status` and `mise run agents:sync` from a local checkout.
+[Agent plugins](agent-pack.md) describes the managed installation, including
+conflict handling and Hermes adapters. The commands below install individual
+entries without enrolling them in that workflow.
+
 Claude Code and Codex read the marketplace. After adding it as described in
 [Agent plugins](agent-pack.md), install each entry by name:
 
@@ -246,7 +252,9 @@ Claude Code and Codex behaved like this in tests with Codex CLI
    version, not the marketplace's commit SHA.
 4. Change `sha` in the entry, and `path` if upstream moved the folder. That
    commit is the release.
-5. Reinstall where needed:
+5. Run `mise run agents:sync` for managed installations, then reload or restart
+   each changed host and review Codex hook trust. For manual installations,
+   reinstall where needed:
    - Claude Code: `claude plugin marketplace update ramtoshiya`, then
      `claude plugin update <entry>@ramtoshiya` and reload or restart.
    - Codex: finish active turns and close sessions using the plugin. For a

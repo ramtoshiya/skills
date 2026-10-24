@@ -125,6 +125,72 @@ then load the plugin from the checkout, so edits apply after a reload.
 Restart the agent after installing, or run `/reload-plugins` in Claude Code and
 `/reload` in Pi.
 
+## Synchronize a local checkout
+
+For a managed installation of this repository and its selected third-party
+packages, run these tasks from the checkout with [mise](https://mise.jdx.dev/getting-started.html):
+
+```sh
+mise run agents:status
+mise run agents:sync
+```
+
+`status` makes no configuration changes or source downloads. Native inventory
+commands may refresh their own metadata caches. The task exits nonzero for
+missing packages, outdated contents, or conflicts. `sync` reconciles every
+supported agent executable on `PATH`. It skips agents that are not installed.
+Use `--host claude`, `--host codex`, `--host pi`, or `--host hermes` to restrict
+either task. `--json` prints the results as JSON.
+
+The marketplace supplies the exact third-party pins. `setup/agents/hosts.json`
+limits `ramtoshiya-cc` to Claude Code and `humanize-korean` to Hermes. Other
+entries apply to all four hosts. Adding an entry therefore declares an
+installation, not just a marketplace listing, when using these tasks.
+
+Claude Code and Codex use their native plugin commands and a marketplace
+registered from this checkout. An existing marketplace registered elsewhere is
+reported as a conflict rather than retargeted. Claude's `readFromFolder`, when
+present, is its effective installation, even if an older cache still exists.
+Native installer results are checked against the approved source files.
+Same-version cache problems are reported, never repaired with cache edits.
+
+Pi settings retain unrelated packages, skills, and extensions. Hermes loads
+native plugins through links to pinned sources. Packages without a native
+Hermes plugin use thin skill-registration adapters. The Humanize adapter
+translates its pinned advisory hook without changing its wording rules.
+Existing Hermes adapters not created by sync are preserved. Adapters created by
+sync follow the repository template, with the same local-change checks as other
+managed files. OpenPencil remains a standalone Hermes skill with its whole
+reference directory.
+
+Sync records owned paths, file fingerprints, and settings entries under
+`$XDG_STATE_HOME/ramtoshiya-agents`, or `~/.local/state/ramtoshiya-agents`.
+Sources not already available in a host's `skill-sources/` directory are fetched
+at the approved commit into that state directory. Upstream files and local
+state stay outside this repository. A repeated sync does not rewrite unchanged
+settings or ownership state.
+
+On first use, existing skill copies must match an approved source before sync
+adopts them. Local modifications are conflicts, not permission to replace the
+files. Preserve the customization in a reviewed fork or resolve it manually
+before retrying. After adoption, removing or changing a managed settings entry
+also produces a conflict. Unrelated entries remain untouched. Symlinked JSON
+configuration files are not replaced or written through, so other dotfile
+managers keep ownership of their targets.
+
+Removing a declared package retires only its recorded registrations. Pi removes
+owned list entries. Claude and Codex use their uninstall commands, with Claude
+persistent data retained. Hermes disables plugins and retains their directories.
+A managed standalone skill link can be removed, but a copied directory requires
+manual preservation first. Downloaded source checkouts are retained.
+
+Sync does not upgrade upstream pins, install agent executables or skill CLIs,
+apply shared dotfiles, grant hook trust, or restart running sessions. Review
+Codex hooks in `/hooks`, reload Pi, and restart Claude Code or Hermes after
+changes. Finish active Codex turns before installation and coordinate any
+shared-server restart as described below. The status table verifies installed
+files and configuration, not what an existing session has loaded.
+
 ## Check that it works
 
 In each agent, ask it to run these commands:

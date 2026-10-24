@@ -60,6 +60,14 @@ hermes plugins enable ramtoshiya
 Restart Hermes after enabling. [Agent plugins](docs/agent-pack.md) describes
 its hook limits and shared preferences.
 
+## Keep installed agents synchronized
+
+From a local checkout, `mise run agents:status` compares installed packages with
+the repository's pins. `mise run agents:sync` reconciles Claude Code, Codex, Pi,
+and Hermes without replacing unrelated settings. It installs all applicable
+marketplace entries and stops on local modifications. [Agent plugins](docs/agent-pack.md)
+describes the managed scope, conflicts, and required restarts.
+
 ## Set up a Mac
 
 Fork and clone the repository, edit `mise.toml` and the files in `setup/`, then

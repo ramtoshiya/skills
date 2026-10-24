@@ -1,0 +1,7 @@
+{
+  "hosts": ["claude", "codex", "pi", "hermes"],
+  "plugins": {
+    "ramtoshiya-cc": ["claude"],
+    "humanize-korean": ["hermes"]
+  }
+}

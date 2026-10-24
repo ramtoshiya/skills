@@ -39,3 +39,11 @@ zsh = true
 "~/.hermes/config.yaml/preferences" = { source = "setup/agents/hermes-config.yaml", merge = true }
 "~/.claude/settings.json/preferences" = { source = "setup/agents/claude-settings.json", merge = true }
 "~/.claude/status-line.sh" = { source = "setup/agents/claude-statusline.sh", mode = "copy" }
+
+[tasks."agents:status"]
+description = "Compare installed agent packages with this checkout"
+run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/sync.py status"
+
+[tasks."agents:sync"]
+description = "Reconcile managed packages across installed agents"
+run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/sync.py sync"

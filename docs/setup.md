@@ -150,6 +150,13 @@ the edit within that file. It is not part of the path.
 | Block (`block = ...`) | Writes the text between `# >>> mise:<id> >>>` and `# <<< mise:<id> <<<` markers, appended to the file if the markers are missing |
 | Line (`line = ...`) | Appends the line if that exact line is missing |
 
+The `agents:status` and `agents:sync` tasks manage agent package installations
+separately from these dotfile operations. They use an ownership record to
+reconcile shared settings lists without replacing unrelated entries. Run them
+from the checkout after changing marketplace pins. They do not run
+`mise bootstrap` or apply dotfiles. [Agent plugins](agent-pack.md) describes
+host support, conflicts, state storage, and reload requirements.
+
 Deleting an entry from `mise.toml` leaves the file as it is.
 [`mise dot unapply`](https://mise.jdx.dev/cli/dotfiles/unapply.html) removes a
 block with its markers.
