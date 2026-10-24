@@ -91,13 +91,15 @@ updating its pin. Invoke `/omd:omd-slop-audit` for a review or
 `/omd:omd-autopilot` for a new surface in Claude Code.
 
 The OmD package also has a Pi extension at `hooks/pi.ts` and a native Hermes
-plugin. Pi needs that extension alongside its selected skill paths. For Hermes,
-check out the marketplace's exact fork commit under the active profile's
-`skill-sources/`, link its `plugins/omd` directory into that profile's `plugins/`,
-and enable `omd` with the Hermes plugin commands. The plugin registers only the
-selected skills and translates preference hooks into native events. Restart
-Hermes to load the skills and prompt context into a new session. Browser-based
-measurements have separate local prerequisites described in the package README.
+plugin. Pi needs that extension alongside its selected skill paths. Managed
+setup installs the full package only in Claude Code, Codex, and Pi. Hermes
+instead receives the `omd-kr-writer` marketplace entry at the same commit,
+selecting only `skills/omd-kr-writer` through a thin registration adapter.
+The pinned checkout retains supporting files, but Hermes loads no OmD design
+skills or preference hooks. Keep both OmD entry pins equal when updating them.
+Restart Hermes to load the writing skill into a new session. Browser-based
+measurements for the full package have separate local prerequisites described
+in its README.
 
 The `humanize` skill applies before creating or modifying any file, including
 code and configuration, and when preparing or publishing content such as

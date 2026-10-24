@@ -31,11 +31,11 @@ zsh = true
 "~/.gitignore/ds-store" = { line = ".DS_Store" }
 "~/.gitignore/claude-local-settings" = { line = "**/.claude/settings.local.json" }
 
-# Coding agents
+# Agents
 "~/.claude/CLAUDE.md" = { source = "setup/agents/preferences.md", mode = "copy" }
 "~/.codex/AGENTS.md" = { source = "setup/agents/preferences.md", mode = "copy" }
 "~/.pi/agent/AGENTS.md" = { source = "setup/agents/preferences.md", mode = "copy" }
-"~/.hermes/AGENTS.md" = { source = "setup/agents/preferences.md", mode = "copy" }
+"~/.hermes/AGENTS.md" = { source = "setup/agents/hermes-preferences.md", mode = "copy" }
 "~/.hermes/config.yaml/preferences" = { source = "setup/agents/hermes-config.yaml", merge = true }
 "~/.claude/settings.json/preferences" = { source = "setup/agents/claude-settings.json", merge = true }
 "~/.claude/status-line.sh" = { source = "setup/agents/claude-statusline.sh", mode = "copy" }

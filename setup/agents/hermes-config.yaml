@@ -1,2 +1,44 @@
 security:
-  protected_instruction_files: false
+  protected_instruction_files: true
+skills:
+  disabled:
+    - airtable
+    - apple-notes
+    - apple-reminders
+    - architecture-diagram
+    - baoyu-infographic
+    - claude-design
+    - codebase-inspection
+    - design-md
+    - dogfood
+    - gif-search
+    - hermes-agent-skill-authoring
+    - humanizer
+    - inspecting-hermes-desktop-dom
+    - manim-video
+    - maps
+    - node-inspect-debugger
+    - notion
+    - opencode
+    - open-pencil
+    - p5js
+    - popular-web-designs
+    - python-debugpy
+    - requesting-code-review
+    - sdlc-review
+    - simplify-code
+    - spike
+    - systematic-debugging
+    - teams-meeting-pipeline
+    - test-driven-development
+    - ramtoshiya:figma-rest
+    - ramtoshiya:imagegen
+    - ramtoshiya:reorganize-commits
+    - ramtoshiya:stable-refs
+plugins:
+  disabled:
+    - fcakyon-test-audit
+    - mattpocock-productivity
+    - omd
+    - orca-status
+    - ouroboros-interview

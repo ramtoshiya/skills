@@ -83,11 +83,12 @@ Git:
 that your file system supports them with `git update-index --test-untracked-cache`
 before you keep them.
 
-Coding agents:
+Agents:
 
 | Target | Change |
 | --- | --- |
-| `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.pi/agent/AGENTS.md`, `~/.hermes/AGENTS.md` | Copies of `setup/agents/preferences.md`, the author's instructions for every agent |
+| `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.pi/agent/AGENTS.md` | Copies of `setup/agents/preferences.md`, the coding-agent instructions |
+| `~/.hermes/AGENTS.md` | Copy of `setup/agents/hermes-preferences.md`, the personal-assistant instructions |
 | `~/.claude/settings.json` | The keys in `setup/agents/claude-settings.json` |
 | `~/.hermes/config.yaml` | The keys in `setup/agents/hermes-config.yaml` |
 | `~/.claude/status-line.sh` | Copy of `setup/agents/claude-statusline.sh` |
@@ -95,11 +96,29 @@ Coding agents:
 Hermes reads its shared preferences through the `ramtoshiya` native plugin,
 which must be installed separately as described in [Agent plugins](agent-pack.md).
 
-`hermes-config.yaml` sets `security.protected_instruction_files` to `false`,
-which disables Hermes' approval gate for writes to agent instruction files.
-mise merges this setting without replacing other Hermes configuration.
+`hermes-config.yaml` enables approval protection for instruction-file writes.
+Its `skills.disabled` list hides development and product-design workflows,
+plus selected personal-service skills that are not in use. It retains the
+shared Excalidraw, Mermaid validation, and Codex session-reading skills.
+Image generation uses Hermes' native `image_generate` tool instead of the
+shared image skill. Configure its backend through `hermes tools` if needed.
+The config also disables the Orca lifecycle plugin `orca-status`.
 
-The shared agent instructions authorize local commits of completed, validated
+mise merges these keys without replacing other Hermes configuration. Lists
+are replaced as a whole, so add local exclusions to the source before applying.
+A disabled skill stays on disk and does not become active after a bundle update.
+New bundled skill names are not automatically excluded.
+
+Hermes handles personal tasks and disposable scripts, not project or product
+implementation. Its instructions require approval before handing coding work
+to Claudex or Codex. They also default email to reading and drafting, with
+confirmation for sending, reservations, payments, and destructive actions
+unless a specific authorization or standing rule covers the action. The
+package selection in [Agent plugins](agent-pack.md) retains Korean writing
+without loading the full design workflow. Orca can recreate its managed plugin
+when launching Hermes, so avoid that launch path if no Orca integration is wanted.
+
+The coding-agent instructions authorize local commits of completed, validated
 task-owned changes on the current branch, including the default branch. They
 protect unrelated changes and respect explicit no-commit requests. Tasks that
 need isolation use a separate worktree before implementation, not a branch

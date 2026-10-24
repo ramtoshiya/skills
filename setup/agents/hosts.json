@@ -2,6 +2,12 @@
   "hosts": ["claude", "codex", "pi", "hermes"],
   "plugins": {
     "ramtoshiya-cc": ["claude"],
-    "humanize-korean": ["hermes"]
+    "humanize-korean": ["hermes"],
+    "omd-kr-writer": ["hermes"],
+    "omd": ["claude", "codex", "pi"],
+    "open-pencil": ["claude", "codex", "pi"],
+    "mattpocock-productivity": ["claude", "codex", "pi"],
+    "fcakyon-test-audit": ["claude", "codex", "pi"],
+    "ouroboros-interview": ["claude", "codex", "pi"]
   }
 }
