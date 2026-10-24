@@ -13,7 +13,7 @@ if [ -e "$link" ] || [ -L "$link" ]; then
     esac
 fi
 mkdir -p "$install_dir" "$HOME/.local/bin"
-for file in excalidraw-board.mjs rooms.mjs protocol.mjs scene.mjs; do
+for file in excalidraw-board.mjs rooms.mjs protocol.mjs scene.mjs images.mjs; do
     install -m 644 "$source_dir/$file" "$install_dir/$file"
 done
 chmod 755 "$install_dir/excalidraw-board.mjs"

@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { createHash, webcrypto } from "node:crypto";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { inflateSync } from "node:zlib";
 import { decrypt, encrypt, writeScene } from "../cli/excalidraw-board/protocol.mjs";
+import { uploadImage } from "../cli/excalidraw-board/images.mjs";
 
 const room = { id: "offline-protocol", key: "AAAAAAAAAAAAAAAAAAAAAA" };
 const before = "2026-01-01T00:00:00.000001Z";
@@ -47,7 +53,8 @@ function transport(t, steps) {
   }
   Object.defineProperty(globalThis, "WebSocket", { configurable: true, writable: true, value: Relay });
   t.mock.method(globalThis, "fetch", async (url, options = {}) => {
-    const request = { url: new URL(url), method: options.method || "GET", body: options.body && JSON.parse(options.body) };
+    const request = { url: new URL(url), method: options.method || "GET", headers: options.headers,
+      body: Buffer.isBuffer(options.body) ? options.body : options.body && JSON.parse(options.body) };
     requests.push(request);
     const step = steps.shift();
     assert.ok(step, `Unexpected ${request.method}`);
@@ -164,6 +171,150 @@ test("writeScene no-op does not PATCH or broadcast", async t => {
   const receipt = await writeScene(room, { update: [{ id: "a", x: 1 }] });
   assert.deepEqual(receipt, { revision: "1767225600000001", changed: [], saved: true, notified: false });
   assert.deepEqual(fixture.requests.map(request => request.method), ["GET", "GET"]);
+  assert.equal(fixture.broadcasts().length, 0);
+});
+
+const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64");
+function imageFixture(t, bytes = png) {
+  const directory = mkdtempSync(join(tmpdir(), "excalidraw-image-"));
+  const file = join(directory, "image.png");
+  writeFileSync(file, bytes);
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  return file;
+}
+function chunks(bytes) {
+  // Decode the upstream length-prefixed wire format independently of the uploader.
+  assert.equal(bytes.readUInt32BE(0), 1);
+  const values = [];
+  for (let offset = 4; offset < bytes.length;) {
+    const length = bytes.readUInt32BE(offset);
+    offset += 4;
+    assert.ok(offset + length <= bytes.length);
+    values.push(bytes.subarray(offset, offset += length));
+  }
+  return values;
+}
+function uploadedBytes(request) {
+  assert.equal(request.headers["X-Goog-Upload-Protocol"], "multipart");
+  const boundary = request.headers["Content-Type"].split("boundary=")[1];
+  const first = request.body.indexOf("\r\n\r\n") + 4;
+  const second = request.body.indexOf(`\r\n--${boundary}`, first);
+  assert.deepEqual(JSON.parse(request.body.subarray(first, second)), {
+    name: `files/rooms/${room.id}/${request.url.searchParams.get("name").split("/").at(-1)}`,
+    contentType: "application/octet-stream", cacheControl: "public, max-age=31536000",
+  });
+  const data = request.body.indexOf("\r\n\r\n", second) + 4;
+  return request.body.subarray(data, request.body.length - Buffer.byteLength(`\r\n--${boundary}--\r\n`));
+}
+
+test("image upload uses the browser's encrypted file format before persisting an image and reuses it on retry", async t => {
+  const file = imageFixture(t);
+  const initial = await document([]);
+  let encrypted, authored, savedDocument;
+  const fixture = transport(t, [
+    ["GET", initial],
+    ["GET", () => new Response(null, { status: 404 })],
+    ["POST", async request => {
+      encrypted = uploadedBytes(request);
+      assert.equal(request.url.origin, "https://firebasestorage.googleapis.com");
+      assert.match(request.url.searchParams.get("name"), /^files\/rooms\/offline-protocol\/[a-f0-9]{40}$/);
+      const [format, iv, ciphertext] = chunks(encrypted);
+      assert.deepEqual(JSON.parse(format), { version: 2, compression: "pako@1", encryption: "AES-GCM" });
+      const key = await webcrypto.subtle.importKey("raw", Buffer.alloc(16), { name: "AES-GCM" }, false, ["decrypt"]);
+      const compressed = await webcrypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+      const [metadata, data] = chunks(inflateSync(Buffer.from(compressed)));
+      assert.equal(data.toString(), `data:image/png;base64,${png.toString("base64")}`);
+      assert.equal(JSON.parse(metadata).mimeType, "image/png");
+      assert.equal(JSON.parse(metadata).id, request.url.searchParams.get("name").split("/").at(-1));
+      assert.equal(encrypted.includes(png), false);
+      return Response.json({});
+    }],
+    ["GET", request => {
+      assert.equal(request.url.searchParams.get("alt"), "media");
+      return new Response(encrypted);
+    }],
+    ["GET", initial], ["GET", initial],
+    ["PATCH", async request => {
+      authored = await elementsIn(request);
+      savedDocument = await document(authored, after);
+      return Response.json({ updateTime: after });
+    }],
+    ["GET", () => Response.json(savedDocument)],
+    ["GET", () => Response.json(savedDocument)],
+    ["GET", () => new Response(encrypted)],
+    ["GET", () => Response.json(savedDocument)], ["GET", () => Response.json(savedDocument)],
+  ]);
+  const first = await uploadImage(room, { file, elementId: "capture", x: 20, y: 30, width: 400 });
+  assert.equal(first.saved, true);
+  assert.equal(first.notified, true);
+  assert.equal(first.uploaded, true);
+  assert.deepEqual(first.changed, ["capture"]);
+  assert.equal(authored[0].fileId, first.fileId);
+  assert.equal(authored[0].status, "saved");
+  assert.equal(authored[0].width, 400);
+  assert.equal(authored[0].height, 400);
+  assert.deepEqual(authored[0].scale, [1, 1]);
+  assert.deepEqual(await fixture.broadcastElements(), authored);
+  const retry = await uploadImage(room, { file, elementId: "capture", x: 20, y: 30, width: 400 });
+  assert.equal(retry.uploaded, false);
+  assert.deepEqual(retry.changed, []);
+  assert.equal(fixture.requests.filter(request => request.method === "POST").length, 1);
+  assert.equal(fixture.requests.filter(request => request.method === "PATCH").length, 1);
+});
+
+test("image retry rejects a concurrent replacement before overwriting its file identity", async t => {
+  const file = imageFixture(t);
+  const image = { id: "capture", type: "image", fileId: createHash("sha1").update(png).digest("hex"),
+    status: "saved", index: "a0", version: 1, versionNonce: 20 };
+  const initial = await document([image]);
+  const replacement = await document([{ ...image, fileId: "b".repeat(40), version: 2 }], after);
+  let encrypted;
+  const fixture = transport(t, [
+    ["GET", initial], ["GET", () => new Response(null, { status: 404 })],
+    ["POST", request => { encrypted = uploadedBytes(request); return Response.json({}); }],
+    ["GET", () => new Response(encrypted)],
+    ["GET", replacement], ["GET", replacement],
+  ]);
+  await assert.rejects(uploadImage(room, { file, elementId: "capture" }), /Image element changed during upload/);
+  assert.equal(fixture.requests.some(request => request.method === "PATCH"), false);
+  assert.equal(fixture.broadcasts().length, 0);
+});
+
+test("image failures never persist or broadcast an image element", async t => {
+  for (const failure of ["missing room", "upload denied", "corrupt file", "invalid frame", "occupied id"]) {
+    await t.test(failure, async t => {
+      const file = imageFixture(t);
+      const initial = await document(failure === "occupied id" ? original : []);
+      const steps = failure === "missing room" ? [["GET", () => new Response(null, { status: 404 })]] : [["GET", initial]];
+      if (failure === "upload denied") steps.push(["GET", () => new Response(null, { status: 404 })], ["POST", () => new Response(null, { status: 403 })]);
+      if (failure === "corrupt file") steps.push(["GET", () => new Response(Buffer.alloc(32))]);
+      const fixture = transport(t, steps);
+      const error = { "missing room": /room is gone/, "upload denied": /Image upload failed/, "corrupt file": /verification failed/, "invalid frame": /frame not found/, "occupied id": /already belongs/ }[failure];
+      await assert.rejects(uploadImage(room, { file, elementId: failure === "occupied id" ? "a" : "capture", frame: failure === "invalid frame" ? "missing" : null }), error);
+      assert.equal(fixture.requests.some(request => request.method === "PATCH"), false);
+      assert.equal(fixture.sockets.length, 0);
+    });
+  }
+});
+
+test("image validation rejects unsupported, oversized and unbounded inputs before network access", async t => {
+  const fixture = transport(t, []);
+  for (const [bytes, options, error] of [
+    [Buffer.from("not an image"), {}, /PNG or JPEG/],
+    [Buffer.alloc(4 * 1024 * 1024 + 1), {}, /4 MiB/],
+    [Buffer.concat([png, Buffer.alloc(3200000)]), {}, /data URL/],
+    [png, { x: NaN }, /finite/], [png, { width: 0 }, /positive/],
+  ]) {
+    const file = imageFixture(t, bytes);
+    await assert.rejects(uploadImage(room, { file, ...options }), error);
+  }
+  assert.equal(fixture.requests.length, 0);
+});
+
+test("ordinary scene writes cannot create an image without uploading its file", async t => {
+  const initial = await document([]);
+  const fixture = transport(t, [["GET", initial], ["GET", initial]]);
+  await assert.rejects(writeScene(room, { add: [{ id: "image", type: "image", fileId: "missing", status: "saved" }] }), /image command/);
   assert.equal(fixture.broadcasts().length, 0);
 });
 

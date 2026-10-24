@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import { openRooms } from "./rooms.mjs";
 import { createScene, loadScene, writeScene } from "./protocol.mjs";
 import { compact } from "./scene.mjs";
+import { uploadImage } from "./images.mjs";
 
 const help = `excalidraw-board (proof of concept, Node.js 24.21+)
   room create <name>
@@ -14,6 +15,7 @@ const help = `excalidraw-board (proof of concept, Node.js 24.21+)
   room link --name <name> | --id <prefix>     prints the secret room link
   read --name <name> | --id <prefix> [--full] [--outline | --frame <id> | --group <id> | --ids a,b]
   write --name <name> | --id <prefix>         read {add:[],update:[],delete:[]} from stdin
+  image --name <name> | --id <prefix> --file <png-or-jpeg> [--element-id <id>] [--x <n>] [--y <n>] [--width <n>] [--frame <id>]
 `;
 
 function input() {
@@ -110,6 +112,22 @@ async function main(args) {
         if (values.ids) { const ids = new Set(values.ids.split(",")); elements = elements.filter(element => ids.has(element.id)); }
         for (const element of elements) console.log(terminalJSON(values.full ? element : compact(element)));
       }
+    } else if (args[0] === "image") {
+      const { values } = argumentsFor(args.slice(1), { ...selectors,
+        file: { type: "string" }, "element-id": { type: "string" }, frame: { type: "string" },
+        x: { type: "string" }, y: { type: "string" }, width: { type: "string" },
+      });
+      if (!values.file) throw new Error("Image needs --file with a PNG or JPEG path");
+      const options = { file: values.file, elementId: values["element-id"], frame: values.frame };
+      for (const field of ["x", "y", "width"]) {
+        if (values[field] !== undefined) {
+          if (!values[field].trim() || !Number.isFinite(Number(values[field]))) throw new Error("Image coordinates and width must be finite numbers");
+          options[field] = Number(values[field]);
+        }
+      }
+      const receipt = await uploadImage(registry.resolve(selector(values)), options);
+      console.log(terminalJSON(receipt));
+      if (receipt.warning) { console.error(receipt.warning); process.exitCode = 2; }
     } else if (args[0] === "write") {
       const { values } = argumentsFor(args.slice(1), selectors);
       let batch;

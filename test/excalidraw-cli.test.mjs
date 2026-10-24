@@ -23,6 +23,14 @@ test("installed board command runs without the checkout and rejects options with
   assert.match(unknown.stderr, /Invalid command options/);
   assert.ok(!unknown.stderr.includes("secret-fixture-argument"));
   assert.equal(run(["read", "--name", "missing", "--id", "abcd"]).status, 1);
+  assert.match(run(["--help"]).stdout, /image .*--file/);
+  const missingFile = run(["image", "--id", "abcd"]);
+  assert.equal(missingFile.status, 1);
+  assert.match(missingFile.stderr, /needs --file/);
+  const badWidth = run(["image", "--id", "abcd", "--file", "private-image.png", "--width", "NaN"]);
+  assert.equal(badWidth.status, 1);
+  assert.match(badWidth.stderr, /finite numbers/);
+  assert.equal(badWidth.stderr.includes("private-image.png"), false);
 });
 
 test("installer refuses to overwrite an unrelated command", t => {

@@ -102,12 +102,51 @@ notification (`notified`). A notification failure after saving exits with code
 2. Read before retrying. A successful notification means the socket sent the
 message, not that every browser applied it.
 
+## Images
+
+```sh
+excalidraw-board image --id <room-prefix> --file screenshot.png \
+  --element-id capture-home --x 40 --y 80 --width 406 --frame review-frame
+```
+
+`image` accepts PNG and JPEG files. It reads dimensions from the file header,
+keeps the aspect ratio, and uses the original pixel width unless `--width` is
+set. Coordinates default to zero. An optional `--frame` must name an existing
+live frame. Image bytes are not resized or re-encoded.
+
+The command compresses the image data URL and metadata, encrypts them with the
+room key, and uploads them to Excalidraw's file storage. It downloads and
+verifies the encrypted file before saving an image element with `status:
+"saved"`. Only then does it notify collaborators. Ordinary `write` batches
+cannot add image elements without this file upload.
+
+The service's 4 MiB limit applies to the base64 data URL, so the source image
+must be slightly smaller than 3 MiB. The command also rejects empty dimensions
+and images larger than 100 million pixels. It does not inspect EXIF orientation
+or decode the full image, so export rotated JPEGs in their intended orientation
+before uploading.
+
+File ids are SHA-1 hashes of the source bytes. Repeating a command with the same
+file and element id reuses the verified file and does not duplicate the image.
+The default element id is `image-<file-id>`. Set different `--element-id` values
+to place the same image more than once. Reusing an element id for different
+file contents is rejected. Reusing it for the same file updates placement and
+size, so read the room before retrying after another person edits that image.
+
+Receipts include `elementId`, `fileId`, `fileSaved`, and `uploaded` alongside the
+scene revision, changed ids, `saved`, and `notified`. File upload and scene save
+are separate operations. A failed scene save can leave an unreferenced encrypted
+file. Read the room before retrying, and use the same element id. Uploading is
+publication to an external service, even though the bytes are encrypted. Anyone
+with the room link can decrypt them. There is no file deletion command or
+expiry guarantee.
+
 ## Limits
 
 This is a small usable proof of concept, not the full handoff specification.
 
-- New rectangles, ellipses, diamonds, text, and frames cover the tested drawing
-  path. Image creation and new line, arrow, and freehand paths are unsupported.
+- New rectangles, ellipses, diamonds, text, frames, and PNG/JPEG uploads cover
+  the tested drawing path. New line, arrow, and freehand paths are unsupported.
   The tool does not render or export pictures.
 - Reads return saved state. A browser can have unsaved edits. The short peer
   bootstrap window on write does not guarantee capture of every in-flight
@@ -123,8 +162,8 @@ This is a small usable proof of concept, not the full handoff specification.
 Tested with Node.js 24.21.0, encrypted persistence and socket delivery, a live
 browser update without reload, and independent Node processes writing ten
 shapes each into one room and into two rooms with no browser in those rooms.
-The old handoff's Codex/Claude-through-Orca scenario is not covered by that
-process test.
+Image upload is checked against encrypted file storage with readback and an
+idempotent retry, not a browser render.
 
 ## Run the checks
 
@@ -132,6 +171,7 @@ From the repository root, `node --test test/excalidraw*.test.mjs` runs offline
 checks. `node test/excalidraw-live.mjs --live` opts into a service integration
 check. It creates three disposable remote boards, runs concurrent installed
 CLI processes, verifies saved elements and no-op revisions, checks encrypted
-relay delivery, and checks per-room last-used timestamps. It does not open a
+relay delivery, uploads a synthetic PNG with a verified retry, and checks
+per-room last-used timestamps. It does not open a
 browser or run coding agents. Its private test home is retained at the printed
 path, including room keys, so treat that directory as secret.

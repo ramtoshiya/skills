@@ -1,7 +1,7 @@
 // Opt-in service integration check. This creates three disposable remote boards.
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -106,8 +106,27 @@ try {
     }
   } finally { database.close(); }
 
+  const imagePath = join(home, "pixel.png");
+  writeFileSync(imagePath, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64"));
+  const imageArgs = ["image", "--id", rooms[0].id, "--file", imagePath, "--element-id", "pixel", "--x", "260", "--width", "80"];
+  const image = JSON.parse(run(imageArgs));
+  assert.equal(image.fileSaved, true);
+  assert.equal(image.saved, true);
+  assert.equal(image.notified, true);
+  assert.equal(image.uploaded, true);
+  const picture = read(0).elements.find(element => element.id === "pixel");
+  assert.equal(picture.type, "image");
+  assert.equal(picture.fileId, image.fileId);
+  assert.equal(picture.status, "saved");
+  assert.equal(picture.width, 80);
+  assert.equal(picture.height, 80);
+  const repeatedImage = JSON.parse(run(imageArgs));
+  assert.equal(repeatedImage.uploaded, false);
+  assert.equal(repeatedImage.revision, image.revision);
+  assert.deepEqual(repeatedImage.changed, []);
+
   assert.ok(!outputs.some(output => keys.some(key => output.includes(key))), "CLI output exposed a room key");
-  console.log(JSON.stringify({ sameRoom: { expected: 20, actual: before.elements.length }, multiRoom: { rooms: 2, elementsEach: 20 }, maxAttempts: Math.max(...sameRoom.concat(multiRoom).map(receipt => receipt.attempts)), staleSave: "HTTP 400 FAILED_PRECONDITION", noOp: "unchanged revision", relay: "received and decrypted", lastUsed: "correct room only", privateTestHome: home }));
+  console.log(JSON.stringify({ sameRoom: { expected: 20, actual: before.elements.length }, multiRoom: { rooms: 2, elementsEach: 20 }, maxAttempts: Math.max(...sameRoom.concat(multiRoom).map(receipt => receipt.attempts)), staleSave: "HTTP 400 FAILED_PRECONDITION", noOp: "unchanged revision", relay: "received and decrypted", image: "encrypted upload/readback and idempotent retry", lastUsed: "correct room only", privateTestHome: home }));
 } catch (error) {
   console.error(`Live check failed. Private test home retained at ${home}`);
   throw error;

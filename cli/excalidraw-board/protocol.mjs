@@ -153,7 +153,7 @@ export class RoomSocket {
   }
 }
 
-export async function writeScene(room, input) {
+export async function writeScene(room, input, options = {}) {
   // Stabilize generated add ids across retries.
   const batch = structuredClone(input);
   if (Array.isArray(batch?.add)) {
@@ -167,7 +167,7 @@ export async function writeScene(room, input) {
     for (let attempt = 0; attempt < 6; attempt++) {
       const current = await loadScene(room);
       const merged = reconcile(current.elements, socket.elements);
-      const result = applyBatch(merged, batch);
+      const result = applyBatch(merged, batch, options);
       if (!result.changed.length) return { revision: current.revision, changed: [], saved: true, notified: false };
       const receipt = await saveScene(room, result.elements, current.updateTime);
       if (!receipt) { await sleep(40 + Math.random() * 100 * (attempt + 1)); continue; }

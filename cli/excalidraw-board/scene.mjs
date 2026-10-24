@@ -61,7 +61,7 @@ function expand(input) {
   return result;
 }
 
-export function applyBatch(elements, batch) {
+export function applyBatch(elements, batch, { imageFiles = [] } = {}) {
   if (!batch || typeof batch !== "object" || Array.isArray(batch)) throw new Error("Expected a batch object");
   for (const key of Object.keys(batch)) if (!["add", "update", "delete"].includes(key)) throw new Error(`Unknown batch field: ${key}`);
   for (const key of ["add", "update", "delete"]) if (batch[key] !== undefined && !Array.isArray(batch[key])) throw new Error(`${key} must be an array`);
@@ -80,8 +80,10 @@ export function applyBatch(elements, batch) {
       const old = map.get(id);
       if (operation === "add" && old) throw new Error(`Element already exists: ${id}`);
       if (operation !== "add" && !old) throw new Error(`Element not found: ${id}`);
+      if (operation === "update" && imageFiles.includes(patch.fileId)
+          && (old.isDeleted || old.type !== "image" || old.fileId !== patch.fileId)) throw new Error("Image element changed during upload. Read the room before retrying.");
       if (operation === "add" && (typeof patch.type !== "string" || !patch.type)) throw new Error("New elements need a type");
-      if (operation === "add" && patch.type === "image") throw new Error("Image creation is not supported");
+      if (operation === "add" && patch.type === "image" && (!imageFiles.includes(patch.fileId) || patch.status !== "saved")) throw new Error("Use the image command to upload and verify image files");
       if (operation === "update" && Object.hasOwn(patch, "type") && patch.type !== old.type) throw new Error("Cannot change an element type");
       const changes = operation === "delete" ? { isDeleted: true } : patch;
       if (old && Object.entries(changes).every(([key, value]) => JSON.stringify(old[key]) === JSON.stringify(value))) continue;
