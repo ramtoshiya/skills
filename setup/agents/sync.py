@@ -548,10 +548,10 @@ class Sync:
             return "updated" if changed else "ok", "restart Hermes" if changed else package.ref[:12]
         return ("ok", package.ref[:12]) if not changed else ("drift", "missing, disabled, or outdated plugin")
 
-    def retire(self, host, names, apply):
+    def retire(self, host, names, apply, selected=None):
         for key, previous in list(self.state["packages"].items()):
             owner, name = key.split(":", 1)
-            if owner != host or name in names:
+            if owner != host or name in names or (selected is not None and name not in selected):
                 continue
             try:
                 path = Path(previous["path"])
@@ -585,7 +585,13 @@ class Sync:
             except ERRORS as error:
                 self.record(host, name, "conflict", str(error))
 
-    def process(self, hosts, apply=False):
+    def process(self, hosts, apply=False, selected=None):
+        if selected is not None:
+            selected = set(selected)
+            known = {entry["name"] for entry in self.marketplace["plugins"]}
+            known.update(key.split(":", 1)[1] for key in self.state["packages"])
+            if selected - known:
+                raise Conflict(f"Unknown plugins: {', '.join(sorted(selected - known))}")
         for host in hosts:
             if not shutil.which(host):
                 self.record(host, "host", "absent", "executable not on PATH")
@@ -599,6 +605,8 @@ class Sync:
             names = set()
             for entry in self.marketplace["plugins"]:
                 name = entry["name"]
+                if selected is not None and name not in selected:
+                    continue
                 if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", name):
                     raise Conflict(f"Invalid plugin name: {name}")
                 if host not in self.policy["plugins"].get(name, self.policy["hosts"]):
@@ -612,7 +620,7 @@ class Sync:
                     self.record(host, name, status, detail)
                 except ERRORS as error:
                     self.record(host, name, "conflict", str(error))
-            self.retire(host, names, apply)
+            self.retire(host, names, apply, selected)
         return self.results
 
     @contextmanager
@@ -631,6 +639,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["status", "sync"])
     parser.add_argument("--host", action="append", choices=["claude", "codex", "pi", "hermes"])
+    parser.add_argument("--plugin", action="append", help="check or sync only this plugin (repeatable)")
     parser.add_argument("--json", action="store_true", help="print machine-readable results")
     args = parser.parse_args()
     try:
@@ -638,9 +647,9 @@ def main():
         hosts = args.host or sync.policy["hosts"]
         if args.command == "sync":
             with sync.lock():
-                results = sync.process(hosts, apply=True)
+                results = sync.process(hosts, apply=True, selected=args.plugin)
         else:
-            results = sync.process(hosts)
+            results = sync.process(hosts, selected=args.plugin)
         if args.json:
             print(json.dumps(results, indent=2))
         else:

@@ -133,6 +133,35 @@ class AgentSyncTests(unittest.TestCase):
         self.assertEqual([row["status"] for row in rows], ["ok", "ok"])
         self.assertEqual((self.settings.read_bytes(), self.settings.stat().st_mtime_ns), before)
 
+    def test_plugin_selection_limits_installation_and_retirement(self):
+        other = self.upstream / "plugins/other/skills/research/SKILL.md"
+        other.parent.mkdir(parents=True)
+        other.write_text("other package\n")
+        git(self.upstream, "add", ".")
+        git(self.upstream, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Add other package")
+        revision = git(self.upstream, "rev-parse", "HEAD")
+        source = self.install_source(revision)
+        self.entry["source"]["sha"] = revision
+        second = {"name": "other", "source": {**self.entry["source"], "path": "plugins/other"}}
+        self.set_entries([self.entry, second])
+        operation = sync.Sync(self.root)
+        rows = operation.process(["pi"], apply=True, selected=["example"])
+        self.assertEqual([row["component"] for row in rows], ["example"])
+        self.assertEqual(set(operation.state["packages"]), {"pi:example"})
+        operation = sync.Sync(self.root)
+        operation.process(["pi"], apply=True)
+        self.set_entries([])
+        operation = sync.Sync(self.root)
+        rows = operation.process(["pi"], selected=["example"])
+        self.assertEqual([(row["component"], row["status"]) for row in rows], [("example", "drift")])
+        operation = sync.Sync(self.root)
+        rows = operation.process(["pi"], apply=True, selected=["example"])
+        self.assertEqual([row["component"] for row in rows], ["example"])
+        self.assertEqual(set(sync.read_json(operation.state_path)["packages"]), {"pi:other"})
+        self.assertEqual(sync.read_json(self.settings)["skills"], [str(source.parent / "other/skills/research")])
+        with self.assertRaisesRegex(sync.Conflict, "Unknown plugins"):
+            sync.Sync(self.root).process(["pi"], apply=True, selected=["typo"])
+
     def test_status_is_offline_and_does_not_create_state_or_settings(self):
         operation, rows = self.execute(False)
         self.assertEqual(rows[0]["status"], "drift")

@@ -140,14 +140,18 @@ commands may refresh their own metadata caches. The task exits nonzero for
 missing packages, outdated contents, or conflicts. `sync` reconciles every
 supported agent executable on `PATH`. It skips agents that are not installed.
 Use `--host claude`, `--host codex`, `--host pi`, or `--host hermes` to restrict
-either task. `--json` prints the results as JSON.
+either task. Repeat `--plugin NAME` to limit both installation and retirement
+to named packages, leaving other managed registrations alone. Unknown names are
+errors. `--json` prints the results as JSON.
 
 The marketplace supplies the exact third-party pins. `setup/agents/hosts.json`
-limits `ramtoshiya-cc` to Claude Code and the `humanize-korean` and
-`omd-kr-writer` packages to Hermes. Hermes uses a personal-assistant selection:
-`ramtoshiya`, `humanize`, `humanize-korean`, and the writing-only
-`omd-kr-writer` adapter. Full OmD, OpenPencil, Matt Pocock productivity,
-test-audit, and Ouroboros interview apply only to Claude Code, Codex, and Pi.
+limits `ramtoshiya-cc` to Claude Code and `humanize-korean` to Hermes.
+`omd-kr-writer` is installed at user level in all four hosts. Full `omd` is
+excluded from user-level sync and installed only in explicitly selected
+projects. Hermes uses a personal-assistant selection: `ramtoshiya`, `humanize`,
+`humanize-korean`, and the writing-only `omd-kr-writer` adapter. OpenPencil,
+Matt Pocock productivity, test-audit, and Ouroboros interview apply only to
+Claude Code, Codex, and Pi.
 Other entries apply to all four hosts unless the policy lists specific hosts.
 Adding an entry therefore declares an installation, not just a marketplace
 listing, when using these tasks.

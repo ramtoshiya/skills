@@ -3,8 +3,8 @@
   "plugins": {
     "ramtoshiya-cc": ["claude"],
     "humanize-korean": ["hermes"],
-    "omd-kr-writer": ["hermes"],
-    "omd": ["claude", "codex", "pi"],
+    "omd-kr-writer": ["claude", "codex", "pi", "hermes"],
+    "omd": [],
     "open-pencil": ["claude", "codex", "pi"],
     "mattpocock-productivity": ["claude", "codex", "pi"],
     "fcakyon-test-audit": ["claude", "codex", "pi"],

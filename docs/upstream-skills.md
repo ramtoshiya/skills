@@ -90,16 +90,30 @@ changes under `integration/` as well as the selected upstream sources when
 updating its pin. Invoke `/omd:omd-slop-audit` for a review or
 `/omd:omd-autopilot` for a new surface in Claude Code.
 
-The OmD package also has a Pi extension at `hooks/pi.ts` and a native Hermes
-plugin. Pi needs that extension alongside its selected skill paths. Managed
-setup installs the full package only in Claude Code, Codex, and Pi. Hermes
-instead receives the `omd-kr-writer` marketplace entry at the same commit,
-selecting only `skills/omd-kr-writer` through a thin registration adapter.
-The pinned checkout retains supporting files, but Hermes loads no OmD design
-skills or preference hooks. Keep both OmD entry pins equal when updating them.
-Restart Hermes to load the writing skill into a new session. Browser-based
-measurements for the full package have separate local prerequisites described
-in its README.
+Managed setup installs `omd-kr-writer` at user level in Claude Code, Codex,
+Pi, and Hermes. This marketplace entry selects only the Korean writing skill,
+with no design roles or preference hooks. Hermes uses a thin registration
+adapter. Full `omd` is excluded from user-level sync. Keep both OmD entry pins
+equal when updating them.
+
+Install the full package only in a project that needs it. In Claude Code, run
+`claude plugin install omd@ramtoshiya --scope project` from that project.
+Codex stores plugin files in a shared cache. Keep `enabled = false` under
+`[plugins."omd@ramtoshiya"]` in the user `config.toml` and enable that same
+plugin in the trusted project's `.codex/config.toml`. `codex plugin add`
+enables the user entry, so restore the user-level `false` after installing or
+updating it. Review hooks in `/hooks` without changing unrelated trust entries.
+
+Pi loads the pinned skill paths and `hooks/pi.ts` through the project's
+`.pi/settings.json`, not the user settings. Omit `omd-kr-writer` from that
+project list because the user installation already supplies it. Hermes supports
+`.hermes/plugins/omd` in a project when launched there with
+`HERMES_ENABLE_PROJECT_PLUGINS=1`. Do not retain a full `omd` link in its user
+plugin directory if that plugin is enabled. Project plugin discovery is an
+explicit Hermes opt-in, not a setting applied to every session by sync.
+
+Restart affected agents to load the changed scope. Browser-based measurements
+for the full package have separate local prerequisites described in its README.
 
 The `humanize` skill applies before creating or modifying any file, including
 code and configuration, and when preparing or publishing content such as
