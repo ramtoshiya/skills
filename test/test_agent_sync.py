@@ -279,6 +279,33 @@ class AgentSyncTests(unittest.TestCase):
         self.assertEqual(json.loads(operation.state_path.read_text())["packages"], {})
         self.assertTrue((self.home / f".pi/agent/skill-sources/example/skills/{self.first}/plugins/example/skills/writing/SKILL.md").exists())
 
+    def test_retirement_preserves_a_skill_shared_with_a_surviving_package(self):
+        selection = {"name": "writing-only", "source": {**self.entry["source"], "path": "plugins/example/skills"}, "skills": ["./writing"]}
+        self.set_entries([self.entry, selection])
+        self.execute(True)
+        self.set_entries([selection])
+        _, rows = self.execute(True)
+        self.assertEqual([row["status"] for row in rows], ["ok", "updated"])
+        settings = sync.read_json(self.settings)
+        self.assertEqual(len(settings["skills"]), 1)
+        self.assertTrue(Path(settings["skills"][0], "SKILL.md").is_file())
+        self.assertEqual(settings["extensions"], [])
+        _, rows = self.execute(True)
+        self.assertEqual([row["status"] for row in rows], ["ok"])
+
+    def test_native_install_does_not_enable_an_already_enabled_plugin(self):
+        operation = sync.Sync(self.root)
+        package = operation.sources.package(self.entry)
+        installed = self.home / ".claude/plugins/cache/example/example/local"
+        operation.inventory = []
+        command = self.home / "bin/claude"
+        inventory = json.dumps([{"id": "example@example", "scope": "user", "installPath": str(installed), "enabled": True}])
+        marketplaces = json.dumps([{"name": "example", "path": str(self.root)}])
+        command.write_text('#!/bin/sh\ncase "$*" in\n  "plugin install example@example --scope user") mkdir -p "' + str(installed.parent) + '"; cp -R "' + str(package.root) + '" "' + str(installed) + '" ;;\n  "plugin marketplace list --json") printf \'%s\\n\' \'' + marketplaces + '\' ;;\n  "plugin list --json") printf \'%s\\n\' \'' + inventory + '\' ;;\n  *) exit 98 ;;\nesac\n')
+        command.chmod(0o755)
+        self.assertEqual(operation.native("claude", self.entry, package, True)[0], "updated")
+        self.assertEqual(operation.native("claude", self.entry, package, True)[0], "ok")
+
     def test_installer_success_is_not_accepted_when_cached_contents_remain_stale(self):
         operation = sync.Sync(self.root)
         package = operation.sources.package(self.entry)

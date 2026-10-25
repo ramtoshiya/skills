@@ -423,6 +423,8 @@ class Sync:
                 run(host, "plugin", command, selector, "--scope", "user")
             else:
                 run(host, "plugin", "add", selector)
+            self.marketplace_setup(host, False)
+            path, enabled, _ = self.installed(host, entry)
         if not enabled:
             if host == "claude":
                 run(host, "plugin", "enable", selector, "--scope", "user")
@@ -549,10 +551,15 @@ class Sync:
         return ("ok", package.ref[:12]) if not changed else ("drift", "missing, disabled, or outdated plugin")
 
     def retire(self, host, names, apply, selected=None):
+        retiring = {
+            key for key in self.state["packages"]
+            if key.split(":", 1)[0] == host and key.split(":", 1)[1] not in names
+            and (selected is None or key.split(":", 1)[1] in selected)
+        }
         for key, previous in list(self.state["packages"].items()):
-            owner, name = key.split(":", 1)
-            if owner != host or name in names or (selected is not None and name not in selected):
+            if key not in retiring:
                 continue
+            _, name = key.split(":", 1)
             try:
                 path = Path(previous["path"])
                 self.check_owned(host, name, path)
@@ -564,8 +571,13 @@ class Sync:
                     before = settings_path.read_bytes()
                     settings = read_json(settings_path)
                     for field, entries in previous.get("settings", {}).items():
+                        retained = {
+                            item for other_key, other in self.state["packages"].items()
+                            if other_key.startswith(host + ":") and other_key not in retiring
+                            for item in other.get("settings", {}).get(field, [])
+                        }
                         if entries:
-                            settings[field] = reconcile_array(settings.get(field, []), entries, [])
+                            settings[field] = reconcile_array(settings.get(field, []), entries, [item for item in entries if item in retained])
                     if settings_path.read_bytes() != before:
                         raise Conflict(f"Settings changed during sync: {settings_path}")
                     write_json(settings_path, settings)
