@@ -42,6 +42,5 @@ plugins:
   disabled:
     - fcakyon-test-audit
     - mattpocock-productivity
-    - omd
     - orca-status
     - ouroboros-interview

@@ -119,8 +119,12 @@ to Claudex or Codex. They also default email to reading and drafting, with
 confirmation for sending, reservations, payments, and destructive actions
 unless a specific authorization or standing rule covers the action. The
 package selection in [Agent plugins](agent-pack.md) retains Korean writing
-without loading the full design workflow. Orca can recreate its managed plugin
-when launching Hermes, so avoid that launch path if no Orca integration is wanted.
+without installing the full design workflow at user level. The shared disabled
+plugin list leaves `omd` available for an explicitly enabled project plugin.
+Keep its full package out of the user plugin directory and opt into project
+discovery only when launching in that project. Orca can recreate its managed
+plugin when launching Hermes, so avoid that launch path if no Orca integration
+is wanted.
 
 The coding-agent instructions authorize local commits of completed, validated
 task-owned changes on the current branch, including the default branch. They
