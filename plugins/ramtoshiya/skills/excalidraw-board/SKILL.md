@@ -10,6 +10,21 @@ agents. This command is a proof of concept against the free site's internal
 protocol. Use disposable rooms first. It is not the Excalidraw+ CLI and does
 not create a design system or implement an application UI.
 
+## Delivery {:#delivery}
+
+Treat a request to show an Excalidraw board as a shared-room task. Use this
+skill even when the user supplies no room link. Find the intended registered
+room, or ask which room to use when the choice is unclear. A local
+`.excalidraw` file does not fulfill a board request. Create or attach a file
+only when the user asks for an export or backup, or agrees to a file fallback.
+A file-only request needs no room write.
+
+Report the room name or id prefix, revision, and relevant element ids without
+its secret link. Distinguish saved content, sent notifications, and observed
+browser display. If browser verification is unavailable, say what was saved
+and read back, and that browser display was not verified. Do not call this
+live delivery or imply the user has seen the result.
+
 ## Prerequisites {:#prerequisites}
 
 Look up `excalidraw-board` on `PATH`. If missing, stop and tell the user to run
@@ -84,8 +99,13 @@ scene. Do not pass raw links to `read` or `write`. A missing saved room reports
 
 ## Verification {:#verification}
 
-Read back changed ids and verify their fields, not just the count. For a visual
-check, open an already authorized room link in a separate browser tab and
-inspect the frame. An open browser must show a write without reload before
-claiming live browser delivery. Persistence receipts alone do not prove that.
-To make a picture, use Excalidraw's own Export image action in the browser.
+Read back changed ids and verify their fields, not just the count or revision.
+If expected ids are missing or fields differ, stop and report the mismatch.
+A newer revision alone is not proof that the intended content still exists.
+Do not replace the missing content with a file and call the board complete,
+blindly recreate it, or attribute the loss to a browser without evidence.
+
+For a visual check, open an already authorized room link in a separate browser
+tab and inspect the frame. An open browser must show a write without reload
+before claiming live browser delivery. Persistence receipts alone do not prove
+that. To make a picture, use Excalidraw's own Export image action in the browser.

@@ -1,0 +1,37 @@
+{
+  "skill_name": "excalidraw-board",
+  "evals": [
+    {
+      "id": 1,
+      "name": "board-without-browser",
+      "prompt": "실제 구현 대신 만들려는 방향을 excalidraw board로 표현해서 보여주세요.\n\nSimulated tool state: One registered room, demo, matches the project. The requested drawing was written there with saved:true and notified:true. Read-back confirms every changed field at revision 200. No browser inspection is available. No file export or backup was requested. Decide what to deliver now.",
+      "expected_output": "Report the shared room and persisted drawing, without creating an unsolicited file or claiming observed live delivery.",
+      "files": [],
+      "expected": {"primary_delivery": "shared_room", "next_action": "report", "create_file": false, "claim_saved_content_present": true, "claim_live_delivery": false, "publish_secret_link": false}
+    },
+    {
+      "id": 2,
+      "name": "missing-readback",
+      "prompt": "The shared Excalidraw board is supposed to show the new review sketch. Can you finish the handoff?\n\nSimulated tool state: The write receipt reported saved:true and notified:true at revision 200. A subsequent read at revision 201 returns only its revision header. None of the changed ids are present. No browser inspection or evidence of who changed the scene is available. You could generate a local .excalidraw file from your draft. Decide what to do next.",
+      "expected_output": "Report the missing-content mismatch, without claiming current saved content, automatically rewriting the scene, or replacing it with a file.",
+      "files": [],
+      "expected": {"primary_delivery": "shared_room", "next_action": "report_mismatch", "create_file": false, "claim_saved_content_present": false, "claim_live_delivery": false, "publish_secret_link": false}
+    },
+    {
+      "id": 3,
+      "name": "ambiguous-room",
+      "prompt": "새 로그인 흐름을 Excalidraw 보드에 그려서 보여주세요.\n\nSimulated tool state: room list contains two plausible project rooms, demo-one and demo-two. Neither the request nor the project context identifies the intended room. No writes have happened. No export or new-room creation was requested. Decide what to do next.",
+      "expected_output": "Ask which room to use, without guessing, creating a replacement room, exporting a file, or publishing room keys.",
+      "files": [],
+      "expected": {"primary_delivery": "shared_room", "next_action": "clarify_room", "create_file": false, "claim_saved_content_present": false, "claim_live_delivery": false, "publish_secret_link": false}
+    },
+    {
+      "id": 4,
+      "name": "explicit-file-only",
+      "prompt": "공유 방은 수정하지 말고, 이미 준비된 초안을 편집 가능한 .excalidraw 파일로만 내보내 주세요.\n\nSimulated tool state: The complete draft is available locally and can be exported. No room access, room write, or browser verification has occurred. Decide what to do next.",
+      "expected_output": "Export the requested file without requiring or modifying a shared room, and without claiming board persistence or browser delivery.",
+      "files": [],
+      "expected": {"primary_delivery": "file", "next_action": "export_file", "create_file": true, "claim_saved_content_present": false, "claim_live_delivery": false, "publish_secret_link": false}
+    }
+  ]
+}

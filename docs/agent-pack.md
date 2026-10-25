@@ -29,6 +29,21 @@ instead. Hermes loads the shared plugin from a local clone.
 claude.ai/design projects through Claude Code's `DesignSync` tool, and a hook
 that blocks AI attribution lines in commits and pull requests.
 
+Excalidraw board requests update a shared room. A `.excalidraw` attachment is
+an export or an agreed fallback, not a replacement for that room. The agent
+reports saved content separately from browser display and stops if read-back
+content is missing or different. It shares room ids, not secret room links.
+
+The board skill's offline policy evaluations use simulated room state and do
+not publish drawings. Run them explicitly with an authenticated Claude Code:
+
+```sh
+node test/excalidraw-skill-eval.mjs plugins/ramtoshiya/skills/excalidraw-board/SKILL.md /path/to/eval-results
+```
+
+These evaluations check the model's delivery decisions, not the CLI protocol
+or live browser synchronization. `npm test` runs the CLI's automated tests.
+
 ## Requirements
 
 The hooks run with [uv](https://docs.astral.sh/uv/getting-started/installation/)
