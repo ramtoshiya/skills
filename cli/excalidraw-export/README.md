@@ -49,6 +49,24 @@ coordinate or a browser viewport coordinate. For example, `80,80,100,100` with
 `--scale 2` produces a 200 by 200 PNG. Content beyond the scene is filled with
 the scene background. Omitting `--region` exports the entire scene.
 
+To select everything except the green middle rectangle in the sample:
+
+```sh
+node export.mjs example.excalidraw selected.png --exclude-ids middle
+```
+
+`--exclude-ids` takes comma-separated exact element IDs and removes those
+objects from the renderer's input before the browser draws anything. It does
+not crop or paint over an existing PNG. The sample still exports at 12,000 by
+8,000 because the remaining objects retain that extent. The original scene
+file is not modified. Unknown IDs, empty IDs, and an empty selection are errors.
+
+Exclusion does not expand through groups, frames, bound text, or arrows.
+Explicitly name each object to omit. The remaining objects determine the
+output bounds, so excluding an outermost object can change image dimensions.
+When combined with `--region`, the crop is relative to the selected scene's
+export bounds.
+
 The server binds only to loopback and serves the bundled renderer and fonts
 from the installed Excalidraw package. Browser requests to external origins are
 blocked. Embedded images must use `data:image/` URLs. Use trusted scene files:
@@ -92,9 +110,12 @@ CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google 
 ```
 
 The tests launch a real headless browser, decode the PNG, and check distant
-corner pixels on a 12,000 by 8,000 scene. They also check local Latin/Korean font
-loading, visible text, scaled cropping with frame children, input limits, and
-output preservation. They do not contact excalidraw.com.
+corner pixels on a 12,000 by 8,000 scene. Excluding the green middle rectangle
+must replace its pixels with white while every other pixel, including text,
+remains identical to the full export. The tests also check local Latin/Korean
+font loading, visible text, scaled cropping with frame children, invalid
+selections, input limits, and output preservation. They do not contact
+excalidraw.com.
 
 `npm audit` currently reports 11 findings in the pinned Excalidraw dependency
 tree, including two high-severity findings. This is a local PoC, not a

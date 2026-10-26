@@ -16,7 +16,7 @@ const browserArgs = executable ? ["--executable-path", executable] : [];
 const pixel = (png, x, y) => [...png.data.subarray((y * png.width + x) * 4, (y * png.width + x) * 4 + 4)];
 
 // Real CLI and PNG pixels catch viewport clipping, scaling errors, and missing assets.
-test("headless export preserves distant corners and loads Latin and Korean fonts", { timeout: 120_000 }, async () => {
+test("headless selection removes only the middle object from the 96MP export", { timeout: 120_000 }, async () => {
   const directory = await mkdtemp(join(tmpdir(), "excalidraw-large-"));
   try {
     const output = join(directory, "large.png");
@@ -39,6 +39,18 @@ test("headless export preserves distant corners and loads Latin and Korean fonts
       }
     }
     assert.ok(dark > 1000, "text must produce visible ink, not only a font receipt");
+    const selectedOutput = join(directory, "selected.png");
+    await run(process.execPath, [script, example, selectedOutput, "--exclude-ids", "middle", ...browserArgs], { timeout: 110_000 });
+    const selected = PNG.sync.read(await readFile(selectedOutput));
+    assert.equal(selected.width, 12000);
+    assert.equal(selected.height, 8000);
+    // Include the rectangle's one-pixel antialiased stroke outside its bounds.
+    // Everything else, including every text pixel, must match the full export.
+    for (let y = 3299; y < 3701; y++) {
+      png.data.fill(255, (y * png.width + 5399) * 4, (y * png.width + 6001) * 4);
+    }
+    assert.deepEqual(pixel(selected, 5500, 3500), [255, 255, 255, 255]);
+    assert.ok(png.data.equals(selected.data), "only the green object's pixels may change");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -76,6 +88,16 @@ test("CLI rejects invalid limits and preserves existing output", async () => {
     const output = join(directory, "output.png");
     for (const args of [["--scale", "0"], ["--region", "0,0,-1,20"], ["--region", "0,0,40000,1"]]) {
       await assert.rejects(run(process.execPath, [script, example, output, ...args]), error => error.code === 1);
+    }
+    for (const [ids, message] of [
+      ["", "Excluded IDs must be nonempty"],
+      ["middle,missing", "Unknown live element IDs: missing"],
+      ["extent,top-left,bottom-right,heading,middle", "Selection contains no live elements"],
+    ]) {
+      await assert.rejects(
+        run(process.execPath, [script, example, output, "--exclude-ids", ids]),
+        error => error.code === 1 && error.stderr.includes(message),
+      );
     }
     await writeFile(output, "keep me");
     await assert.rejects(run(process.execPath, [script, example, output]), error => error.stderr.includes("already exists"));
