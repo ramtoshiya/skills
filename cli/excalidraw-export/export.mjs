@@ -10,6 +10,7 @@ import { chromium } from "playwright";
 const directory = dirname(fileURLToPath(import.meta.url));
 const help = `Usage: node export.mjs scene.excalidraw output.png [options]
   --region x,y,width,height  Crop relative to the full export's top-left, before scaling
+  --ids id1,id2               Render only these exact element IDs
   --exclude-ids id1,id2       Omit these exact element IDs before rendering
   --scale number             Pixels per scene unit (default 1)
   --max-pixels number        Per-canvas allocation limit (default 100000000)
@@ -27,7 +28,8 @@ try {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
     options: Object.fromEntries([
-      ["help", "boolean"], ["region", "string"], ["scale", "string"], ["exclude-ids", "string"],
+      ["help", "boolean"], ["region", "string"], ["scale", "string"],
+      ["ids", "string"], ["exclude-ids", "string"],
       ["max-pixels", "string"], ["timeout-ms", "string"], ["executable-path", "string"],
     ].map(([name, type]) => [name, { type }])),
   });
@@ -64,14 +66,21 @@ try {
     if (!Array.isArray(scene.elements) || scene.elements.every(element => element.isDeleted)) {
       throw new Error("Input must contain a nonempty Excalidraw elements array");
     }
-    if (values["exclude-ids"] !== undefined) {
-      const excludedIds = values["exclude-ids"].split(",").map(id => id.trim());
-      if (excludedIds.some(id => !id)) throw new Error("Excluded IDs must be nonempty comma-separated element IDs");
+    if (values.ids !== undefined && values["exclude-ids"] !== undefined) {
+      throw new Error("Choose only one of --ids or --exclude-ids");
+    }
+    const selection = values.ids ?? values["exclude-ids"];
+    if (selection !== undefined) {
+      const requestedIds = selection.split(",").map(id => id.trim());
+      const label = values.ids !== undefined ? "Selected" : "Excluded";
+      if (requestedIds.some(id => !id)) throw new Error(`${label} IDs must be nonempty comma-separated element IDs`);
       const liveIds = new Set(scene.elements.filter(element => !element.isDeleted).map(element => element.id));
-      const unknownIds = excludedIds.filter(id => !liveIds.has(id));
+      const unknownIds = requestedIds.filter(id => !liveIds.has(id));
       if (unknownIds.length) throw new Error(`Unknown live element IDs: ${unknownIds.join(", ")}`);
-      const excluded = new Set(excludedIds);
-      scene.elements = scene.elements.filter(element => !element.isDeleted && !excluded.has(element.id));
+      const requested = new Set(requestedIds);
+      scene.elements = scene.elements.filter(element => !element.isDeleted && (
+        values.ids !== undefined ? requested.has(element.id) : !requested.has(element.id)
+      ));
       if (!scene.elements.length) throw new Error("Selection contains no live elements");
     }
     for (const file of Object.values(scene.files ?? {})) {

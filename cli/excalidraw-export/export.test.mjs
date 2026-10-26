@@ -56,6 +56,40 @@ test("headless selection removes only the middle object from the 96MP export", {
   }
 });
 
+test("ID inclusion sizes only the selection and preserves scene stacking order", { timeout: 120_000 }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), "excalidraw-ids-"));
+  try {
+    const singleOutput = join(directory, "middle.png");
+    await run(process.execPath, [script, example, singleOutput, "--ids", "middle", "--max-pixels", "300000", ...browserArgs], { timeout: 110_000 });
+    const single = PNG.sync.read(await readFile(singleOutput));
+    assert.equal(single.width, 600);
+    assert.equal(single.height, 400);
+    assert.deepEqual(pixel(single, 300, 200), [0, 128, 0, 255]);
+
+    const scene = {
+      appState: { viewBackgroundColor: "#ffffff" },
+      elements: [
+        { id: "back", type: "rectangle", x: -100, y: -100, width: 100, height: 100, backgroundColor: "#ff0000", fillStyle: "solid", roughness: 0 },
+        { id: "front", type: "rectangle", x: -80, y: -80, width: 60, height: 60, backgroundColor: "#0000ff", fillStyle: "solid", roughness: 0 },
+        { id: "omit", type: "rectangle", x: -70, y: -70, width: 40, height: 40, backgroundColor: "#008000", fillStyle: "solid", roughness: 0 },
+      ],
+    };
+    const input = join(directory, "overlapping.excalidraw");
+    const output = join(directory, "included.png");
+    const source = JSON.stringify(scene);
+    await writeFile(input, source);
+    await run(process.execPath, [script, input, output, "--ids", "front,back", ...browserArgs], { timeout: 110_000 });
+    const included = PNG.sync.read(await readFile(output));
+    assert.equal(included.width, 100);
+    assert.equal(included.height, 100);
+    assert.deepEqual(pixel(included, 10, 10), [255, 0, 0, 255]);
+    assert.deepEqual(pixel(included, 50, 50), [0, 0, 255, 255]);
+    assert.equal(await readFile(input, "utf8"), source);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("crop uses export-relative coordinates and scale without changing framed children", { timeout: 120_000 }, async () => {
   const directory = await mkdtemp(join(tmpdir(), "excalidraw-crop-"));
   try {
@@ -89,13 +123,16 @@ test("CLI rejects invalid limits and preserves existing output", async () => {
     for (const args of [["--scale", "0"], ["--region", "0,0,-1,20"], ["--region", "0,0,40000,1"]]) {
       await assert.rejects(run(process.execPath, [script, example, output, ...args]), error => error.code === 1);
     }
-    for (const [ids, message] of [
-      ["", "Excluded IDs must be nonempty"],
-      ["middle,missing", "Unknown live element IDs: missing"],
-      ["extent,top-left,bottom-right,heading,middle", "Selection contains no live elements"],
+    for (const [args, message] of [
+      [["--exclude-ids", ""], "Excluded IDs must be nonempty"],
+      [["--exclude-ids", "middle,missing"], "Unknown live element IDs: missing"],
+      [["--exclude-ids", "extent,top-left,bottom-right,heading,middle"], "Selection contains no live elements"],
+      [["--ids", ""], "Selected IDs must be nonempty"],
+      [["--ids", "middle,missing"], "Unknown live element IDs: missing"],
+      [["--ids", "middle", "--exclude-ids", "top-left"], "Choose only one of --ids or --exclude-ids"],
     ]) {
       await assert.rejects(
-        run(process.execPath, [script, example, output, "--exclude-ids", ids]),
+        run(process.execPath, [script, example, output, ...args]),
         error => error.code === 1 && error.stderr.includes(message),
       );
     }

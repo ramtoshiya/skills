@@ -49,6 +49,19 @@ coordinate or a browser viewport coordinate. For example, `80,80,100,100` with
 `--scale 2` produces a 200 by 200 PNG. Content beyond the scene is filled with
 the scene background. Omitting `--region` exports the entire scene.
 
+To render only the green middle rectangle, or only the heading and rectangle:
+
+```sh
+node export.mjs example.excalidraw middle.png --ids middle
+node export.mjs example.excalidraw heading-and-middle.png --ids heading,middle
+```
+
+`--ids` takes comma-separated exact element IDs and sends only those objects
+to the renderer. `--ids middle` produces a 600 by 400 PNG rather than allocating
+the sample's full 12,000 by 8,000 canvas. IDs are matched exactly, with surrounding
+whitespace trimmed. The original scene stacking order is preserved regardless
+of the order of IDs in the argument.
+
 To select everything except the green middle rectangle in the sample:
 
 ```sh
@@ -61,11 +74,12 @@ not crop or paint over an existing PNG. The sample still exports at 12,000 by
 8,000 because the remaining objects retain that extent. The original scene
 file is not modified. Unknown IDs, empty IDs, and an empty selection are errors.
 
-Exclusion does not expand through groups, frames, bound text, or arrows.
-Explicitly name each object to omit. The remaining objects determine the
-output bounds, so excluding an outermost object can change image dimensions.
+`--ids` and `--exclude-ids` are mutually exclusive. Neither selection mode
+expands through groups, frames, bound text, or arrows. Explicitly name each
+object to include or omit. The selected objects determine output bounds, so
+selecting a subset or excluding an outermost object can change image dimensions.
 When combined with `--region`, the crop is relative to the selected scene's
-export bounds.
+export bounds. Without either selection flag, all live objects are rendered.
 
 The server binds only to loopback and serves the bundled renderer and fonts
 from the installed Excalidraw package. Browser requests to external origins are
@@ -94,12 +108,14 @@ PoC guardrails, not guarantees that Chromium can allocate every permitted size.
 `--timeout-ms` defaults to 120,000 and applies to browser launch and rendering
 after the bundle is built.
 
-A crop currently renders the full scene first, then copies the region into a
-second canvas. A 12,000 by 8,000 canvas alone needs about 384 MB of raw RGBA
-memory. Cropping can require another canvas of similar size, plus browser and
-PNG encoding overhead. The full-scene limit applies even to a small crop.
-Very large scenes may need a lower `--scale`. Unbounded-size export and direct
-region-only rendering are outside this PoC.
+ID filtering happens before rendering and canvas allocation. The pixel limit
+therefore applies to the selected scene, not objects left out of the selection.
+A crop currently renders that entire selected scene first, then copies the
+region into a second canvas. A 12,000 by 8,000 canvas alone needs about 384 MB
+of raw RGBA memory. Cropping can require another canvas of similar size, plus
+browser and PNG encoding overhead. The selected-scene limit applies even to a
+small crop. Very large selections may need a lower `--scale`. Unbounded-size
+export and direct region-only rendering are outside this PoC.
 
 ## Checks
 
@@ -113,9 +129,10 @@ The tests launch a real headless browser, decode the PNG, and check distant
 corner pixels on a 12,000 by 8,000 scene. Excluding the green middle rectangle
 must replace its pixels with white while every other pixel, including text,
 remains identical to the full export. The tests also check local Latin/Korean
-font loading, visible text, scaled cropping with frame children, invalid
-selections, input limits, and output preservation. They do not contact
-excalidraw.com.
+font loading, visible text, single-ID export under a reduced pixel budget,
+multi-ID stacking order, scaled cropping with frame children, invalid or
+conflicting selections, input limits, and output preservation. They do not
+contact excalidraw.com.
 
 `npm audit` currently reports 11 findings in the pinned Excalidraw dependency
 tree, including two high-severity findings. This is a local PoC, not a
