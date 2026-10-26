@@ -30,9 +30,10 @@ execFileSync("uv", [
 
 test("translates real guard denials and allows harmless command text without executing it", async (t) => {
 	const cwd = fixture(t);
-	const denial = await call(cwd, "python3 -V");
+	const denial = await call(cwd, "hf download publisher/model");
 	assert.equal(denial.block, true);
-	assert.match(denial.reason, /Bare Python\/pip/);
+	assert.match(denial.reason, /40-character commit hash/);
+	assert.equal(await call(cwd, `hf download publisher/model --revision ${"a".repeat(40)}`), undefined);
 	assert.equal(await call(cwd, "touch should-not-exist"), undefined);
 	assert.equal(existsSync(join(cwd, "should-not-exist")), false);
 });

@@ -49,6 +49,54 @@ rules:
   interpreter by path, such as `.venv/bin/python`. An activated virtual
   environment does not make a bare `python` allowed.
 
+The same shared guard checks common model commands:
+
+- `hf download` and `huggingface-cli download` require `--revision` with a
+  full 40-character commit hash. Branches, tags, short hashes, missing values,
+  and conflicting mutable revision declarations are denied. This also applies
+  to dataset and space downloads, which can carry model artifacts or code.
+- `ollama pull`, `run`, and `create` are denied because these command forms do
+  not establish reviewed, immutable artifact provenance. Even a cached `run`
+  is denied because it can fetch a missing model.
+- oMLX and vLLM `serve`, `mlx_lm.server`, `mlx_vlm.server`, `llama-server`,
+  `llama-cli`, and MLX `generate`/`convert` commands require an explicit,
+  existing local model path beginning with `/`, `./`, `../`, or `~/`.
+  A Hub repository id is not a local path. Servers also require an explicit
+  loopback `--host` (`127.0.0.1`, `::1`, or `localhost`).
+- Recognized oMLX, vLLM, llama, and MLX commands reject `--trust-remote-code`
+  and `--trust_remote_code`, including abbreviated spellings and explicit
+  false values. Omit the flag. MLX adapter paths must also be local.
+- llama commands reject Hub and URL source flags and the environment settings
+  `LLAMA_ARG_HF_REPO`, `LLAMA_ARG_HF_REPO_V`, `LLAMA_ARG_HF_FILE`, and
+  `LLAMA_ARG_MODEL_URL` even alongside a local model path. Download through
+  the pinned acquisition step instead.
+
+Subcommand help remains available. The guard also recognizes these entry points
+through `uv run` and Python `-m`, including attached module arguments. Existing
+Python and package-age checks still apply.
+
+A full revision identifies bytes, not a trustworthy publisher or safe behavior.
+Before loading, review the publisher and revision, record the source repository,
+revision, filenames, and SHA-256 hashes, and verify those hashes after download
+and conversion. Prefer non-executable weight formats such as safetensors.
+Review tokenizer, configuration, templates, and loader code too. A clean
+benchmark does not rule out a trigger-based backdoor in weights.
+
+Run inference in a separate, least-privilege process with only the required
+inputs and model files mounted. Remove credentials and project secrets, deny
+outbound network access after acquisition, and give the process no shell or
+agent tool authority. Treat model output as untrusted data and validate it
+before any downstream action. Loopback binding alone does not provide this
+isolation. A pinned local model can still produce malicious or incorrect output.
+
+These are command-text checks, not artifact attestation or OS isolation.
+They do not fetch metadata, enforce a model release-age floor, hash large
+artifacts, inspect model contents, verify local directory provenance, or apply
+network/filesystem restrictions. Local files can change after review. Direct
+SDK calls, inline scripts, HTTP clients, other loaders, custom wrappers, and
+already-running inference services are outside model-rule coverage. Download
+and review first, then use a local path with a separately isolated runtime.
+
 `uv python install` is always allowed. The guard
 splits command sequences, follows `sh -c` and similar wrappers, and skips
 heredoc bodies. A denial reaches the agent as the hook's reason.
