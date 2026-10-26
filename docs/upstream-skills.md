@@ -14,7 +14,7 @@ those repositories. This repository holds none of them.
 | `fcakyon-test-audit` | `test-audit` | `plugins/test-audit/skills` in the fork [ramtoshiya/claude-codex-settings](https://github.com/ramtoshiya/claude-codex-settings) | MIT |
 | `humanize` | `humanize` and its hook | `plugins/humanize` in the fork [ramtoshiya/claude-codex-settings](https://github.com/ramtoshiya/claude-codex-settings) | Apache-2.0 |
 | `humanize-korean` | Korean prose diagnosis, editing, and verification | `plugins/humanize-korean` in the fork [ramtoshiya/im-not-ai](https://github.com/ramtoshiya/im-not-ai) | MIT |
-| `ouroboros-interview` | `interview` | `plugins/ouroboros-interview` in the fork [ramtoshiya/ouroboros](https://github.com/ramtoshiya/ouroboros) | MIT |
+| `ouroboros-interview` | `interview`, `unstuck` | `plugins/ouroboros-interview` in the fork [ramtoshiya/ouroboros](https://github.com/ramtoshiya/ouroboros) | MIT |
 | `omd` | Design-system workflows, preference learning, design reviews, and `omd-kr-writer` | `plugins/omd` in the fork [ramtoshiya/oh-my-design](https://github.com/ramtoshiya/oh-my-design) | MIT |
 
 `grill-me` and `handoff` run only when you invoke them, so the agent's own
@@ -37,13 +37,16 @@ excludes test reads used as evidence for research, diagnosis, source review,
 packaging, and validation planning. A research assignment does not become a
 test audit because its parent workflow will later change tests.
 
-`ouroboros-interview` packages only the interview skill and its bundled
-questioning and closure-review prompts. It uses the host's native tools, needs
-no additional runtime or server, and ends with an agreed requirements summary.
-It does not load the fork's root plugin, start implementation, change agent
-configuration, or check for updates. Results stay in the conversation unless
-you request a summary file. Invoke `/ouroboros-interview:interview` in Claude
-Code after installing the entry.
+`ouroboros-interview` packages the interview and unstuck skills with their
+bundled review and lateral-thinking prompts. Both use the host's native tools
+and need no additional runtime or server. Interview ends with an agreed
+requirements summary. Unstuck examines repeated failures or consequential
+decisions through hacker, researcher, simplifier, architect, and contrarian
+perspectives before recommending one next move. Neither skill loads the fork's
+root plugin, starts implementation, changes agent configuration, or checks for
+updates. Results stay in the conversation unless you request a summary file.
+Invoke `/ouroboros-interview:interview` or `/ouroboros-interview:unstuck` in
+Claude Code after installing the entry.
 
 The two `claude-codex-settings` entries have different licenses. The
 repository is Apache-2.0, and the `test-audit` folder has its own MIT
