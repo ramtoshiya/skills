@@ -197,6 +197,33 @@ Claude Code and Codex behaved like this in tests with Codex CLI
   root is not in the installed copy unless the folder has its own.
 - Both agents install the whole `path` folder and load only the listed skills.
 
+## Scheduled fork checks
+
+[Upstream fork drift](../.github/workflows/upstream-forks.yml) runs every Monday
+at 04:23 UTC and can be started from the Actions tab with `workflow_dispatch`.
+It currently monitors `ramtoshiya/ouroboros:main` against `Q00/ouroboros:main`.
+
+The check uses GitHub's compare API with the upstream branch as the base and
+the fork branch as the head. Its `behind_by` count includes missing upstream
+commits even when the fork has its own commits. When the count is positive,
+the built-in `GITHUB_TOKEN` creates or updates one open issue per pair in
+`ramtoshiya/skills`, with the count and comparison link. A later successful
+check closes that issue when the count reaches zero. API errors fail the run
+and leave that pair's issue unchanged. Runs are serialized to avoid duplicate
+creation, and existing duplicate bot issues are closed.
+
+To monitor another public fork in the same GitHub fork network, add an object
+to [the monitored pairs](../.github/upstream-forks.json) with `fork`, `branch`,
+`upstream`, and `upstreamBranch`. Repository values use `owner/repository`.
+Each pair has its own issue marker, so changing a pair's branches or removing
+it requires closing its old issue manually. Issue matching uses the marker and
+the `github-actions[bot]` author, leaving human issues alone.
+
+The workflow needs only repository contents read access and issues write
+access. It uses no private credentials or local services. It never changes
+fork branches or marketplace pins. Review and merge upstream changes manually,
+then follow the pin update steps below. Deterministic tests run with `npm test`.
+
 ## Update a pin
 
 1. Read the upstream diff for the entry's folder between the pinned commit and
