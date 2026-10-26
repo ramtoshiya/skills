@@ -102,6 +102,32 @@ notification (`notified`). A notification failure after saving exits with code
 2. Read before retrying. A successful notification means the socket sent the
 message, not that every browser applied it.
 
+## Scene snapshots with images
+
+```sh
+excalidraw-board snapshot --name sketch --ids screenshot,caption > selected.excalidraw
+excalidraw-board snapshot --id ROOM_PREFIX --exclude-ids draft > selected.excalidraw
+```
+
+`snapshot` returns one scene JSON object with `revision`, full `elements`, and
+embedded `files`. Unlike `read --full`, it retrieves image binaries from room
+storage and decrypts them with the registered room key. It fetches only files
+referenced by selected live elements, once per distinct file ID. Scene and file
+requests are read-only. Groups, frames, and bound text are not expanded.
+
+The output contains decrypted board content and images, but no room key or
+secret link. Keep it out of repositories and public logs unless the content
+is meant to be shared. Room background state is unavailable and defaults to
+white. No image placeholders are returned after a file read or decrypt failure.
+
+Supported encrypted files use the version-2 AES-GCM/pako envelope. Each image
+data URL is limited to 4 MiB and their total to 48 MiB. Unknown formats, corrupt
+envelopes, missing files, and inaccessible files fail explicitly. Downloads
+are sequential to bound concurrent transfer memory.
+
+The separate [web exporter](../excalidraw-web-export/README.md) consumes this
+snapshot to render selected objects through a deployed Excalidraw app.
+
 ## Limits
 
 This is a small usable proof of concept, not the full handoff specification.

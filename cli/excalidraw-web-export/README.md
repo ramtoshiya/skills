@@ -38,13 +38,18 @@ node export.mjs --room-id ROOM_PREFIX selected.png --ids a1,b2 \
   --executable-path '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 ```
 
-The script runs `excalidraw-board read --id ROOM_PREFIX --full`. It reads the
-saved revision and full element records, filters by ID, and imports that
-snapshot into the deployment's blank canvas. It never obtains or opens the
-secret room link, joins collaboration, or writes room elements. The JSON
+The script requires the `snapshot` command in `excalidraw-board`. Check
+`excalidraw-board --help` and update the command separately if it is absent.
+It runs `excalidraw-board snapshot --id ROOM_PREFIX`, forwarding the ID filter.
+That command reads saved elements, downloads only their referenced image files,
+and decrypts those files with the registered room key. The selected scene and
+its embedded files are imported into the deployment's blank canvas. No room
+key or link is passed to the browser.
+
+The exporter never joins collaboration or writes room elements. The JSON
 receipt includes the read revision and exported IDs. Unsaved browser edits
-are not captured. Room snapshots use a white background because this read
-command does not return the room's app state.
+are not captured. Room snapshots use a white background because scene
+persistence does not include the room's app state.
 
 ## Export a local file
 
@@ -95,11 +100,13 @@ guaranteed.
 - Browser non-GET requests, WebSockets, and cross-origin navigations are blocked.
   Asset GET requests still need network access. This is not a hostile-input
   sandbox or a guarantee against a malicious deployment leaking imported data.
-- Room `read --full` does not return image binaries. Selecting a room image fails
-  explicitly rather than exporting a missing-image placeholder. To export
-  images, provide a complete local scene with embedded PNG/JPEG/WebP/GIF files.
-  SVG image payloads and missing image files are rejected. Iframes and video
-  are not supported by this PoC.
+- Room images are fetched by `snapshot` from the encrypted room-file store.
+  PNG and JPEG room uploads have been verified end to end. Missing, inaccessible,
+  corrupt, or unsupported encrypted files fail instead of producing image
+  placeholders. The snapshot reader supports the version-2 AES-GCM/pako file
+  format, caps each image data URL at 4 MiB, and caps their total at 48 MiB.
+- Local scenes can embed PNG/JPEG/WebP/GIF files. SVG image payloads are rejected.
+  Iframes and video are not supported by this PoC.
 - Existing output files are never overwritten. Browser downloads are copied
   with exclusive creation. The default launch/export deadline is 120 seconds,
   configurable with `--timeout-ms` up to 600,000 ms. There is no hard memory cap.
@@ -119,6 +126,21 @@ PNG downloads, verify single and multiple IDs, visible text, and embedded
 raster images, and compare a 96MP full export against an export omitting only
 the green middle object.
 They do not create or modify shared rooms.
+
+For a separate real-room image check, the existing installed `excalidraw-board`
+must also support `image` uploads:
+
+```sh
+CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' npm run test:room-live -- --output-dir /path/to/new-artifacts
+```
+
+This opt-in check creates a disposable remote room and uploads PNG and JPEG
+patterns. It installs the checkout's snapshot-capable CLI only into a private
+test HOME, leaving the user's installed command untouched. It verifies the
+recovered source bytes, selected PNG pixels, duplicate image placements, and
+unchanged room revision and elements. The printed test HOME contains room
+credentials and is retained for inspection. Do not publish it. Remote test
+rooms are not deleted by the check and have no expiry guarantee.
 
 Tested with Node.js 24.21.0, Playwright 1.58.2, headless Chrome 156.0.8078.47 on
 macOS arm64, and the deployed excalidraw.com UI.

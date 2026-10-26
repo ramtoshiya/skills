@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import { openRooms } from "./rooms.mjs";
 import { createScene, loadScene, writeScene } from "./protocol.mjs";
 import { compact } from "./scene.mjs";
+import { readSnapshot } from "./snapshot.mjs";
 
 const help = `excalidraw-board (proof of concept, Node.js 24.21+)
   room create <name>
@@ -13,6 +14,7 @@ const help = `excalidraw-board (proof of concept, Node.js 24.21+)
   room list [name-prefix]
   room link --name <name> | --id <prefix>     prints the secret room link
   read --name <name> | --id <prefix> [--full] [--outline | --frame <id> | --group <id> | --ids a,b]
+  snapshot --name <name> | --id <prefix> [--ids a,b | --exclude-ids a,b]  read scene JSON with image files
   write --name <name> | --id <prefix>         read {add:[],update:[],delete:[]} from stdin
 `;
 
@@ -81,6 +83,10 @@ async function main(args) {
         const { values } = argumentsFor(args.slice(2), selectors);
         console.log(registry.link(registry.resolve(selector(values))));
       } else throw new Error("Unknown room command. Run excalidraw-board --help");
+    } else if (args[0] === "snapshot") {
+      const { values } = argumentsFor(args.slice(1), { ...selectors, ids: { type: "string" }, "exclude-ids": { type: "string" } });
+      const snapshot = await readSnapshot(registry.resolve(selector(values)), { ids: values.ids, excludeIds: values["exclude-ids"] });
+      console.log(terminalJSON(snapshot));
     } else if (args[0] === "read") {
       const { values } = argumentsFor(args.slice(1), { ...selectors, full: { type: "boolean" }, outline: { type: "boolean" }, frame: { type: "string" }, group: { type: "string" }, ids: { type: "string" } });
       if ([values.outline, values.frame, values.group, values.ids].filter(value => value !== undefined && value !== false).length > 1) throw new Error("Choose only one read filter");

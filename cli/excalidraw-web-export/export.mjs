@@ -57,21 +57,23 @@ try {
     if (roomId !== undefined) {
       let stdout;
       try {
-        ({ stdout } = await run("excalidraw-board", ["read", "--id", roomId, "--full"], { timeout, maxBuffer: 64 * 1024 * 1024 }));
+        const args = ["snapshot", "--id", roomId];
+        if (values.ids !== undefined) args.push("--ids", values.ids);
+        if (values["exclude-ids"] !== undefined) args.push("--exclude-ids", values["exclude-ids"]);
+        ({ stdout } = await run("excalidraw-board", args, { timeout, maxBuffer: 64 * 1024 * 1024 }));
       } catch (error) {
         if (error.code === "ENOENT") throw new Error("excalidraw-board is missing from PATH. Install it separately before exporting rooms.");
-        throw new Error("excalidraw-board could not read the saved room. Check its read command before retrying.");
+        throw new Error("excalidraw-board snapshot failed. Use a version with the snapshot command, then check room and image access before retrying.");
       }
-      const records = stdout.trim().split("\n").map(line => JSON.parse(line));
-      revision = records.shift()?.revision;
-      if (typeof revision !== "string") throw new Error("Expected a revision header from excalidraw-board read --full");
-      scene = { elements: records, files: {}, appState: { viewBackgroundColor: "#ffffff" } };
+      scene = JSON.parse(stdout);
+      revision = scene.revision;
+      if (typeof revision !== "string") throw new Error("Expected a revision from excalidraw-board snapshot");
     } else {
       scene = JSON.parse(await readFile(positionals[0], "utf8"));
     }
     if (!Array.isArray(scene.elements)) throw new Error("Input must contain an Excalidraw elements array");
     let elements = scene.elements.filter(element => !element.isDeleted);
-    const selection = values.ids ?? values["exclude-ids"];
+    const selection = roomId === undefined ? (values.ids ?? values["exclude-ids"]) : undefined;
     if (selection !== undefined) {
       const ids = selection.split(",").map(id => id.trim());
       if (ids.some(id => !id)) throw new Error("Selection IDs must be nonempty comma-separated IDs");
@@ -85,7 +87,7 @@ try {
     for (const element of elements.filter(element => element.type === "image")) {
       const file = scene.files?.[element.fileId];
       if (typeof file?.dataURL !== "string" || !/^data:image\/(png|jpeg|webp|gif);base64,/.test(file.dataURL)) {
-        throw new Error("Selected images need embedded raster files. Room read does not include image payloads. Use a complete local .excalidraw file for images.");
+        throw new Error("Selected images need embedded raster files in the scene or room snapshot");
       }
       files[element.fileId] = file;
     }
