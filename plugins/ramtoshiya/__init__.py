@@ -18,6 +18,11 @@ SKILLS = {
     "codex-session-reader": "Find and read local Codex CLI session transcripts.",
     "excalidraw-board": "Read and draw on shared Excalidraw rooms.",
     "figma-rest": "Read Figma designs through the REST API.",
+    "github-actions-authoring": (
+        "Use before creating or editing .github/workflows/*.yml, "
+        ".github/workflows/*.yaml, action.yml, or action.yaml. Verify official "
+        "releases, the 72-hour cooldown, compatibility, and immutable commit pins."
+    ),
     "imagegen": "Generate and edit raster images with GPT Image or Grok Imagine.",
     "mermaid-check": "Validate Mermaid diagrams with the real parser before delivery.",
     "reorganize-commits": "Reorganize branch commits when explicitly requested.",

@@ -41,8 +41,55 @@ mise does not back up the files it overwrites. Copy the files listed below
 before the first run, or set up
 [dotfile history](https://mise.jdx.dev/dotfiles/history.html) first.
 
-`mise.toml` declares no tools or environment variables, so loading it inside
-the checkout changes nothing else.
+`mise.toml` also declares the repository's Actions analyzers. Run `mise install
+--locked` to install them without applying the machine setup. Loading the
+checkout puts installed tools on mise's activated `PATH` but declares no
+environment variables.
+
+## Check GitHub Actions
+
+From the checkout, run:
+
+```sh
+mise install --locked
+mise run actions:check
+mise exec -- node --test test/actions-checks.mjs
+```
+
+The checks use [actionlint](https://github.com/rhysd/actionlint) for workflow
+syntax, schemas, and action contracts, and
+[zizmor](https://docs.zizmor.sh/) for Actions security. Run them separately with
+`mise run actions:syntax` and `mise run actions:security`. Both return nonzero
+on findings. The focused tests exercise each task against a bad workflow and
+check that its diagnostic reaches the caller. They need Node.js and Git.
+
+The versions in `mise.toml` are exact. `mise.lock` records download URLs,
+SHA-256 checksums, and provenance verification for Linux x64 (CI) and Apple
+silicon macOS. Other platforms need lock entries before using `--locked`.
+When updating tools or actions, verify the official release date and wait at
+least 72 hours, even for an exact pin. mise's minimum-release-age setting does
+not filter exact versions. Refresh the lock with `mise lock --platform
+linux-x64,macos-arm64`, then rerun the checks and tests.
+
+`actionlint` releases less frequently than the Actions ecosystem changes.
+Passing it does not prove that an action is current, supported, or secure.
+Check releases and advisories in the original repositories when updating
+SHA pins, and keep version comments beside each `uses:` entry.
+
+The security task runs zizmor offline, removes GitHub token variables and
+`RUST_LOG`, and uses no verbose or debug logging. It does not perform online
+advisory or repository audits. Review advisories separately when updating
+pins. Do not use zizmor 1.27.0, whose debug logs can expose credentials
+([GHSA-f42p-wjw5-97qh](https://github.com/zizmorcore/zizmor/security/advisories/GHSA-f42p-wjw5-97qh),
+fixed in 1.28.0).
+
+`.github/workflows/actions-check.yml` runs the same checks for pushes and pull
+requests with read-only permissions. It uses a SHA-pinned mise action, an
+exact mise release, and locked tool downloads, without applying dotfiles or
+Homebrew setup. Its security step runs even if the syntax check fails.
+The upstream fork drift workflow keeps issue-write permission only for its
+existing reporting job. Checkout does not persist credentials, and setup-node's
+automatic package-manager cache is disabled there.
 
 ## What it changes
 
