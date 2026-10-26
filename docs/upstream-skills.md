@@ -10,7 +10,6 @@ those repositories. This repository holds none of them.
 
 | Entry | Skills | Source | License |
 | --- | --- | --- | --- |
-| `open-pencil` | Official OpenPencil CLI and editor workflow, with its design-authoring reference | `skills/open-pencil` in [open-pencil/open-pencil](https://github.com/open-pencil/open-pencil) | MIT |
 | `mattpocock-productivity` | `grilling`, `grill-me`, `handoff` | `skills/productivity` in the fork [ramtoshiya/mattpocock-skills](https://github.com/ramtoshiya/mattpocock-skills) | MIT |
 | `fcakyon-test-audit` | `test-audit` | `plugins/test-audit/skills` in the fork [ramtoshiya/claude-codex-settings](https://github.com/ramtoshiya/claude-codex-settings) | MIT |
 | `humanize` | `humanize` and its hook | `plugins/humanize` in the fork [ramtoshiya/claude-codex-settings](https://github.com/ramtoshiya/claude-codex-settings) | Apache-2.0 |
@@ -21,21 +20,6 @@ those repositories. This repository holds none of them.
 `grill-me` and `handoff` run only when you invoke them, so the agent's own
 skill list shows only `grilling`. Installed skills carry the entry name as a
 prefix, for example `mattpocock-productivity:grilling`.
-
-`open-pencil` is the unchanged official skill. It covers live editor and
-headless CLI commands, tool discovery, comments, JSX authoring, and exports.
-Its bundled `references/design-authoring.md` and `LICENSE.txt` stay with the
-skill. It also documents MCP, but a configured agent MCP connection is not
-required for CLI use. The `openpencil` executable must already be on `PATH`.
-Follow [OpenPencil's setup instructions](https://openpencil.dev/getting-started)
-for installation. Repository package policy takes precedence over upstream's
-global installation examples. Invoke `/open-pencil:open-pencil` in Claude Code.
-
-For Pi and Hermes, create a detached checkout of the marketplace pin outside
-this repository. Add its `skills/open-pencil` directory to Pi's `skills` list,
-or copy it to `skills/open-pencil` under the active Hermes profile. Keep the
-whole directory so its authoring reference resolves. Restart Hermes or reload
-Pi after installing. Neither installation needs a new MCP client configuration.
 
 The productivity fork preserves decision-tree rounds while recording obvious
 defaults under **Assumed (override if wrong)** instead of asking for individual
