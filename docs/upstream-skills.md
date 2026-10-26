@@ -209,6 +209,14 @@ Claude Code and Codex behaved like this in tests with Codex CLI
 at 04:23 UTC and can be started from the Actions tab with `workflow_dispatch`.
 It currently monitors `ramtoshiya/ouroboros:main` against `Q00/ouroboros:main`.
 
+The Ouroboros fork first runs its own [upstream sync workflow](https://github.com/ramtoshiya/ouroboros/blob/main/.github/workflows/sync-upstream.yml)
+every Monday at 04:00 UTC. It rebases the fork's customization commits onto
+the latest upstream `main`, runs the standalone interview plugin test, and
+pushes with a force-with-lease. A clean rebase therefore finishes without an
+alert. A conflict or failed test leaves the fork unchanged, and the drift check
+then reports the work that needs manual review. Both workflows also support a
+manual run.
+
 The check uses GitHub's compare API with the upstream branch as the base and
 the fork branch as the head. Its `behind_by` count includes missing upstream
 commits even when the fork has its own commits. When the count is positive,
@@ -225,10 +233,13 @@ Each pair has its own issue marker, so changing a pair's branches or removing
 it requires closing its old issue manually. Issue matching uses the marker and
 the `github-actions[bot]` author, leaving human issues alone.
 
-The workflow needs only repository contents read access and issues write
-access. It uses no private credentials or local services. It never changes
-fork branches or marketplace pins. Review and merge upstream changes manually,
-then follow the pin update steps below. Deterministic tests run with `npm test`.
+The drift workflow needs only repository contents read access and issues write
+access. It uses no private credentials or local services, and it never changes
+fork branches or marketplace pins. The separate sync workflow runs inside the
+Ouroboros fork, where its built-in token can update that fork without a shared
+credential. Marketplace pins remain review-gated. Follow the pin update steps
+below after reviewing a synchronized fork. Deterministic tests run with
+`npm test`.
 
 ## Update a pin
 
