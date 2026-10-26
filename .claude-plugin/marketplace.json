@@ -83,14 +83,15 @@
       "license": "MIT"
     },
     {
-      "name": "omd",
-      "description": "OmD design systems, preference learning, full quality gates, and Korean writing with 12 voice presets, packaged without its CLI or company reference catalog.",
+      "name": "omd-kr-writer",
+      "description": "OmD Korean writing with 12 voice presets, without the product-design workflow or preference hooks.",
       "source": {
         "source": "git-subdir",
         "url": "ramtoshiya/oh-my-design",
-        "path": "plugins/omd",
+        "path": "plugins/omd/skills",
         "sha": "46ebebcabd24d7af695b74402275d6d640d2e379"
       },
+      "skills": ["./omd-kr-writer"],
       "author": { "name": "kwakseongjae" },
       "repository": "https://github.com/ramtoshiya/oh-my-design",
       "license": "MIT"
