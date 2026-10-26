@@ -34,6 +34,10 @@ test("the packed distribution is limited to shared content and runs without the 
 	execFileSync("tar", ["-xf", join(directory, archive.filename), "-C", directory]);
 	const installed = join(directory, "package");
 	const manifest = JSON.parse(readFileSync(join(installed, "package.json"), "utf8"));
+	const authoring = manifest.pi.skills.map(path => join(installed, path, "github-actions-authoring/SKILL.md"));
+	assert.ok(authoring.some(path => archive.files.some(file => join(installed, file.path) === path)),
+		"GitHub Actions authoring must ship under a Pi skill discovery root");
+	assert.match(readFileSync(authoring[0], "utf8"), /^name: github-actions-authoring$/m);
 	assert.equal(manifest.pi.extensions.length, 1);
 	const { default: register } = await import(pathToFileURL(join(installed, manifest.pi.extensions[0])).href);
 	let handler;
