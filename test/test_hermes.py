@@ -35,10 +35,12 @@ class HermesAdapterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             args = {"command": "git status", "workdir": directory}
             self.assertIsNone(adapter.package_guard("terminal", args))
-            args["command"] = "pip --version"
+            args["command"] = "hf download publisher/model --revision " + "a" * 40
+            self.assertIsNone(adapter.package_guard("terminal", args))
+            args["command"] = "hf download publisher/model"
             result = adapter.package_guard("terminal", args)
             self.assertEqual(result["action"], "block")
-            self.assertIn("Bare Python/pip", result["message"])
+            self.assertIn("40-character commit hash", result["message"])
             self.assertIsNone(adapter.package_guard("read_file", args))
 
     def test_guard_failures_block_commands_but_allow_finishing(self):
