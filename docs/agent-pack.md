@@ -15,10 +15,22 @@ instead. Hermes loads the shared plugin from a local clone.
 | `codex-session-reader` | Finds and reads Codex CLI session transcripts under `~/.codex/sessions/` | Nothing |
 | `figma-rest` | Reads Figma files, tokens, and rendered nodes through the REST API instead of the Figma MCP server | A Figma personal access token in the `FIGMA_TOKEN` environment variable, or as a `FIGMA_TOKEN=<token>` line in `~/.config/agent-secrets/figma.env` |
 | `excalidraw-board` | Reads and draws on shared excalidraw.com rooms through a proof-of-concept CLI | The separately installed `excalidraw-board` command on `PATH`, described in [its README](../cli/excalidraw-board/README.md) |
+| `github-actions-authoring` | Checks official releases, a 72-hour cooldown, compatibility, and full commit pins before editing GitHub Actions workflows or action metadata | Git, authenticated `gh` access, `actionlint`, `zizmor`, and the target repository's test runner on `PATH` |
 | `imagegen` | Generates and edits images with OpenAI GPT Image or xAI Grok Imagine through an OpenAI-compatible Images API | uv, and an API key or proxy in the environment (see the skill's `SKILL.md`) |
 | `mermaid-check` | Runs the Mermaid parser over diagrams before the agent delivers them | Node.js. The first run downloads `@mermaid-js/mermaid-cli` 12.0.0 through `npx` |
 | `reorganize-commits` | Rewrites the current branch's commits into reviewable chunks. Runs only when you invoke it | Git |
 | `stable-refs` | Gives documents and plans permanent identifiers that survive edits | Nothing |
+
+The GitHub Actions skill applies to `.github/workflows/*.yml`,
+`.github/workflows/*.yaml`, `action.yml`, and `action.yaml`, including changes that
+do not explicitly update versions. It inventories remote dependencies and stops
+when official release age, tag provenance, or compatibility cannot be verified.
+It requires `actionlint`, `zizmor`, repository tests, and a safe affected workflow
+run when feasible. Tool versions and advisories need review too. The skill never
+installs missing tools and never enables verbose/debug `zizmor` logging with a
+GitHub token present. Follow the target repository's documented setup step for
+missing tools, or [Machine setup](setup.md) for this repository. These are agent
+instructions, not automatic hook enforcement.
 
 `ramtoshiya` hooks, described in [Hooks](hooks.md):
 
