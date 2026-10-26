@@ -18,6 +18,7 @@ preferences, so fork the repository and edit it before you run it.
 | `sidecar` | A macOS command that connects an iPad as a Sidecar display, and an iPad shortcut that runs it over SSH | [README](cli/sidecar/README.md) |
 | `claudex` | Runs Claude Code with GPT models discovered from CLIProxyAPI | [README](cli/claudex/README.md) |
 | `excalidraw-board` | Proof-of-concept command for reading and editing shared Excalidraw rooms | [README](cli/excalidraw-board/README.md) |
+| `excalidraw-web-export` | Headless PNG export through a deployed Excalidraw app, from a local file or saved room snapshot | [README](cli/excalidraw-web-export/README.md) |
 
 ## Install the agent plugins
 
@@ -86,6 +87,7 @@ pi/cliproxy-provider/             Pi provider package, installed separately
 cli/sidecar/                      Standalone macOS command
 cli/claudex/                      Claude Code launcher for CLIProxyAPI GPT models
 cli/excalidraw-board/              Standalone shared-board command
+cli/excalidraw-web-export/         Headless deployed-app PNG exporter
 test/                             Tests for the hooks and the Pi package
 docs/                             Documentation
 ```
