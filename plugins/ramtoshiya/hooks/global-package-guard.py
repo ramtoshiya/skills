@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse package policy and Python command guard.
+"""PreToolUse package/model policy and Python command guard.
 
 Command text is parsed, never evaluated. This is an ordinary-command guard,
 not a shell sandbox or a complete boundary against deliberate bypass.
@@ -428,6 +428,109 @@ def python_reason(executable, cwd, environment):
     return "Bare Python/pip commands are disabled. Use uv run, uv pip, or an explicit virtual-environment interpreter path."
 
 
+def model_option(args, names):
+    """Read all model option declarations, rejecting missing/dynamic values."""
+    values = []
+    i = 0
+    while i < len(args):
+        token = args[i]
+        if token == "--":
+            break
+        key, equal, value = token.partition("=")
+        if key in names:
+            if not equal:
+                i += 1
+                value = args[i] if i < len(args) else ""
+            if not value or value.startswith("-") or any(c in value for c in "$`"):
+                raise ValueError("model options require literal values")
+            values.append(value)
+        i += 1
+    return values
+
+
+def model_reason(name, args, cwd, environment):
+    """Guard common acquisition/loading CLIs, not arbitrary SDK code."""
+    if name in {"hf", "huggingface-cli", "ollama"} and len(args) == 2 and args[1] in {"--help", "-h"}:
+        return None
+    if name in {"hf", "huggingface-cli"} and args[:1] == ["download"]:
+        revisions = model_option(args[1:], {"--revision"})
+        if not revisions or any(not re.fullmatch(r"[0-9a-fA-F]{40}", v) for v in revisions):
+            return "Model downloads require --revision with a full 40-character commit hash from a reviewed publisher. Branches and tags are mutable."
+        # Dataset/space repositories can also carry executable/model artifacts.
+        return None
+    if name == "ollama" and args[:1] in (["pull"], ["run"], ["create"]):
+        return "Ollama pull/run/create cannot establish immutable artifact provenance here. Use a reviewed commit-pinned download and an explicit local model path instead."
+
+    model_cli = name.startswith(("mlx_lm.", "mlx_vlm.")) or name in {"omlx", "vllm", "llama-server", "llama-cli"}
+    if not model_cli:
+        return None
+    if any(len(token.split("=", 1)[0]) > 2 and forbidden.startswith(token.split("=", 1)[0])
+           for token in args for forbidden in {"--trust-remote-code", "--trust_remote_code"}):
+        return "Model remote code execution is disabled. Review code separately and use local artifacts without trust-remote-code."
+    if any(flag in args for flag in {"--help", "-h", "--version"}):
+        return None
+
+    server = name in {"llama-server", "mlx_lm.server", "mlx_vlm.server"} or (name in {"omlx", "vllm"} and args[:1] == ["serve"])
+    loaders = {"mlx_lm.generate", "mlx_vlm.generate", "mlx_lm.convert", "mlx_vlm.convert", "llama-cli"}
+    if not server and name not in loaders:
+        return None
+    remote_flags = {"-hf", "--hf-repo", "-hfr", "--hf-repo-v", "-hff", "--hf-file", "-mu", "--model-url"}
+    if name in {"llama-server", "llama-cli"} and (
+        any(token.split("=", 1)[0] in remote_flags for token in args)
+        or any(environment.get(key) for key in {"llama_arg_hf_repo", "llama_arg_hf_repo_v", "llama_arg_hf_file", "llama_arg_model_url"})
+    ):
+        return "Remote model sources are disabled for llama commands. Download a reviewed revision separately and load only local artifacts."
+    model_flags = {"--model", "--model-dir", "--hf-path", "-m"}
+    models = model_option(args, model_flags)
+    if name == "vllm" and args[:1] == ["serve"] and len(args) > 1 and not args[1].startswith("-"):
+        models.append(args[1])
+    if not models:
+        return "Model loading requires an explicit local artifact path. Download a reviewed full revision first, then verify the artifact hashes."
+    models.extend(model_option(args, {"--adapter-path"}))
+    for value in models:
+        # A repo id (publisher/model) must not silently trigger a Hub fetch.
+        if not (value.startswith(("/", "./", "../", "~/"))):
+            return "Model loading requires an explicit local artifact path, not a repository id or mutable model name."
+        path = resolve_path(value, cwd, environment)
+        if not path.exists():
+            return "The local model path must already exist. Acquire and verify pinned artifacts before loading."
+    if server:
+        hosts = model_option(args, {"--host"})
+        if not hosts or any(host not in {"127.0.0.1", "::1", "localhost"} for host in hosts):
+            return "Model servers require an explicit loopback --host (127.0.0.1, ::1, or localhost). Keep secrets and tool execution outside the inference process."
+    return None
+
+
+def model_command(tokens):
+    """Expose uv run and Python -m targets without evaluating script bodies."""
+    if not tokens:
+        return "", []
+    name, args = PurePath(tokens[0]).name, tokens[1:]
+    if name == "uv":
+        words = positions(args)
+        if len(words) < 2 or words[0][1] != "run":
+            return name, args
+        return model_command(args[words[1][0]:])
+    if PYTHON_COMMAND.fullmatch(name):
+        index = 0
+        while index < len(args):
+            token = args[index]
+            if token in {"-W", "-X", "--check-hash-based-pycs"}:
+                index += 2
+                continue
+            module = re.fullmatch(r"-[bBdEiIOPqRsSuvVx]*m(.*)", token)
+            if module:
+                if module[1]:
+                    return module[1], args[index + 1:]
+                if index + 1 < len(args):
+                    return args[index + 1], args[index + 2:]
+                break
+            if not token.startswith("-") or token == "-" or re.match(r"-[bBdEiIOPqRsSuvVx]*c", token):
+                break
+            index += 1
+    return name, args
+
+
 def reason(command, cwd=None, environment=None, depth=0):
     if depth > 4:
         return "Shell wrappers are too deeply nested to review. Use a simple command."
@@ -464,6 +567,13 @@ def reason(command, cwd=None, environment=None, depth=0):
                     if nested:
                         return nested
                     break
+        model_name, model_args = model_command(tokens)
+        try:
+            denial_reason = model_reason(model_name, model_args, cwd, effective)
+        except ValueError:
+            return "Model options require explicit literal values and existing local paths."
+        if denial_reason:
+            return denial_reason
         # Only check mutating subcommands; an echoed command or npm test's
         # arguments do not become package-manager operations.
         package_args = args[:args.index("--")] if "--" in args else args

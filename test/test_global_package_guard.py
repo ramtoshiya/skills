@@ -35,6 +35,66 @@ class GlobalPackageGuardTests(unittest.TestCase):
     def check(self, command):
         return guard.blocked(command, self.cwd, self.environment)
 
+    def test_model_acquisition_requires_immutable_revision(self):
+        revision = "a" * 40
+        for command in [
+            "hf download publisher/model", "huggingface-cli download publisher/model --revision main",
+            "hf download publisher/model --revision v1.0", "hf download publisher/model --revision abcdef0",
+            "hf download publisher/model --revision", "hf download publisher/model --revision '$REV'",
+            f"hf download publisher/model --revision main --revision {revision}",
+            f"hf download publisher/model -- --revision {revision}",
+            "env HF_REVISION=main hf download publisher/model",
+            "bash -lc 'hf download publisher/model'", "ollama pull model:latest",
+            "ollama run model:7b", "ollama create model -f Modelfile",
+            "uv run hf download publisher/model --revision main",
+        ]:
+            with self.subTest(command=command):
+                self.assertTrue(self.check(command))
+        for command in [
+            f"hf download publisher/model --revision {revision}",
+            f"huggingface-cli download publisher/model weights.safetensors --revision={revision}",
+            "hf cache ls", "hf --help", "hf download --help", "ollama pull --help",
+            "ollama list", "ollama show model",
+            "echo 'hf download publisher/model'",
+        ]:
+            with self.subTest(command=command):
+                self.assertFalse(self.check(command))
+
+    def test_model_loading_uses_local_artifacts_and_loopback(self):
+        (self.cwd / "model").mkdir()
+        for command in [
+            "omlx serve --model-dir ./model --host 127.0.0.1",
+            "uv run python -m mlx_lm.server --model ./model --host=::1",
+            "uv run mlx_vlm.generate --model ./model --prompt test",
+            "vllm serve ./model --host localhost",
+            "llama-server -m ./model --host 127.0.0.1",
+            "uv run python -m mlx_lm.convert --hf-path ./model",
+        ]:
+            with self.subTest(command=command):
+                self.assertFalse(self.check(command))
+        for command, message in [
+            ("omlx serve --model-dir ./model", "loopback"),
+            ("omlx serve --model-dir ./model --host 0.0.0.0", "loopback"),
+            ("omlx serve --model-dir ./model --host 0.0.0.0 --host 127.0.0.1", "loopback"),
+            ("vllm serve publisher/model --host 127.0.0.1", "local artifact"),
+            ("uv run python -m mlx_lm.generate --model publisher/model", "local artifact"),
+            ("uv run python -m mlx_vlm.convert --hf-path publisher/model", "local artifact"),
+            ("llama-server --host 127.0.0.1", "local artifact"),
+            ("omlx serve --model-dir ./missing --host 127.0.0.1", "must already exist"),
+            ("vllm serve ./model --host localhost --trust-remote-code", "remote code"),
+            ("uv run mlx_vlm.generate --model ./model --trust_remote_code=true", "remote code"),
+            ("uv run python -mmlx_lm.server --model publisher/model --host 0.0.0.0", "local artifact"),
+            (".venv/bin/python -Immlx_vlm.generate --model publisher/model", "local artifact"),
+            ("uv run python -m mlx_lm.server --model ./model --host localhost --trust-remote-cod", "remote code"),
+            ("uv run mlx_vlm.generate --model ./model --tr", "remote code"),
+            ("llama-server -m ./model -hf publisher/model --host localhost", "Remote model sources"),
+            ("llama-cli -m ./model --model-url=https://example.org/weights.gguf", "Remote model sources"),
+            ("LLAMA_ARG_HF_REPO=publisher/model llama-server -m ./model --host localhost", "Remote model sources"),
+            ("uv run mlx_lm.generate --model ./model --adapter-path publisher/adapter", "local artifact"),
+        ]:
+            with self.subTest(command=command):
+                self.assertIn(message, guard.reason(command, self.cwd, self.environment))
+
     def test_global_mutations(self):
         for command in [
             "npm install -g example", "npm --global install example",
@@ -215,7 +275,7 @@ class GlobalPackageGuardTests(unittest.TestCase):
 
     def test_denial_wire_format_for_both_shell_inputs(self):
         for tool, field in [("Bash", "command"), ("Monitor", "command"), ("exec_command", "cmd")]:
-            payload = {"tool_name": tool, "tool_input": {field: "npm install -g example"}}
+            payload = {"tool_name": tool, "tool_input": {field: "hf download publisher/model"}}
             result = subprocess.run([sys.executable, str(SCRIPT)], input=json.dumps(payload), text=True, capture_output=True)
             self.assertEqual(result.returncode, 0)
             output = json.loads(result.stdout)["hookSpecificOutput"]
@@ -229,10 +289,11 @@ class GlobalPackageGuardTests(unittest.TestCase):
         self.assertEqual(result.stdout, "")
 
     def test_allow_does_not_override_normal_permissions(self):
-        payload = {"tool_name": "Bash", "tool_input": {"command": "npm test"}}
-        result = subprocess.run([sys.executable, str(SCRIPT)], input=json.dumps(payload), text=True, capture_output=True)
-        self.assertEqual(result.returncode, 0)
-        self.assertEqual(result.stdout, "")
+        for tool, field in [("Bash", "command"), ("Monitor", "command"), ("exec_command", "cmd")]:
+            payload = {"tool_name": tool, "tool_input": {field: "hf download publisher/model --revision " + "a" * 40}}
+            result = subprocess.run([sys.executable, str(SCRIPT)], input=json.dumps(payload), text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
 
     def test_policy_denials_and_cwd_in_native_payload(self):
         (self.cwd / "uv.toml").write_text('exclude-newer = "1 day"\n')
