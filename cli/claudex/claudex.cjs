@@ -138,6 +138,8 @@ async function main() {
   };
   launch(['--settings', JSON.stringify(settings), ...args], {
     ...process.env, ANTHROPIC_API_KEY: key, ANTHROPIC_AUTH_TOKEN: '',
+    IMAGEGEN_BASE_URL: process.env.IMAGEGEN_BASE_URL ?? baseUrl + '/v1',
+    IMAGEGEN_API_KEY: process.env.IMAGEGEN_API_KEY ?? key,
   });
 }
 
