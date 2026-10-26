@@ -16,20 +16,6 @@
       "author": { "name": "ramtoshiya" }
     },
     {
-      "name": "open-pencil",
-      "description": "Official OpenPencil skill for inspecting, editing, and exporting designs through the CLI or the running editor.",
-      "source": {
-        "source": "git-subdir",
-        "url": "open-pencil/open-pencil",
-        "path": "skills",
-        "sha": "806380c6d0a3fa032f17827262f8880e747a406f"
-      },
-      "skills": ["./open-pencil"],
-      "author": { "name": "Danila Poyarkov" },
-      "repository": "https://github.com/open-pencil/open-pencil",
-      "license": "MIT"
-    },
-    {
       "name": "mattpocock-productivity",
       "description": "Grilling interviews and conversation handoff from Matt Pocock's skills, patched to state obvious defaults and ask actual questions.",
       "source": {
@@ -72,12 +58,12 @@
     },
     {
       "name": "ouroboros-interview",
-      "description": "Ouroboros's Socratic requirements interview with bundled questioning and closure-review prompts, without its server or execution workflow.",
+      "description": "Ouroboros's Socratic interview and unstuck workflows with bundled review and lateral-thinking prompts, without its server or execution workflow.",
       "source": {
         "source": "git-subdir",
         "url": "ramtoshiya/ouroboros",
         "path": "plugins/ouroboros-interview",
-        "sha": "8aab374343bbca5863c0c4674fee921aba4c7c4d"
+        "sha": "c1839602f663d43a8227fcf53d426e977c3c01f1"
       },
       "author": { "name": "Q00" },
       "repository": "https://github.com/ramtoshiya/ouroboros",
@@ -97,14 +83,15 @@
       "license": "MIT"
     },
     {
-      "name": "omd",
-      "description": "OmD design systems, preference learning, full quality gates, and Korean writing with 12 voice presets, packaged without its CLI or company reference catalog.",
+      "name": "omd-kr-writer",
+      "description": "OmD Korean writing with 12 voice presets, without the product-design workflow or preference hooks.",
       "source": {
         "source": "git-subdir",
         "url": "ramtoshiya/oh-my-design",
-        "path": "plugins/omd",
+        "path": "plugins/omd/skills",
         "sha": "46ebebcabd24d7af695b74402275d6d640d2e379"
       },
+      "skills": ["./omd-kr-writer"],
       "author": { "name": "kwakseongjae" },
       "repository": "https://github.com/ramtoshiya/oh-my-design",
       "license": "MIT"

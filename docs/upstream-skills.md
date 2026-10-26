@@ -10,32 +10,16 @@ those repositories. This repository holds none of them.
 
 | Entry | Skills | Source | License |
 | --- | --- | --- | --- |
-| `open-pencil` | Official OpenPencil CLI and editor workflow, with its design-authoring reference | `skills/open-pencil` in [open-pencil/open-pencil](https://github.com/open-pencil/open-pencil) | MIT |
 | `mattpocock-productivity` | `grilling`, `grill-me`, `handoff` | `skills/productivity` in the fork [ramtoshiya/mattpocock-skills](https://github.com/ramtoshiya/mattpocock-skills) | MIT |
 | `fcakyon-test-audit` | `test-audit` | `plugins/test-audit/skills` in the fork [ramtoshiya/claude-codex-settings](https://github.com/ramtoshiya/claude-codex-settings) | MIT |
 | `humanize` | `humanize` and its hook | `plugins/humanize` in the fork [ramtoshiya/claude-codex-settings](https://github.com/ramtoshiya/claude-codex-settings) | Apache-2.0 |
 | `humanize-korean` | Korean prose diagnosis, editing, and verification | `plugins/humanize-korean` in the fork [ramtoshiya/im-not-ai](https://github.com/ramtoshiya/im-not-ai) | MIT |
-| `ouroboros-interview` | `interview` | `plugins/ouroboros-interview` in the fork [ramtoshiya/ouroboros](https://github.com/ramtoshiya/ouroboros) | MIT |
-| `omd` | Design-system workflows, preference learning, design reviews, and `omd-kr-writer` | `plugins/omd` in the fork [ramtoshiya/oh-my-design](https://github.com/ramtoshiya/oh-my-design) | MIT |
+| `ouroboros-interview` | `interview`, `unstuck` | `plugins/ouroboros-interview` in the fork [ramtoshiya/ouroboros](https://github.com/ramtoshiya/ouroboros) | MIT |
+| `omd-kr-writer` | Korean writing with 12 voice presets | `plugins/omd/skills/omd-kr-writer` in the fork [ramtoshiya/oh-my-design](https://github.com/ramtoshiya/oh-my-design) | MIT |
 
 `grill-me` and `handoff` run only when you invoke them, so the agent's own
 skill list shows only `grilling`. Installed skills carry the entry name as a
 prefix, for example `mattpocock-productivity:grilling`.
-
-`open-pencil` is the unchanged official skill. It covers live editor and
-headless CLI commands, tool discovery, comments, JSX authoring, and exports.
-Its bundled `references/design-authoring.md` and `LICENSE.txt` stay with the
-skill. It also documents MCP, but a configured agent MCP connection is not
-required for CLI use. The `openpencil` executable must already be on `PATH`.
-Follow [OpenPencil's setup instructions](https://openpencil.dev/getting-started)
-for installation. Repository package policy takes precedence over upstream's
-global installation examples. Invoke `/open-pencil:open-pencil` in Claude Code.
-
-For Pi and Hermes, create a detached checkout of the marketplace pin outside
-this repository. Add its `skills/open-pencil` directory to Pi's `skills` list,
-or copy it to `skills/open-pencil` under the active Hermes profile. Keep the
-whole directory so its authoring reference resolves. Restart Hermes or reload
-Pi after installing. Neither installation needs a new MCP client configuration.
 
 The productivity fork preserves decision-tree rounds while recording obvious
 defaults under **Assumed (override if wrong)** instead of asking for individual
@@ -53,67 +37,33 @@ excludes test reads used as evidence for research, diagnosis, source review,
 packaging, and validation planning. A research assignment does not become a
 test audit because its parent workflow will later change tests.
 
-`ouroboros-interview` packages only the interview skill and its bundled
-questioning and closure-review prompts. It uses the host's native tools, needs
-no additional runtime or server, and ends with an agreed requirements summary.
-It does not load the fork's root plugin, start implementation, change agent
-configuration, or check for updates. Results stay in the conversation unless
-you request a summary file. Invoke `/ouroboros-interview:interview` in Claude
-Code after installing the entry.
+`ouroboros-interview` packages the interview and unstuck skills with their
+bundled review and lateral-thinking prompts. Both use the host's native tools
+and need no additional runtime or server. Interview ends with an agreed
+requirements summary. Unstuck examines repeated failures or consequential
+decisions through hacker, researcher, simplifier, architect, and contrarian
+perspectives before recommending one next move. Neither skill loads the fork's
+root plugin, starts implementation, changes agent configuration, or checks for
+updates. Results stay in the conversation unless you request a summary file.
+Invoke `/ouroboros-interview:interview` or `/ouroboros-interview:unstuck` in
+Claude Code after installing the entry.
 
 The two `claude-codex-settings` entries have different licenses. The
 repository is Apache-2.0, and the `test-audit` folder has its own MIT
 `LICENSE`.
 
-`omd` packages the design workflow from oh-my-design without its CLI or company
-reference catalog. It keeps `DESIGN.md`, the decision-to-token chain, component
-contracts, the full numbered slop gates, and `.omd/preferences.md`.
-`omd-apply` handles changes to an existing interface, `omd-autopilot` handles
-new surfaces, and `omd-harness` provides the guided workflow. `omd-feel`,
-`omd-restraint`, and `omd-slop-audit` provide focused reviews. The writing
-selection is `omd-kr-writer`, which writes or revises Korean text with 12 voice
-presets and defaults to `toss-tech-design`. Explicit instructions and project
-voice override presets. It uses the caller's output paths and document schema.
-Other locales remain caller-owned. The package does not include `omd-humanize`,
-`omd-locale-adapter`, or `hangul`.
+`omd-kr-writer` writes or revises Korean text with 12 voice presets and defaults
+to `toss-tech-design`. Explicit instructions and project voice override presets.
+It uses the caller's output paths and document schema. Other locales remain
+caller-owned.
 
-The preference loop records corrections through `omd-remember`, observes
-off-system edits through hooks, and proposes recurring corrections for review.
-`omd-learn` folds approved corrections into the system. The package includes
-the provider-free graph, review, compiler, and adoption helpers this needs.
-Those helpers do not install the OmD CLI. New systems start from the product
-brief, repository, and approved assets instead of choosing a company reference.
-
-The fork contains the selected skills, supporting roles, runtime helpers, and
-hook adapters. Its installed subtree includes the upstream MIT license. Review
-changes under `integration/` as well as the selected upstream sources when
-updating its pin. Invoke `/omd:omd-slop-audit` for a review or
-`/omd:omd-autopilot` for a new surface in Claude Code.
-
-Managed setup installs `omd-kr-writer` at user level in Claude Code, Codex,
-Pi, and Hermes. This marketplace entry selects only the Korean writing skill,
-with no design roles or preference hooks. Hermes uses a thin registration
-adapter. Full `omd` is excluded from user-level sync. Keep both OmD entry pins
-equal when updating them.
-
-Install the full package only in a project that needs it. In Claude Code, run
-`claude plugin install omd@ramtoshiya --scope project` from that project.
-Codex stores plugin files in a shared cache. Keep `enabled = false` under
-`[plugins."omd@ramtoshiya"]` in the user `config.toml` and enable that same
-plugin in the trusted project's `.codex/config.toml`. `codex plugin add`
-enables the user entry, so restore the user-level `false` after installing or
-updating it. Review hooks in `/hooks` without changing unrelated trust entries.
-
-Pi loads the pinned skill paths and `hooks/pi.ts` through the project's
-`.pi/settings.json`, not the user settings. Omit `omd-kr-writer` from that
-project list because the user installation already supplies it. Hermes supports
-`.hermes/plugins/omd` in a project when launched there with
-`HERMES_ENABLE_PROJECT_PLUGINS=1`. Do not retain a full `omd` link in its user
-plugin directory if that plugin is enabled. Project plugin discovery is an
-explicit Hermes opt-in, not a setting applied to every session by sync.
-
-Restart affected agents to load the changed scope. Browser-based measurements
-for the full package have separate local prerequisites described in its README.
+The marketplace source points at the OmD skills directory but exposes only
+`omd-kr-writer`. It does not load OmD's design-system workflows, roles,
+preference hooks, Pi extension, or native Hermes plugin. Claude Code and Codex
+use the marketplace's `skills` selection. Pi should list only the pinned
+`plugins/omd/skills/omd-kr-writer` directory. Hermes should register that same
+directory through a writing-only adapter. Restart or reload the affected agent
+after changing the installation.
 
 The `humanize` skill applies before creating or modifying any file, including
 code and configuration, and when preparing or publishing content such as
@@ -252,6 +202,33 @@ Claude Code and Codex behaved like this in tests with Codex CLI
 - A `git-subdir` install copies only `path`. A `LICENSE` at the repository
   root is not in the installed copy unless the folder has its own.
 - Both agents install the whole `path` folder and load only the listed skills.
+
+## Scheduled fork checks
+
+[Upstream fork drift](../.github/workflows/upstream-forks.yml) runs every Monday
+at 04:23 UTC and can be started from the Actions tab with `workflow_dispatch`.
+It currently monitors `ramtoshiya/ouroboros:main` against `Q00/ouroboros:main`.
+
+The check uses GitHub's compare API with the upstream branch as the base and
+the fork branch as the head. Its `behind_by` count includes missing upstream
+commits even when the fork has its own commits. When the count is positive,
+the built-in `GITHUB_TOKEN` creates or updates one open issue per pair in
+`ramtoshiya/skills`, with the count and comparison link. A later successful
+check closes that issue when the count reaches zero. API errors fail the run
+and leave that pair's issue unchanged. Runs are serialized to avoid duplicate
+creation, and existing duplicate bot issues are closed.
+
+To monitor another public fork in the same GitHub fork network, add an object
+to [the monitored pairs](../.github/upstream-forks.json) with `fork`, `branch`,
+`upstream`, and `upstreamBranch`. Repository values use `owner/repository`.
+Each pair has its own issue marker, so changing a pair's branches or removing
+it requires closing its old issue manually. Issue matching uses the marker and
+the `github-actions[bot]` author, leaving human issues alone.
+
+The workflow needs only repository contents read access and issues write
+access. It uses no private credentials or local services. It never changes
+fork branches or marketplace pins. Review and merge upstream changes manually,
+then follow the pin update steps below. Deterministic tests run with `npm test`.
 
 ## Update a pin
 
