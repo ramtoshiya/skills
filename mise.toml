@@ -1,6 +1,22 @@
 # macOS machine setup, applied with `mise bootstrap`.
 # docs/setup.md explains every entry. Preview with `mise bootstrap --dry-run`.
 
+[tools]
+"aqua:rhysd/actionlint" = "1.7.12"
+"aqua:zizmorcore/zizmor" = "1.31.1"
+
+[tasks."actions:syntax"]
+description = "Check GitHub Actions syntax, schemas, and contracts"
+run = "actionlint"
+
+[tasks."actions:security"]
+description = "Audit GitHub Actions security without network access or credentials"
+run = "env -u GH_TOKEN -u GITHUB_TOKEN -u ZIZMOR_GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN -u RUST_LOG zizmor --offline --strict-collection .github/workflows"
+
+[tasks."actions:check"]
+description = "Run GitHub Actions syntax and security checks"
+depends = ["actions:syntax", "actions:security"]
+
 [bootstrap.packages]
 "brew:jq" = "latest"                  # used by the Claude Code status line
 "brew:uv" = "latest"                  # runs the agent hooks
