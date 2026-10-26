@@ -1,6 +1,7 @@
 {
   "autoMemoryEnabled": false,
   "disableBundledSkills": true,
+  "syncClaudeAiPlugins": false,
   "enableArtifact": false,
   "includeGitInstructions": false,
   "promptSuggestionEnabled": false,

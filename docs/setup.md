@@ -149,6 +149,11 @@ pushing, publishing, or destructive history changes.
 - `disableBundledSkills` is true, which removes bundled skills and workflows
   and hides built-in slash commands from the model. Built-in commands remain
   typable. Plugin skills and local skills and commands are unaffected.
+- `syncClaudeAiPlugins` is false, which stops syncing and loading plugins from
+  the claude.ai account, including skills such as `pptx` and `xlsx`. On the next
+  startup, Claude Code moves previously synced copies to `~/.claude/plugins/.trash/`.
+  Marketplace plugins and local skills are unaffected. This does not remove
+  plugins from the claude.ai account. See the [plugin loading reference](https://code.claude.com/docs/en/plugins/loading.md).
 - Automatic memory, prompt suggestions, away summaries, and feedback surveys
   are off.
 - `attribution.commit` and `attribution.pr` are empty and
