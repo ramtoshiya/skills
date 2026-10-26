@@ -53,6 +53,7 @@ const before = (await run("excalidraw-board", ["read", "--id", room.id, "--full"
 
 // Install only into the test's private HOME. Leave the user's installed CLI alone.
 await run("sh", [join(directory, "../excalidraw-board/install.sh")], { env, timeout: 30_000 });
+await run("sh", [join(directory, "install.sh")], { env, timeout: 60_000 });
 const snapshotEnv = { ...env, PATH: `${join(home, ".local/bin")}:${env.PATH}` };
 const snapshot = JSON.parse((await run("excalidraw-board", ["snapshot", "--id", room.id, "--ids", "image-a,image-b"], { env: snapshotEnv, timeout: 60_000 })).stdout);
 assert.equal(Object.keys(snapshot.files).length, 1);
@@ -63,7 +64,7 @@ assert.equal(jpegSnapshot.files[jpegUploaded.fileId].dataURL, `data:image/jpeg;b
 const browserArgs = process.env.CHROMIUM_EXECUTABLE_PATH ? ["--executable-path", process.env.CHROMIUM_EXECUTABLE_PATH] : [];
 const exportPng = async (name, ids, option = "--ids") => {
   const path = join(output, name);
-  const { stdout } = await run(process.execPath, [join(directory, "export.mjs"), "--room-id", room.id, path, option, ids, ...browserArgs], { env: snapshotEnv, timeout: 125_000 });
+  const { stdout } = await run("excalidraw-web-export", ["--room-id", room.id, path, option, ids, ...browserArgs], { env: snapshotEnv, timeout: 125_000 });
   const receipt = JSON.parse(stdout);
   assert.equal(receipt.revision, snapshot.revision);
   return { png: PNG.sync.read(await readFile(path)), receipt };
@@ -100,5 +101,5 @@ assert.equal(after, before, "Export must not change the saved revision or elemen
 console.log(JSON.stringify({ roomPrefix: room.id.slice(0, 8), revision: snapshot.revision, fileId: uploaded.fileId,
   sourceImageBytes: bytes.length, sourceJpegBytes: jpeg.length, imageCount: 3, uniqueFiles: 2, imageBytesMatch: true, pixelChecks: 12,
   roomUnchanged: true, single: { width: single.width, height: single.height },
-  multiple: { width: both.width, height: both.height }, method: receipt.method,
+  multiple: { width: both.width, height: both.height }, method: receipt.method, installedExporter: true,
   privateTestHome: home, artifacts: output }));

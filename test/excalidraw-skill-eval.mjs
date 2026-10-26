@@ -17,20 +17,22 @@ const schema = {
 	type: "object",
 	properties: {
 		primary_delivery: { type: "string", enum: ["shared_room", "file"], description: "The kind of artifact the user requested, even if delivery is blocked." },
-		next_action: { type: "string", enum: ["report", "report_mismatch", "clarify_room", "export_file", "write_room"] },
+		next_action: { type: "string", enum: ["report", "report_mismatch", "clarify_room", "export_file", "export_png", "report_missing_tool", "write_room"] },
+		export_method: { type: "string", enum: ["none", "excalidraw-web-export", "browser_ui"] },
+		install_tool: { type: "boolean" },
 		create_file: { type: "boolean" },
 		claim_saved_content_present: { type: "boolean" },
 		claim_live_delivery: { type: "boolean" },
 		publish_secret_link: { type: "boolean" },
 		explanation: { type: "string" },
 	},
-	required: ["primary_delivery", "next_action", "create_file", "claim_saved_content_present", "claim_live_delivery", "publish_secret_link", "explanation"],
+	required: ["primary_delivery", "next_action", "export_method", "install_tool", "create_file", "claim_saved_content_present", "claim_live_delivery", "publish_secret_link", "explanation"],
 	additionalProperties: false,
 };
 const results = [];
 for (const item of suite.evals) {
 	const casePath = join(output, `eval-${item.id}-${item.name}`);
-	const runPath = join(casePath, configuration);
+	const runPath = join(casePath, configuration, "run-1");
 	mkdirSync(join(runPath, "outputs"), { recursive: true });
 	const save = (path, value) => writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx" });
 	const metadataPath = join(casePath, "eval_metadata.json");

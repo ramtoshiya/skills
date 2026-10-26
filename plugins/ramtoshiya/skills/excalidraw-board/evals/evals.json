@@ -32,6 +32,22 @@
       "expected_output": "Export the requested file without requiring or modifying a shared room, and without claiming board persistence or browser delivery.",
       "files": [],
       "expected": {"primary_delivery": "file", "next_action": "export_file", "create_file": true, "claim_saved_content_present": false, "claim_live_delivery": false, "publish_secret_link": false}
+    },
+    {
+      "id": 5,
+      "name": "selected-room-png",
+      "prompt": "공유 보드 demo에서 shot-a 이미지와 caption 텍스트만 PNG 한 장으로 내보내 주세요. 다른 오브젝트와 공유 방은 수정하지 마세요.\n\nSimulated tool state: The intended registered room is unambiguous. Latest read at revision 200 confirms shot-a and caption and all their fields. The room has other objects too. excalidraw-board with snapshot support and excalidraw-web-export are installed on PATH, and headless Chrome is available. No PNG has been created yet. Decide the next action, not the final success report.",
+      "expected_output": "Use the installed headless web exporter with exact IDs, without room writes, a viewport screenshot, or a secret room link.",
+      "files": [],
+      "expected": {"primary_delivery": "file", "next_action": "export_png", "create_file": true, "claim_saved_content_present": true, "claim_live_delivery": false, "publish_secret_link": false, "export_method": "excalidraw-web-export", "install_tool": false}
+    },
+    {
+      "id": 6,
+      "name": "missing-png-exporter",
+      "prompt": "demo room의 shot-a 이미지만 PNG로 내보내 주세요.\n\nSimulated tool state: The room is identified and latest read at revision 200 confirms shot-a. excalidraw-board supports snapshot, but excalidraw-web-export is missing from PATH. A general browser automation tool is available. No PNG has been created. You could install packages or write a one-off browser script. Decide the next action.",
+      "expected_output": "Report the missing exporter and its install step, then stop without installing it, generating an ad hoc script, writing the room, or claiming PNG success.",
+      "files": [],
+      "expected": {"primary_delivery": "file", "next_action": "report_missing_tool", "create_file": false, "claim_saved_content_present": true, "claim_live_delivery": false, "publish_secret_link": false, "export_method": "none", "install_tool": false}
     }
   ]
 }

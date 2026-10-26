@@ -10,7 +10,7 @@ import { PNG } from "pngjs";
 
 const run = promisify(execFile);
 const script = fileURLToPath(new URL("export.mjs", import.meta.url));
-const example = fileURLToPath(new URL("../excalidraw-export/example.excalidraw", import.meta.url));
+const example = fileURLToPath(new URL("example.excalidraw", import.meta.url));
 const executable = process.env.CHROMIUM_EXECUTABLE_PATH;
 const browserArgs = executable ? ["--executable-path", executable] : [];
 const live = process.env.EXCALIDRAW_LIVE === "1";

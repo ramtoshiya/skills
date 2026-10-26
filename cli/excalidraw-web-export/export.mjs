@@ -7,8 +7,8 @@ import { chromium } from "playwright";
 
 const run = promisify(execFile);
 const help = `Usage:
-  node export.mjs scene.excalidraw output.png [options]
-  node export.mjs --room-id prefix output.png [options]
+  excalidraw-web-export scene.excalidraw output.png [options]
+  excalidraw-web-export --room-id prefix output.png [options]
 Options:
   --ids a,b                  Render only these exact live element IDs
   --exclude-ids a,b          Omit these exact live element IDs
@@ -94,7 +94,16 @@ try {
     const data = JSON.stringify({ type: "excalidraw", version: 2, source: "headless-web-export", elements, files,
       appState: { ...scene.appState, exportEmbedScene: false } });
     const started = performance.now();
-    browser = await chromium.launch({ headless: true, executablePath: values["executable-path"], timeout });
+    let executablePath = values["executable-path"] ?? process.env.CHROMIUM_EXECUTABLE_PATH;
+    if (!executablePath && process.platform === "darwin") {
+      const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+      try { await access(chrome); executablePath = chrome; } catch {}
+    }
+    try {
+      browser = await chromium.launch({ headless: true, executablePath, timeout });
+    } catch {
+      throw new Error("Cannot launch headless Chrome/Chromium. Set --executable-path or install managed Chromium as described in the exporter README.");
+    }
     const context = await browser.newContext({ locale: "en-US", viewport: { width: 1000, height: 800 }, acceptDownloads: true, serviceWorkers: "block" });
     // Force the app's browser-download fallback instead of an unautomatable OS save dialog.
     await context.addInitScript(() => { delete window.showSaveFilePicker; delete window.showOpenFilePicker; });

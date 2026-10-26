@@ -8,14 +8,29 @@ Excalidraw renderer.
 
 ## Setup
 
-Install [Node.js](https://nodejs.org/en/download) 24.21 or newer. From this directory:
+Install [Node.js](https://nodejs.org/en/download) 24.21 or newer and npm. From the
+repository root:
 
 ```sh
-npm ci --ignore-scripts
-node node_modules/playwright/cli.js install chromium
+sh cli/excalidraw-web-export/install.sh
 ```
 
-Alternatively, use an existing Chrome executable with `--executable-path`.
+The installer copies the command and lockfile into
+`~/.local/share/excalidraw-web-export`, installs pinned production dependencies
+locally with a three-day release-age gate, and links
+`~/.local/bin/excalidraw-web-export`. Put `~/.local/bin` on `PATH`. Rerun the
+installer to update. It refuses to replace an unrelated command and does not
+install or update agent plugins, `excalidraw-board`, or browsers.
+
+On macOS, an existing Chrome at its standard application path is used by default.
+`--executable-path` overrides `CHROMIUM_EXECUTABLE_PATH`, which overrides that
+automatic lookup. Otherwise the command uses Playwright-managed Chromium.
+Install that browser explicitly if needed:
+
+```sh
+node "$HOME/.local/share/excalidraw-web-export/node_modules/playwright/cli.js" install chromium
+```
+
 See [Playwright's browser documentation](https://playwright.dev/docs/browsers).
 The only direct runtime npm dependency is `playwright` 1.58.2. `pngjs` 7.0.0 is
 used only by tests. React, React DOM, Excalidraw, and esbuild are not installed
@@ -28,13 +43,13 @@ The exporter looks it up on `PATH` and never installs or updates it. Use an
 already registered room ID prefix:
 
 ```sh
-node export.mjs --room-id ROOM_PREFIX selected.png --ids a1,b2
+excalidraw-web-export --room-id ROOM_PREFIX selected.png --ids a1,b2
 ```
 
 For a Mac with Chrome installed:
 
 ```sh
-node export.mjs --room-id ROOM_PREFIX selected.png --ids a1,b2 \
+excalidraw-web-export --room-id ROOM_PREFIX selected.png --ids a1,b2 \
   --executable-path '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 ```
 
@@ -54,12 +69,12 @@ persistence does not include the room's app state.
 ## Export a local file
 
 ```sh
-node export.mjs scene.excalidraw middle.png --ids middle
-node export.mjs scene.excalidraw selected.png --ids heading,middle
-node export.mjs scene.excalidraw without-middle.png --exclude-ids middle
+excalidraw-web-export scene.excalidraw middle.png --ids middle
+excalidraw-web-export scene.excalidraw selected.png --ids heading,middle
+excalidraw-web-export scene.excalidraw without-middle.png --exclude-ids middle
 ```
 
-The repository's large sample is `../excalidraw-export/example.excalidraw`.
+This directory includes the large sample `example.excalidraw`.
 Omit both ID options to export every live object. The options are mutually
 exclusive. IDs match exactly, with whitespace trimmed. Unknown or deleted IDs,
 empty IDs, and an empty result are errors. Stacking order stays in scene order.
@@ -68,9 +83,8 @@ object needed by the export. The input file is not modified.
 
 The app exports at its default 1x scale with 10 scene units of padding on each
 side. For the repository sample, `--ids middle` produces 620 by 420 pixels,
-while the entire scene produces 12,020 by 8,020 pixels. The script does not
-offer the local renderer PoC's `--region`, `--scale`, or preallocation pixel
-budget. Selection happens before import, so unselected objects do not enlarge
+while the entire scene produces 12,020 by 8,020 pixels. The command has no
+`--region`, `--scale`, or preallocation pixel budget options. Selection happens before import, so unselected objects do not enlarge
 the export canvas. `Embed scene` is explicitly disabled.
 
 ## Why download instead of clipboard
@@ -115,13 +129,17 @@ guaranteed.
 
 ## Checks
 
+From this directory, install test dependencies locally before running checks:
+
 ```sh
+npm ci --ignore-scripts
 npm test
 CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' npm run test:live
 ```
 
-The default test checks rejected inputs and output preservation without network
-access. Live tests explicitly opt into the deployed app. They decode actual
+The default tests check rejected inputs, output preservation, standalone
+installation and updates, and command collision protection without network
+access. Installation tests reuse the npm cache populated by `npm ci`. Live tests explicitly opt into the deployed app. They decode actual
 PNG downloads, verify single and multiple IDs, visible text, and embedded
 raster images, and compare a 96MP full export against an export omitting only
 the green middle object.
@@ -135,10 +153,11 @@ CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google 
 ```
 
 This opt-in check creates a disposable remote room and uploads PNG and JPEG
-patterns. It installs the checkout's snapshot-capable CLI only into a private
-test HOME, leaving the user's installed command untouched. It verifies the
-recovered source bytes, selected PNG pixels, duplicate image placements, and
-unchanged room revision and elements. The printed test HOME contains room
+patterns. It installs the checkout's snapshot-capable board CLI and web exporter
+only into a private test HOME, leaving the user's installed commands untouched.
+It invokes that installed exporter from PATH and verifies recovered source bytes,
+selected PNG pixels, duplicate image placements, and unchanged room revision and
+elements. The printed test HOME contains room
 credentials and is retained for inspection. Do not publish it. Remote test
 rooms are not deleted by the check and have no expiry guarantee.
 

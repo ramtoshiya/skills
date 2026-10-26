@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test export.test.mjs",
-    "test:live": "EXCALIDRAW_LIVE=1 node --test export.test.mjs",
+    "test": "node --test *.test.mjs",
+    "test:live": "EXCALIDRAW_LIVE=1 node --test *.test.mjs",
     "test:room-live": "node room-live.mjs --live"
   },
   "dependencies": { "playwright": "1.58.2" },
