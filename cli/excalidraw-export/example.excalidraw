@@ -1,0 +1,14 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "headless-export-poc",
+  "appState": { "viewBackgroundColor": "#ffffff" },
+  "files": {},
+  "elements": [
+    { "id": "extent", "type": "rectangle", "x": -400, "y": -300, "width": 12000, "height": 8000, "strokeColor": "#ffffff", "backgroundColor": "#ffffff", "fillStyle": "solid", "strokeWidth": 0, "roughness": 0 },
+    { "id": "top-left", "type": "rectangle", "x": -400, "y": -300, "width": 200, "height": 200, "strokeColor": "#ff0000", "backgroundColor": "#ff0000", "fillStyle": "solid", "strokeWidth": 0, "roughness": 0 },
+    { "id": "bottom-right", "type": "rectangle", "x": 11400, "y": 7500, "width": 200, "height": 200, "strokeColor": "#0000ff", "backgroundColor": "#0000ff", "fillStyle": "solid", "strokeWidth": 0, "roughness": 0 },
+    { "id": "heading", "type": "text", "x": 100, "y": 100, "width": 1600, "height": 100, "text": "Headless export · 한글 폰트 확인", "fontSize": 64, "fontFamily": 5, "lineHeight": 1.25, "textAlign": "left", "verticalAlign": "top", "strokeColor": "#000000" },
+    { "id": "middle", "type": "rectangle", "x": 5000, "y": 3000, "width": 600, "height": 400, "strokeColor": "#008000", "backgroundColor": "#008000", "fillStyle": "solid", "strokeWidth": 0, "roughness": 0 }
+  ]
+}
