@@ -44,6 +44,13 @@ Catalog discovery times out after five seconds and refuses redirects.
 The client key goes to Claude Code through its environment, without being
 included in command arguments or written to a generated settings file.
 
+For image generation tools, the launched Claude session and its child processes
+receive `IMAGEGEN_BASE_URL` set to the resolved proxy URL with `/v1` appended and
+`IMAGEGEN_API_KEY` set to the resolved client key. Set either variable in the
+shell that launches `claudex` to override its default independently. These values
+are passed through the environment, without being added to command arguments or
+generated settings files.
+
 ## Use
 
 ```sh

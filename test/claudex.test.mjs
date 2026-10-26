@@ -15,7 +15,9 @@ async function fixture(t, catalog, status = 200, codex = { models: [], status: 2
   await writeFile(join(dir, 'claude'), `#!${process.execPath}
 require('node:fs').writeFileSync(process.env.CAPTURE, JSON.stringify({
   args: process.argv.slice(2), key: process.env.ANTHROPIC_API_KEY,
-  token: process.env.ANTHROPIC_AUTH_TOKEN
+  token: process.env.ANTHROPIC_AUTH_TOKEN,
+  imagegenBaseUrl: process.env.IMAGEGEN_BASE_URL,
+  imagegenKey: process.env.IMAGEGEN_API_KEY
 }));
 process.exitCode = 7;
 `, { mode: 0o755 });
@@ -36,6 +38,7 @@ process.exitCode = 7;
     baseUrl: `http://127.0.0.1:${server.address().port}/v1/`, apiKey: '$TEST_PROXY_KEY',
   }));
   return {
+    baseUrl: `http://127.0.0.1:${server.address().port}`,
     requests,
     capture: () => readFile(capture, 'utf8').then(JSON.parse),
     run: (args = [], extra = {}) => new Promise((done, reject) => {
@@ -43,6 +46,7 @@ process.exitCode = 7;
         ...process.env, PATH: dir + ':' + process.env.PATH, CAPTURE: capture,
         CLAUDEX_CONFIG: config, TEST_PROXY_KEY: 'test-client-key',
         CLIPROXY_API_KEY: '', CLIPROXY_BASE_URL: '',
+        IMAGEGEN_BASE_URL: undefined, IMAGEGEN_API_KEY: undefined,
         ANTHROPIC_API_KEY: 'other-provider-key', ANTHROPIC_AUTH_TOKEN: 'other-token',
         ...extra,
       } });
@@ -80,6 +84,27 @@ test('discovers role models and forwards CLI arguments, credentials, and exit st
   assert.ok(!JSON.stringify(child.args).includes('test-client-key'));
   assert.deepEqual(f.requests, ['/v1/models', '/v1/models?client_version=0.155.0']
     .map(url => ({ url, authorization: 'Bearer test-client-key' })));
+});
+
+test('passes imagegen connection defaults and independent overrides through the child environment', async t => {
+  for (const overrides of [
+    {},
+    { IMAGEGEN_BASE_URL: 'https://images.example.test/v1' },
+    { IMAGEGEN_API_KEY: 'test-imagegen-key' },
+    { IMAGEGEN_BASE_URL: 'https://images.example.test/v1', IMAGEGEN_API_KEY: 'test-imagegen-key' },
+  ]) {
+    const f = await fixture(t, [{ id: 'gpt-6-sol', owned_by: 'openai' }]);
+    const result = await f.run([], { CLIPROXY_API_KEY: 'test-resolved-proxy-key', ...overrides });
+    assert.equal(result.code, 7);
+    const child = await f.capture();
+    assert.equal(child.imagegenBaseUrl, overrides.IMAGEGEN_BASE_URL ?? f.baseUrl + '/v1');
+    assert.equal(child.imagegenKey, overrides.IMAGEGEN_API_KEY ?? 'test-resolved-proxy-key');
+    for (const key of ['test-resolved-proxy-key', 'test-imagegen-key']) {
+      assert.ok(!JSON.stringify(child.args).includes(key));
+      assert.ok(!result.stdout.includes(key));
+      assert.ok(!result.stderr.includes(key));
+    }
+  }
 });
 
 test('resolves startup context from route metadata and falls back when unavailable', async t => {
