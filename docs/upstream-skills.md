@@ -207,7 +207,15 @@ Claude Code and Codex behaved like this in tests with Codex CLI
 
 [Upstream fork drift](../.github/workflows/upstream-forks.yml) runs every Monday
 at 04:23 UTC and can be started from the Actions tab with `workflow_dispatch`.
-It currently monitors `ramtoshiya/ouroboros:main` against `Q00/ouroboros:main`.
+It monitors every fork used by this marketplace:
+
+| Fork | Upstream |
+| --- | --- |
+| `ramtoshiya/mattpocock-skills:main` | `mattpocock/skills:main` |
+| `ramtoshiya/claude-codex-settings:main` | `fcakyon/claude-codex-settings:main` |
+| `ramtoshiya/ouroboros:main` | `Q00/ouroboros:main` |
+| `ramtoshiya/im-not-ai:main` | `epoko77-ai/im-not-ai:main` |
+| `ramtoshiya/oh-my-design:main` | `kwakseongjae/oh-my-design:main` |
 
 The Ouroboros fork first runs its own [upstream sync workflow](https://github.com/ramtoshiya/ouroboros/blob/main/.github/workflows/sync-upstream.yml)
 every Monday at 04:00 UTC. It rebases the fork's customization commits onto
@@ -229,6 +237,8 @@ creation, and existing duplicate bot issues are closed.
 To monitor another public fork in the same GitHub fork network, add an object
 to [the monitored pairs](../.github/upstream-forks.json) with `fork`, `branch`,
 `upstream`, and `upstreamBranch`. Repository values use `owner/repository`.
+The deterministic test also requires every `ramtoshiya/*` marketplace source
+to have a monitored pair, so a new fork cannot be added without this check.
 Each pair has its own issue marker, so changing a pair's branches or removing
 it requires closing its old issue manually. Issue matching uses the marker and
 the `github-actions[bot]` author, leaving human issues alone.
