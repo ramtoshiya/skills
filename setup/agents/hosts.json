@@ -2,7 +2,7 @@
   "hosts": ["claude", "codex", "pi", "hermes"],
   "plugins": {
     "ramtoshiya-cc": ["claude"],
-    "humanize-korean": ["hermes"],
+    "humanize-korean": ["claude", "codex", "pi", "hermes"],
     "omd-kr-writer": ["claude", "codex", "pi", "hermes"],
     "omd": [],
     "open-pencil": ["claude", "codex", "pi"],
