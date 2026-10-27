@@ -77,7 +77,7 @@ then the first available tier in each row:
 | --- | --- |
 | Fable | `astra` |
 | Main and Opus | `astra`, `sol`, `codex`, no suffix, `terra` |
-| Sonnet and subagents | `sol`, `terra`, `codex`, no suffix |
+| Sonnet and subagents | `terra`, `sol`, `codex`, no suffix |
 | Haiku | `luna`, `mini`, `nano` |
 
 If a role has no matching tier, it uses the main model. If no main tier

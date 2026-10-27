@@ -63,7 +63,7 @@ test('discovers role models and forwards CLI arguments, credentials, and exit st
   const f = await fixture(t, [
     { id: 'gpt-9-astra', owned_by: 'openai', visibility: 'hide' },
     { id: 'gpt-9-sol', owned_by: 'other' },
-    ...['gpt-5.1-astra', 'gpt-6-astra', 'gpt-6.1-sol', 'gpt-6.1-mini', 'gpt-image-9']
+    ...['gpt-5.1-astra', 'gpt-6-astra', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6.1-mini', 'gpt-image-9']
       .map(id => ({ id, owned_by: 'openai' })),
   ], 200, { status: 200, models: [{ slug: 'gpt-6.1-sol', context_window: 500000, max_context_window: 872000 }] });
   const args = ['--model', 'gpt-6.1-sol', '-p', 'a prompt with spaces'];
@@ -75,8 +75,8 @@ test('discovers role models and forwards CLI arguments, credentials, and exit st
   assert.equal(settings.env.CLAUDE_CODE_EXTRA_BODY, undefined);
   assert.equal(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '872000');
   assert.equal(settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL, 'gpt-6-astra');
-  assert.equal(settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'gpt-6.1-sol');
-  assert.equal(settings.env.CLAUDE_CODE_SUBAGENT_MODEL, 'gpt-6.1-sol');
+  assert.equal(settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'gpt-6.1-terra');
+  assert.equal(settings.env.CLAUDE_CODE_SUBAGENT_MODEL, 'gpt-6.1-terra');
   assert.equal(settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL, 'gpt-6.1-mini');
   assert.deepEqual(child.args.slice(2), args);
   assert.equal(child.key, 'test-client-key');

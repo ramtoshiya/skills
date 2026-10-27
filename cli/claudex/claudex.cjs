@@ -41,7 +41,7 @@ function selectModels(data) {
   }
   const main = pick(['astra', 'sol', 'codex', '', 'terra']) || models[0].id;
   return { main, fable: pick(['astra']) || main,
-    standard: pick(['sol', 'terra', 'codex', '']) || main,
+    standard: pick(['terra', 'sol', 'codex', '']) || main,
     light: pick(['luna', 'mini', 'nano']) || main };
 }
 
