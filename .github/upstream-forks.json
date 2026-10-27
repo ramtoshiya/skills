@@ -1,8 +1,32 @@
 [
   {
+    "fork": "ramtoshiya/mattpocock-skills",
+    "branch": "main",
+    "upstream": "mattpocock/skills",
+    "upstreamBranch": "main"
+  },
+  {
+    "fork": "ramtoshiya/claude-codex-settings",
+    "branch": "main",
+    "upstream": "fcakyon/claude-codex-settings",
+    "upstreamBranch": "main"
+  },
+  {
     "fork": "ramtoshiya/ouroboros",
     "branch": "main",
     "upstream": "Q00/ouroboros",
+    "upstreamBranch": "main"
+  },
+  {
+    "fork": "ramtoshiya/im-not-ai",
+    "branch": "main",
+    "upstream": "epoko77-ai/im-not-ai",
+    "upstreamBranch": "main"
+  },
+  {
+    "fork": "ramtoshiya/oh-my-design",
+    "branch": "main",
+    "upstream": "kwakseongjae/oh-my-design",
     "upstreamBranch": "main"
   }
 ]

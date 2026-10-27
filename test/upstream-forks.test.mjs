@@ -1,10 +1,27 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { checkForks, comparisonPath, driftResult, marker, reconcile, validatePairs } from '../scripts/upstream-forks.mjs';
 
 const pair = { fork: 'ramtoshiya/ouroboros', branch: 'main', upstream: 'Q00/ouroboros', upstreamBranch: 'main' };
 const comparison = (behind_by, status = 'diverged') => ({ behind_by, status, html_url: 'https://github.com/Q00/ouroboros/compare/main...ramtoshiya:main' });
 const issue = (number, overrides = {}) => ({ number, state: 'open', user: { login: 'github-actions[bot]' }, ...driftResult(pair, comparison(2)), ...overrides });
+
+test('monitors every fork used by the marketplace', async () => {
+  const pairs = JSON.parse(await readFile(new URL('../.github/upstream-forks.json', import.meta.url)));
+  const marketplace = JSON.parse(await readFile(new URL('../.claude-plugin/marketplace.json', import.meta.url)));
+  const marketplaceForks = [...new Set(marketplace.plugins
+    .map(plugin => plugin.source?.url)
+    .filter(url => url?.startsWith('ramtoshiya/')))].sort();
+  assert.deepEqual(pairs, [
+    { fork: 'ramtoshiya/mattpocock-skills', branch: 'main', upstream: 'mattpocock/skills', upstreamBranch: 'main' },
+    { fork: 'ramtoshiya/claude-codex-settings', branch: 'main', upstream: 'fcakyon/claude-codex-settings', upstreamBranch: 'main' },
+    pair,
+    { fork: 'ramtoshiya/im-not-ai', branch: 'main', upstream: 'epoko77-ai/im-not-ai', upstreamBranch: 'main' },
+    { fork: 'ramtoshiya/oh-my-design', branch: 'main', upstream: 'kwakseongjae/oh-my-design', upstreamBranch: 'main' },
+  ]);
+  assert.deepEqual(pairs.map(({ fork }) => fork).sort(), marketplaceForks);
+});
 
 test('compares upstream base against fork head, including encoded branch names', () => {
   assert.equal(comparisonPath(pair), '/repos/Q00/ouroboros/compare/main...ramtoshiya%3Amain');
