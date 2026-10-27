@@ -65,10 +65,12 @@ use the marketplace's `skills` selection. Pi should list only the pinned
 directory through a writing-only adapter. Restart or reload the affected agent
 after changing the installation.
 
-The `humanize` skill applies before creating or modifying any file, including
-code and configuration, and when preparing or publishing content such as
-commits and pull requests. Ordinary chat, research, explanations, and read-only
-reviews do not invoke it unless you explicitly request the skill.
+The `humanize` skill handles English writing and existing code/configuration
+changes. Korean text, including new publication drafts, goes to
+`humanize-korean`. Both skills load for bilingual text. Select by source or
+output language, not the language of the instructions. Ordinary private chat,
+research, explanations, and read-only reviews do not invoke either unless also
+writing files, publishing, or explicitly humanizing text.
 
 Its hook checks file writes, commits, pull requests, and Slack or Linear
 posts for AI-sounding wording. Findings are advisory warnings and do not block
@@ -79,11 +81,18 @@ When the hook itself fails, it lets the call through, as upstream does.
 For Codex patches, the hook skips files it cannot read or reconstruct and
 checks the remaining files. Codex reports any patch errors.
 
-`humanize-korean` adapts epoko77-ai's im-not-ai directly for Hermes. It keeps
-the upstream Korean rules, light/standard/heavy routing, diagnosis and finalizer
-roles, chunk reassembly, and deterministic verification scripts. It runs when
-you request Korean prose editing, not before every file change. The existing
-`humanize` skill and its advisory hook remain separate.
+`humanize-korean` packages a pinned commit from the
+[ramtoshiya/im-not-ai fork](https://github.com/ramtoshiya/im-not-ai), not a local
+source path. Claude Code, Codex, Pi, and Hermes load the paired skills. The
+managed host selection in `setup/agents/hosts.json` enables the Korean companion
+where the English skill delegates to it.
+
+For new Korean publication text, including issue replies without an editing
+request, the Korean skill reads its rulebook and drafts from the caller's facts.
+It does not create an empty editing source or claim source-relative gate results.
+Supplied-source editing keeps the upstream Korean rules, light/standard/heavy
+routing, diagnosis and finalizer roles, chunk reassembly, and deterministic
+verification scripts. The advisory English-wording hook remains separate.
 
 The fork builds a self-contained package with the upstream MIT license.
 `scripts/build_hermes_plugin.py --check` checks the packaged copies against
@@ -93,10 +102,11 @@ pin. A matching rulebook alone does not prove that the workflow still works.
 
 ## Measure humanizer routing
 
-The two entries do not enforce exclusive language routing. `humanize` covers
-file changes and publication in any language. `humanize-korean` covers Korean
-prose editing. Conversation language and the language of the text being edited
-can differ, so measure them separately before changing either description.
+Measure source/output-language routing separately from conversation language.
+Korean publication and source editing should use `humanize-korean`, English
+text should use `humanize`, and bilingual text should use both. A private-chat
+control means ordinary Q&A without file writing or a separate publication task,
+not a platform privacy or access-control guarantee.
 
 Run the routing evaluator with local `SKILL.md` files from the exact marketplace
 pins. It needs Node.js, Claude Code, and a configured model provider:
@@ -119,17 +129,15 @@ To check implicit writing, use
 `test/fixtures/humanizer-implicit-thread-cases.json` as the first argument. It
 pairs the same user message in a published Multica thread and a private chat,
 in Korean and English, without asking for humanization. Publication context is
-stated in the prompt, not discovered through a live Multica tool. The cases'
-`expected_skills` describe the current contract: new published replies use
-`humanize` in either language, while private discussion uses neither skill.
-They do not assume that new Korean writing belongs to the editing-only skill.
+stated in the prompt, not discovered through a live Multica tool. Both corpora
+carry `expected_skills` for the publication-inclusive contract above. Code-only
+changes remain with `humanize`. Combine the corpora and freeze those labels
+before evaluating either configuration. Compare baseline and candidate against
+the same contract rather than scoring each against its own scope.
 
-For a publication-inclusive candidate, combine both corpora and freeze new
-expected labels before running either configuration: Korean publication and
-Korean source editing use `humanize-korean`, English text uses `humanize`,
-bilingual text uses both, and private discussion uses neither. Keep code-only
-changes with `humanize` when preserving that existing contract. Do not overwrite
-the baseline corpus's labels or compare scores computed under different policies.
+`test/fixtures/humanizer-publication-holdout-cases.json` adds cross-language
+publication and private discussion that mentions posting without requesting it.
+Keep this separate from the optimization corpus when reporting results.
 
 Keep experimental source clones at explicit base commits and record each local
 candidate commit. Edit the Korean fork's canonical Claude, Codex, and Hermes

@@ -139,6 +139,11 @@ Coding agents:
 | `~/.hermes/config.yaml` | The keys in `setup/agents/hermes-config.yaml` |
 | `~/.claude/status-line.sh` | Copy of `setup/agents/claude-statusline.sh` |
 
+The managed plugin synchronization workflow reads host selections from
+`setup/agents/hosts.json`. Both humanizers are selected together on Claude Code,
+Codex, Pi, and Hermes so Korean delegation has an installed target. This policy
+file does not install plugins during `mise bootstrap`.
+
 Hermes reads its shared preferences through the `ramtoshiya` native plugin,
 which must be installed separately as described in [Agent plugins](agent-pack.md).
 

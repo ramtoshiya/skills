@@ -45,12 +45,12 @@
     },
     {
       "name": "humanize",
-      "description": "Natural-writing skill and advisory AI-wording warnings from fcakyon's claude-codex-settings, patched in a personal fork to run through uv-managed Python with a Pi adapter.",
+      "description": "English writing and advisory AI-wording warnings, with Korean text delegated to humanize-korean and a uv-managed hook plus Pi adapter.",
       "source": {
         "source": "git-subdir",
         "url": "ramtoshiya/claude-codex-settings",
         "path": "plugins/humanize",
-        "sha": "c5a091bba3a5e9e585a46350514cca09d648c5f1"
+        "sha": "200d8bb89914e13dabd1bd35db3db289a5bb349e"
       },
       "author": { "name": "Fatih C. Akyon" },
       "repository": "https://github.com/ramtoshiya/claude-codex-settings",
@@ -71,12 +71,12 @@
     },
     {
       "name": "humanize-korean",
-      "description": "Korean diagnosis, editing, and verification from epoko77-ai's im-not-ai, packaged in a personal fork with the full Hermes workflow and upstream runtime gates.",
+      "description": "Korean publication writing plus diagnosis, editing, and verification from epoko77-ai's im-not-ai, packaged for Claude Code, Codex, Pi, and Hermes.",
       "source": {
         "source": "git-subdir",
         "url": "ramtoshiya/im-not-ai",
         "path": "plugins/humanize-korean",
-        "sha": "6586b4c04cf822b500cd18b768a92c5b32e2eb5e"
+        "sha": "ae40e238c20e29af1365a0d5e40cce1805a26218"
       },
       "author": { "name": "epoko77-ai" },
       "repository": "https://github.com/ramtoshiya/im-not-ai",
