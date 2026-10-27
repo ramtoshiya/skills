@@ -17,6 +17,7 @@ instead. Hermes loads the shared plugin from a local clone.
 | `excalidraw-board` | Reads and draws on shared excalidraw.com rooms, and exports selected saved objects as PNG | The separately installed `excalidraw-board` command on `PATH`, described in [its README](../cli/excalidraw-board/README.md). PNG export also needs [excalidraw-web-export](../cli/excalidraw-web-export/README.md) and headless Chrome/Chromium |
 | `github-actions-authoring` | Checks official releases, a 72-hour cooldown, compatibility, and full commit pins before editing GitHub Actions workflows or action metadata | Git, authenticated `gh` access, `actionlint`, `zizmor`, and the target repository's test runner on `PATH` |
 | `imagegen` | Generates and edits images with OpenAI GPT Image or xAI Grok Imagine through an OpenAI-compatible Images API | uv, and an API key or proxy in the environment (see the skill's `SKILL.md`) |
+| `impeccable-interview` | Clarifies or resumes a product task and saves approved interview context in an Impeccable surface brief | An already-installed native Impeccable CLI supporting surface-brief v1 and Python 3.11+ (standard library only) |
 | `mermaid-check` | Runs the Mermaid parser over diagrams before the agent delivers them | Node.js. The first run downloads `@mermaid-js/mermaid-cli` 12.0.0 through `npx` |
 | `reorganize-commits` | Rewrites the current branch's commits into reviewable chunks. Runs only when you invoke it | Git |
 | `stable-refs` | Gives documents and plans permanent identifiers that survive edits | Nothing |
