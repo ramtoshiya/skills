@@ -91,6 +91,39 @@ their source files. Run it after merging upstream changes, then exercise the
 packaged helpers and a fresh Hermes session before updating the marketplace
 pin. A matching rulebook alone does not prove that the workflow still works.
 
+## Measure humanizer routing
+
+The two entries do not enforce exclusive language routing. `humanize` covers
+file changes and publication in any language. `humanize-korean` covers Korean
+prose editing. Conversation language and the language of the text being edited
+can differ, so measure them separately before changing either description.
+
+Run the routing evaluator with local `SKILL.md` files from the exact marketplace
+pins. It needs Node.js, Claude Code, and a configured model provider:
+
+```sh
+node scripts/humanizer-trigger-eval.mjs \
+  test/fixtures/humanizer-trigger-cases.json \
+  /path/to/english/SKILL.md /path/to/korean/SKILL.md \
+  /path/outside/repository/results.json gpt-6.1-sol 3
+```
+
+The corpus has paired Korean and English requests, cross-language editing, and
+bilingual text. The runner loads both skills' frontmatter together in a temporary
+plugin, uses isolated settings, and records actual `Skill` calls in the first
+assistant turn. Skill bodies and hooks do not execute. Claude Code's built-in
+skills can remain visible and are recorded with each observation. Timeouts,
+missing skills, and failed runs are invalid observations, not non-triggers.
+
+Report each skill's calls divided by valid runs, grouped by conversation language
+and task type. Also report target-text language, both/neither selections, and
+invalid runs. Keep generated results outside the repository and attach them to
+the review. Three repetitions of a small synthetic corpus are a routing check,
+not a production usage estimate. This evaluator does not measure later calls,
+editing quality, hook warnings, or Codex, Pi, and Hermes behavior. Do not use
+Claude Code's `--bare` mode here. It omits automatic skill context even when the
+initialization event lists the skills.
+
 ## Install
 
 Claude Code and Codex read the marketplace. After adding it as described in
