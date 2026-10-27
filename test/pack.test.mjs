@@ -38,6 +38,15 @@ test("the packed distribution is limited to shared content and runs without the 
 	assert.ok(authoring.some(path => archive.files.some(file => join(installed, file.path) === path)),
 		"GitHub Actions authoring must ship under a Pi skill discovery root");
 	assert.match(readFileSync(authoring[0], "utf8"), /^name: github-actions-authoring$/m);
+	const interview = join(installed, "plugins/ramtoshiya/skills/impeccable-interview");
+	assert.match(execFileSync("uv", [
+		"run", "--offline", "--no-project", "--managed-python", "--python", ">=3.11",
+		"--no-config", "--exclude-newer", "3 days", "python", "-I",
+		join(interview, "scripts/brief_bridge.py"), "--help",
+	], { cwd: directory, encoding: "utf8" }), /prepare.*apply/);
+	for (const reference of ["evidence-and-questioning.md", "impeccable-storage-contract.md"]) {
+		assert.ok(readFileSync(join(interview, "references", reference), "utf8").trim());
+	}
 	assert.equal(manifest.pi.extensions.length, 1);
 	const { default: register } = await import(pathToFileURL(join(installed, manifest.pi.extensions[0])).href);
 	let handler;

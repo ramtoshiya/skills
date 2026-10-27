@@ -1,0 +1,29 @@
+{
+  "skill_name": "impeccable-interview",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Resume the Impeccable brief for route:/imports/review in the supplied project. The native engine and project locations are supplied by the harness. The requester has already confirmed these prototype requirements and authorizes saving this limited task-context update after showing its diff: clerks must correct an invalid SKU and retry without re-uploading or losing valid rows, the chosen file and rows must survive back navigation, and approval is still required before overwriting stock. Keep importer API, permissions, and all other screens unchanged. The support report is one incident, its frequency is unknown, and user checks remain planned. Keep the existing visual system, Direction contract, related targets, and all team notes intact. Do not implement or install anything, and do not modify PRODUCT.md, DESIGN.md, settings, sidecar, build state, or critique records. Show the proposed interview change, save within that authorization, and return the actual saved path with readiness and evidence limits. Do not reopen settled requirements or ask for another confirmation of the same write scope.",
+      "expected_output": "Uses the existing primary surface behind the review alias, writes only approved interview task context while preserving Direction contract/team notes/related targets and protected files, and reports the actual saved path. Distinguishes prototype readiness from user validation and does not implement or install. With the skill, uses the bundled prepare/apply guard and an external plan.",
+      "files": ["evals/fixtures/PRODUCT.md", "evals/fixtures/DESIGN.md", "evals/fixtures/surface.md"],
+      "expectations": [
+        "Saves the approved correction, retry, valid-row and back-navigation context to the existing primary brief behind the review alias, and reports its actual path.",
+        "Preserves the existing Direction contract, team notes, related-target metadata, and every protected product/design/config/build/critique file.",
+        "Keeps the overwrite-approval rule and scope exclusions, and distinguishes one reported incident and planned checks from validated user outcomes.",
+        "Does not reopen settled requirements or require another confirmation of the same authorized scope, and does not implement UI, install tools, or use another interview skill/wiki."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "We want to clarify a delivery-status page and eventually save it for Impeccable. There is no installed Impeccable executable in this fixture, and installation or filesystem searches outside the supplied project are not authorized. Only this new interview skill is available, with no other interview skill or wiki. Please continue without installing anything, without trying another workflow, and without writing project files. The requester says customers should check whether their delivery date changed, with no accounts or identity collection. They have not spoken to customers and have not chosen exact dates versus ranges. They ask to stop interviewing now and receive a provisional brief. Give the brief, name what cannot be saved, and do not ask more questions.",
+      "expected_output": "Returns a conversation-only provisional task brief, preserves privacy and unresolved date precision, separates requester intent from customer evidence, and states that saving is unavailable because the Impeccable prerequisite is missing. Does not install, search elsewhere, invoke another skill, invent paths, or write project artifacts.",
+      "files": [],
+      "expectations": [
+        "Produces a provisional conversation-only brief and honors the stop request without another interview question.",
+        "Names the missing Impeccable prerequisite and states that no brief was saved, without inventing a saved path.",
+        "Preserves no-account/no-identity constraints and unresolved exact dates versus ranges, and treats the customer need as requester intent rather than observed customer evidence.",
+        "Leaves the fixture project unchanged and does not install, search outside the authorized scope, or invoke another workflow or interview skill."
+      ]
+    }
+  ]
+}
