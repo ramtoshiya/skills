@@ -24,6 +24,10 @@ SKILLS = {
         "releases, the 72-hour cooldown, compatibility, and immutable commit pins."
     ),
     "imagegen": "Generate and edit raster images with GPT Image or Grok Imagine.",
+    "impeccable-interview": (
+        "Clarify or resume an Impeccable product task or user flow, and save "
+        "approved surface-brief context without implementing UI."
+    ),
     "mermaid-check": "Validate Mermaid diagrams with the real parser before delivery.",
     "reorganize-commits": "Reorganize branch commits when explicitly requested.",
     "stable-refs": "Keep document and plan identifiers stable through edits.",
