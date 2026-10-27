@@ -115,9 +115,23 @@ assistant turn. Skill bodies and hooks do not execute. Claude Code's built-in
 skills can remain visible and are recorded with each observation. Timeouts,
 missing skills, and failed runs are invalid observations, not non-triggers.
 
+To check implicit writing, use
+`test/fixtures/humanizer-implicit-thread-cases.json` as the first argument. It
+pairs the same user message in a published Multica thread and a private chat,
+in Korean and English, without asking for humanization. Publication context is
+stated in the prompt, not discovered through a live Multica tool. The cases'
+`expected_skills` describe the current contract: new published replies use
+`humanize` in either language, while private discussion uses neither skill.
+They do not assume that new Korean writing belongs to the editing-only skill.
+
 Report each skill's calls divided by valid runs, grouped by conversation language
 and task type. Also report target-text language, both/neither selections, and
-invalid runs. Keep generated results outside the repository and attach them to
+invalid runs. For each skill, compute the true-positive rate on cases that
+require it and the false-positive rate on cases that exclude it. Report missed
+calls separately from wrong-language calls. A skill with no positive cases has
+an undefined true-positive rate, not a zero rate. State whether the reference
+contract is the current scope or a proposed language-exclusive writing policy.
+Keep generated results outside the repository and attach them to
 the review. Three repetitions of a small synthetic corpus are a routing check,
 not a production usage estimate. This evaluator does not measure later calls,
 editing quality, hook warnings, or Codex, Pi, and Hermes behavior. Do not use
