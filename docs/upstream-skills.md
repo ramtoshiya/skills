@@ -124,6 +124,22 @@ stated in the prompt, not discovered through a live Multica tool. The cases'
 `humanize` in either language, while private discussion uses neither skill.
 They do not assume that new Korean writing belongs to the editing-only skill.
 
+For a publication-inclusive candidate, combine both corpora and freeze new
+expected labels before running either configuration: Korean publication and
+Korean source editing use `humanize-korean`, English text uses `humanize`,
+bilingual text uses both, and private discussion uses neither. Keep code-only
+changes with `humanize` when preserving that existing contract. Do not overwrite
+the baseline corpus's labels or compare scores computed under different policies.
+
+Keep experimental source clones at explicit base commits and record each local
+candidate commit. Edit the Korean fork's canonical Claude, Codex, and Hermes
+skill sources, then rebuild and check its self-contained package with
+`scripts/build_hermes_plugin.py`. Evaluate the rebuilt package, not a generated
+file edited by hand. A new-writing mode must not invent an empty editing source
+or claim source-relative gate results. Smoke-test the full skill body separately
+from description-only routing. Local evaluation does not update marketplace
+pins, plugin versions, or installed agents.
+
 Report each skill's calls divided by valid runs, grouped by conversation language
 and task type. Also report target-text language, both/neither selections, and
 invalid runs. For each skill, compute the true-positive rate on cases that
