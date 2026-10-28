@@ -155,6 +155,28 @@ def runtime_path(name):
     return name in (".claude", ".multica", "CLAUDE.md") or name.startswith((".claude/", ".multica/"))
 
 
+def semantic_index(repo):
+    # --debug exposes persistent entry flags as well as expendable stat data.
+    # Keep CE_VALID, CE_INTENT_TO_ADD and CE_SKIP_WORKTREE, not cached validity,
+    # name-length, extended-bit encoding, or cache-tree/fsmonitor extensions.
+    data = git_bytes(repo, "ls-files", "--stage", "--debug", "-z")
+    entries = []
+    pattern = re.compile(
+        rb"([0-7]{6}) ([0-9a-f]{40,64}) ([0-3])\t([^\0]+)\0"
+        rb"  ctime: [^\n]*\n  mtime: [^\n]*\n  dev: [^\n]*\n"
+        rb"  uid: [^\n]*\n  size: [^\n]*\tflags: ([0-9a-f]+)\n")
+    position = 0
+    while position < len(data):
+        match = pattern.match(data, position)
+        require(match is not None, "unsupported Git index inventory")
+        mode, oid, stage, name, flags = match.groups()
+        entries.append({"path": os.fsdecode(name), "mode": mode.decode(),
+                        "object": oid.decode(), "stage": int(stage),
+                        "flags": int(flags, 16) & 0x60008000})
+        position = match.end()
+    return sorted(entries, key=lambda entry: (entry["path"], entry["stage"]))
+
+
 def capture_baseline(repo):
     repo = repo.resolve()
     require(git_bytes(repo, "rev-parse", "--show-toplevel").decode().strip() == str(repo),
@@ -196,13 +218,12 @@ def capture_baseline(repo):
             require(total <= 32 * 1024 * 1024, "baseline content exceeds limit")
             digest = fingerprint(path)
         inventory[name] = {"mode": mode, "digest": digest}
-    index = Path(git_bytes(repo, "rev-parse", "--path-format=absolute", "--git-path", "index").decode().strip())
     value = {
-        "version": 1,
+        "version": 2,
         "head": git_bytes(repo, "rev-parse", "HEAD").decode().strip(),
         "branch": git_bytes(repo, "rev-parse", "--abbrev-ref", "HEAD").decode().strip(),
         "status": git_bytes(repo, "status", "--porcelain=v1", "--untracked-files=all").decode(),
-        "index": fingerprint(index),
+        "index": semantic_index(repo),
         "worktrees": git_bytes(repo, "worktree", "list", "--porcelain").decode(),
         "runtime_paths": sorted(name for name in inventory if runtime_path(name)),
         "inventory": inventory,
@@ -212,6 +233,9 @@ def capture_baseline(repo):
 
 
 def verify_baseline(repo, baseline):
+    require(isinstance(baseline, dict) and type(baseline.get("version")) is int
+            and baseline["version"] == 2,
+            "unknown baseline version, capture a reviewed v2 baseline")
     require(capture_baseline(repo) == baseline, "repository baseline changed")
 
 
@@ -246,26 +270,61 @@ def fingerprint(path):
 
 
 def sources(source):
-    names = ["pipeline.py", "skill/SKILL.md"] + [
+    names = ["pipeline.py", "skill/SKILL.md", "skill/evals/evals.json"] + [
         f".claude/agents/claudex-{role}.md" for role in sorted(ROLES)
     ]
     return {name: safe_path(source, name).read_bytes() for name in names}
 
 
+def role_definition(source, role):
+    require(role in ROLES, "unknown role")
+    text = safe_path(source, f".claude/agents/claudex-{role}.md").read_text()
+    parts = text.split("---\n", 2)
+    require(len(parts) == 3 and parts[0] == "", "missing frontmatter")
+    # Strict YAML subset: mapping keys with JSON values, no runtime dependency.
+    meta = {}
+    for line in parts[1].splitlines():
+        key, separator, raw = line.partition(":")
+        require(separator and re.fullmatch(r"[A-Za-z]+", key)
+                and key not in meta, "invalid frontmatter mapping")
+        meta[key] = json.loads(raw.strip())
+    return meta, parts[2]
+
+
+def dispatcher_tools(source, role):
+    validate_package(source)
+    meta, _ = role_definition(source, role)
+    return ["Agent", *meta["tools"]]
+
+
+def package_fingerprint(source):
+    validate_package(source)
+    desired = {name: hashlib.sha256(data).hexdigest() for name, data in sources(source).items()}
+    mapping = {}
+    ignored = {".git", "__pycache__", ".DS_Store", ".in_use"}
+    for item in sorted(source.rglob("*")):
+        relative = item.relative_to(source)
+        if any(part in ignored for part in relative.parts) or item.suffix == ".pyc":
+            continue
+        safe_path(source, relative.as_posix())
+        if relative.as_posix() == MANIFEST:
+            continue
+        if item.is_file():
+            mapping[relative.as_posix()] = fingerprint(item)
+        else:
+            require(item.is_dir(), "unsupported package entry")
+    require(mapping == desired, "unexpected package content")
+    if (source / MANIFEST).exists():
+        # Verify ownership before reporting an installed package as canonical.
+        reconcile(source, source, "status")
+    # Match setup/agents/sync.py exactly, including JSON's default separators.
+    return hashlib.sha256(json.dumps(mapping, sort_keys=True).encode()).hexdigest()
+
+
 def validate_package(source):
     names = set()
     for role in ROLES:
-        text = (source / f".claude/agents/claudex-{role}.md").read_text()
-        parts = text.split("---\n", 2)
-        require(len(parts) == 3 and parts[0] == "", "missing frontmatter")
-        # This package uses a strict YAML subset: mapping keys with JSON values.
-        # Keeping the subset closed avoids a third-party installer dependency.
-        meta = {}
-        for line in parts[1].splitlines():
-            key, separator, raw = line.partition(":")
-            require(separator and re.fullmatch(r"[A-Za-z]+", key)
-                    and key not in meta, "invalid frontmatter mapping")
-            meta[key] = json.loads(raw.strip())
+        meta, body = role_definition(source, role)
         require(meta["name"] == f"claudex-{role}" and meta["name"] not in names, "invalid or duplicate name")
         names.add(meta["name"])
         require(isinstance(meta["description"], str) and meta["description"], "missing description")
@@ -279,7 +338,7 @@ def validate_package(source):
         require(set(meta["tools"]) == expected, "unexpected role capability")
         require({"Bash", "Agent", "Task", "ToolSearch"} <= set(meta["disallowedTools"]), "worker can escape tool boundary")
         for section in ("control-input", "boundaries", "output"):
-            require(f"{{:#{section}}}" in parts[2], "missing role contract section")
+            require(f"{{:#{section}}}" in body, "missing role contract section")
     sources(source)
 
 
@@ -357,16 +416,23 @@ def save_active(repo, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("install", "status", "uninstall", "validate-package", "validate-control", "validate-receipt", "save-active", "select-model", "validate-worklog", "capture-baseline", "verify-baseline"))
+    parser.add_argument("operation", choices=("install", "status", "uninstall", "validate-package", "validate-control", "validate-receipt", "save-active", "select-model", "validate-worklog", "capture-baseline", "verify-baseline", "package-fingerprint", "dispatcher-tools"))
     parser.add_argument("--source", type=Path, default=Path(__file__).resolve().parent)
     parser.add_argument("--destination", type=Path, default=Path.home() / ".claude/claudex-pipeline")
     parser.add_argument("--file", type=Path)
     parser.add_argument("--control", type=Path)
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     parser.add_argument("--model")
+    parser.add_argument("--role", choices=sorted(ROLES))
     parser.add_argument("--work-kind", choices=("bounded", "reasoning"), default="reasoning")
     args = parser.parse_args()
     try:
+        if args.operation == "package-fingerprint":
+            print(package_fingerprint(args.source))
+            return 0
+        if args.operation == "dispatcher-tools":
+            print(",".join(dispatcher_tools(args.source, args.role)))
+            return 0
         if args.operation in ("install", "status", "uninstall"):
             reconcile(args.source, args.destination, args.operation)
         elif args.operation == "validate-package":

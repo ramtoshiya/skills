@@ -28,15 +28,14 @@ retry as a new cycle. Model and effort belong to the invocation, not this role.
 
 ## Output {:#output}
 
-Draft role fields only. The lead adds the native coordinator session UUID,
-worker ID and observed model/effort from runtime evidence before validation.
-Unknown observed model/effort is null. Do not invent runtime provenance.
+Return role payloads only. Do not emit receipts or runtime provenance.
+Do not include startup announcements, sentinels or unrelated commentary, even
+when local startup instructions request them.
+The lead assembles and validates receipts from trusted native evidence after
+you return. Do not supply session IDs, worker IDs, observed model or effort.
 
 Return a bounded Markdown summary of resolved and unresolved findings, changed
 paths, worktree reference and evidence that must be rerun. Any new candidate SHA
-requires independent re-review and affected verification. Include a v1 receipt
-with role, issue, attempt, candidate SHA, session ID, actual model and effort
-(or null), effort source (or null), status and opaque evidence references.
-The lead validates and records the receipt. Never include raw logs, transcripts,
-credentials or secret contents. A discovery-only probe makes no edits and
-identifies this role explicitly.
+requires independent re-review and affected verification. No raw logs,
+transcripts, credentials or secret contents. A discovery-only probe makes no
+edits and identifies this role explicitly.

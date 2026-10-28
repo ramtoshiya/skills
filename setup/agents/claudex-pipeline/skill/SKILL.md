@@ -37,10 +37,13 @@ before accepting the baseline.
 Use `pipeline.py capture-baseline --repo REPO --file BASELINE` before a read-only
 probe and `verify-baseline` with the same arguments after it. Store BASELINE in
 private control storage outside the worktree. Capture bounded initial status,
-HEAD, branch, index fingerprint, worktree inventory, and file modes/fingerprints,
+HEAD, branch, semantic index entries, worktree inventory, and file modes/fingerprints,
 including ignored runtime startup files. The helper rejects dirty tracked/index
 state and unexpected non-runtime untracked paths. It fails closed when its
-inventory or size limit is exceeded. It does not authenticate runtime ownership.
+inventory or size limit is exceeded. Baseline v2 compares staged path, mode,
+object, stage and persistent flags, ignoring Git stat/cache-tree refreshes. Do
+not use raw index bytes as an integrity assertion or accept an older schema.
+It does not authenticate runtime ownership.
 Require exact preservation or an explicitly authorized, reviewed delta. For an
 authorized implementation delta, retain the original baseline and record the
 allowed paths and changes separately. Never replace the baseline to conceal a
@@ -59,6 +62,21 @@ have no model setting. Use an explicit full model ID and `--effort` on a fresh
 Claudex coordinator session, with `CLAUDE_CODE_SUBAGENT_MODEL` set to that same
 ID. Spawn only one selected work unit in that session. Do not use role aliases,
 resume a builder as reviewer, or allow automatic fallback without checking it.
+
+Run `pipeline.py package-fingerprint` from the source and installed package and
+compare the full 64-character values with `agents:status`. This canonical logical
+file mapping excludes the ownership manifest and sync-excluded cache artifacts.
+An ownership conflict or extra included file must be resolved before dispatch.
+
+Derive the parent allowlist with `pipeline.py dispatcher-tools --role ROLE` and
+pass its comma-separated output to both `--tools` and `--allowedTools`. It is
+`Agent` plus the selected role's declared tools. An Agent-only parent strips
+file tools from workers too. Keep the worker's frontmatter restrictions intact.
+The coordinator system prompt must invoke exactly one Agent naming that role,
+wait for completion and never use the extra role tools itself or invoke another
+agent. Verify this against native events, not coordinator claims. The reporter
+parent exposes only Agent. Writers expose only Agent and their declared file
+tools. This prompt contract does not create an OS or per-caller native sandbox.
 
 Use the selection and receipt functions in the installed
 `~/.claude/claudex-pipeline/pipeline.py`. Terra requires confirmed actual max effort. Luna may use

@@ -27,16 +27,15 @@ Never post periodic progress comments. Return control before the lead's deadline
 
 ## Output {:#output}
 
-Draft role fields only. The lead adds the native coordinator session UUID,
-worker ID and observed model/effort from runtime evidence before validation.
-Unknown observed model/effort is null. Do not invent runtime provenance.
+Return role payloads only. Do not emit receipts or runtime provenance.
+Do not include startup announcements, sentinels or unrelated commentary, even
+when local startup instructions request them.
+The lead assembles and validates receipts from trusted native evidence after
+you return. Do not supply session IDs, worker IDs, observed model or effort.
 
 Return a bounded Markdown implementation summary with changed paths, behavior,
-unresolved findings, requested tests and exact worktree reference. Return a v1
-receipt with role, issue and attempt IDs, exact candidate SHA, session ID, actual
-model, actual effort (or null), trusted effort source (or null), status and
-opaque evidence references. The lead validates provenance, commits through its
-broker, and binds review to the resulting SHA. No raw logs, transcript bodies,
-credentials or secret contents in the receipt. Missing execution evidence means
-needs_work, not pass. During a discovery-only probe make no edits and identify
-this role explicitly.
+unresolved findings, requested tests and exact worktree reference. The lead
+commits through its broker and binds review to the resulting SHA. No raw logs,
+transcript bodies, credentials or secret contents. Missing execution evidence
+means needs_work, not pass. During a discovery-only probe make no edits and
+identify this role explicitly.
