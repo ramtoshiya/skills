@@ -9,10 +9,6 @@ The values are the author's preferences. Fork the repository and change them
 before you run it, and delete any entry you do not want. The agent plugins are
 installed separately, as described in [Agent plugins](agent-pack.md).
 
-The shared agent preferences use a `mem0-local` MCP server when one is configured.
-Agents search before coding tasks and save durable, verified findings. This setup
-does not install a memory backend or register an MCP server.
-
 The `agents:sync` and `agents:status` tasks also manage the scoped
 [Claudex pipeline role root](claudex-pipeline.md) from
 `setup/agents/claudex-pipeline/`, without registering its roles globally.
