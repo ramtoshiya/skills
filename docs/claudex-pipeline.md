@@ -111,11 +111,31 @@ authorize integration.
 
 ## Repository baseline
 
-Preflight requires clean tracked and index state, not an empty `git status`.
-A task runtime can supply untracked `.claude/`, `.multica/` and `CLAUDE.md` before
-native work starts. Inspect their ownership and establish that they were present
-at baseline. Their names are not an ownership guarantee, and unexpected
-product-owned untracked content must be resolved before a probe.
+Preflight requires clean product content and an unchanged index, not an empty
+`git status`. A task runtime can supply untracked `.claude/`, `.multica/` and
+`CLAUDE.md` before native work starts. Inspect their ownership and confirm that
+Multica supplied them before the agent began. Their names are not an ownership
+guarantee. Resolve unexpected product-owned untracked content before a probe.
+
+A tracked `CLAUDE.md`, including a one-line `@AGENTS.md` import, can carry a
+proven startup overlay. The helper permits it only as the sole dirty tracked
+path, with no staged changes, conflict stages, or persistent index flags. It
+requires the exact index bytes followed by the Multica writer's two-LF managed
+separator and one complete appended runtime block. The block must have the
+exact begin/end markers, original-boundary metadata matching the tracked CR/LF
+suffix and blank-file state, the runtime heading, and the matching agent identity.
+Prepended blocks, legacy blocks without boundary metadata, formatter-normalized
+boundaries, duplicate or malformed markers, markers already in the tracked
+content, mode changes, and edits outside the managed insertion fail closed.
+
+Provenance must be a bounded untracked regular `.multica/daemon_task_context.json` in this
+checkout, with `managed_by` equal to `multica-daemon-task`, canonical `agent_id`
+and `issue_id` UUIDs, and at most an optional canonical `chat_session_id` UUID.
+Unknown or duplicate fields and symlinked provenance are rejected. Parent-directory
+markers are not borrowed. This is a structural check, not cryptographic task
+authentication: the daemon marker has no checkout path, signature, or timestamp.
+The operator must confirm runtime ownership and startup timing before capture.
+A forged local marker and matching body cannot establish that ownership.
 
 Capture a bounded baseline in private storage outside the worktree:
 
@@ -126,7 +146,10 @@ uv run --offline --no-project --managed-python --python '>=3.11' python -I setup
 
 Capture before the probe and verify afterward. The record includes initial
 status, HEAD, branch, semantic index entries, registered worktrees and file modes
-and SHA-256 fingerprints. Baseline schema version 2 records each index path,
+and SHA-256 fingerprints. Baseline schema version 3 also records tracked dirty
+status and the complete overlay fingerprint, block offsets and digest, tracked
+object and digest, and the local provenance fields and fingerprint. Verification
+requires this entire record to remain identical. The semantic index records each path,
 mode, object ID, conflict stage and persistent assume-unchanged, skip-worktree
 and intent-to-add flags. Stat-cache, cache-tree, fsmonitor-valid cache state and
 index encoding changes are ignored. Ordinary Git reads can refresh these without
@@ -241,6 +264,29 @@ this evidence path. A requested flag, frontmatter, native Agent argument or
 worker self-report is not proof of actual effective effort. The manager can use
 Sol now or add trusted runtime effort instrumentation before enabling those tiers.
 
+## Lead progress and external blockers
+
+The lead owns end-to-end progress, including authorized checkout synchronization,
+package or workspace-skill refresh, installation checks, and routine verification.
+For each remaining action, decide whether the lead can execute it, can delegate
+it, or needs external input or capability. Execute or dispatch the first two
+categories. Keep the issue `in_progress` for implementation and housekeeping, or
+`in_verification` for required behavior checks. Do not create a separate product
+issue or ask the user to appoint an owner for routine pipeline work.
+
+Product-code edits and conflict resolution still belong to builders. Repository
+permissions still apply, including the rule that a skill does not install, update,
+or build a missing CLI. Ownership does not authorize bypassing those boundaries.
+
+Use `blocked` only when the lead can neither execute nor delegate the remaining
+action because of missing authority, credentials, an external system, a device,
+or a user decision. Name a verified actor and one actionable unblock condition,
+with evidence for both unavailable autonomous paths. An unspecified "integration
+owner" is not an actor. For example, if only an identified workspace administrator
+can grant device access and neither lead nor workers can grant it, request that
+specific grant from that administrator. Recheck access and resume verification
+when granted. A pending builder or unrun local test keeps work active.
+
 ## Control records and recovery
 
 `pipeline.py validate-control --file ENVELOPE` checks a closed v1 schema:
@@ -266,10 +312,35 @@ Validate with `validate-receipt --file RECEIPT --control ENVELOPE` to reject a
 stale candidate or mismatched issue, attempt or role. Keep findings and role
 payloads in Markdown. Persist JSON only after inspecting it for sensitive data.
 
-`save-active --file STATE --repo REPO` takes `version`, a validated `control`,
-`receipt_refs`, and nullable `blocker`. A blocker has `actor_ref`, `condition_ref`
-and `evidence_ref`, pointing to the bounded Markdown explanation. The command
-verifies commit objects and atomically writes:
+`validate-active --file STATE` checks a closed active-state schema with integer
+`version: 2`, a validated v1 `control`, at most sixteen `receipt_refs`, and nullable
+`blocker`. A non-null blocker has exactly these five fields:
+
+- `actor_ref`: `member:<uuid>`, `agent:<uuid>`, `system:<uuid>`, or `device:<uuid>`,
+  using a canonical nonzero UUID from an authorized directory or inventory.
+  A name or role such as `integration-owner` is rejected.
+- `lead_cannot_act_ref`: evidence of the specific missing authority or capability
+  preventing direct lead execution.
+- `lead_cannot_delegate_ref`: evidence that delegation cannot remove that constraint.
+- `condition_ref`: one actionable condition that the identified actor can satisfy.
+- `evidence_ref`: the last verification result supporting the current blocker.
+
+The last four fields are bounded safe references to Markdown explanations or native
+artifacts, not arbitrary text. A syntactically valid UUID does not prove an actor
+exists or has authority. The lead must verify the actor, read the referenced
+material, and reject fictional owners or explanations that leave an autonomous
+path open. Never invent IDs or references to satisfy the validator.
+
+Only active-state version 2 is accepted. Other versions, including v1 with null
+blockers, fail closed during validation and saving. Preserve a rejected record
+for inspection, recheck current authority and evidence, and explicitly rebuild
+v2 state. Merely changing the version or guessing missing evidence is not a valid
+recovery. Control and receipt schemas remain v1. The storage namespace below
+is independent of the record version and remains unchanged so recovery still
+finds and rejects old state instead of overlooking it.
+
+`save-active --file STATE --repo REPO` applies the same validation, verifies commit
+objects, and atomically writes:
 
 ```text
 <git-common-dir>/claudex-pipeline/v1/issues/<issue-uuid>/active.json
