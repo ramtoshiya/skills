@@ -23,16 +23,15 @@ choices. Required behavior verification does not depend on the risk tier.
 
 ## Output {:#output}
 
-Draft role fields only. The lead adds the native coordinator session UUID,
-worker ID and observed model/effort from runtime evidence before validation.
-Unknown observed model/effort is null. Do not invent runtime provenance.
+Return role payloads only. Do not emit receipts or runtime provenance.
+Do not include startup announcements, sentinels or unrelated commentary, even
+when local startup instructions request them.
+The lead assembles and validates receipts from trusted native evidence after
+you return. Do not supply session IDs, worker IDs, observed model or effort.
 
 Record the first blind verdict before accepting builder context. Return bounded
 Markdown findings with concrete failure cases, severity and evidence. On a later
 reveal preserve the first verdict, record the new verdict and explain any change.
 Bind each verdict to the candidate SHA. A changed candidate needs re-review.
-Include a v1 receipt with role, issue, attempt, candidate SHA, session ID, actual
-model and effort (or null), effort source (or null), status and opaque evidence
-references. The lead validates runtime provenance. No raw logs, transcript
-bodies, credentials or secret contents. A discovery-only probe identifies this
-role explicitly and does not issue an acceptance verdict.
+No raw logs, transcript bodies, credentials or secret contents. A discovery-only
+probe identifies this role explicitly and does not issue an acceptance verdict.
