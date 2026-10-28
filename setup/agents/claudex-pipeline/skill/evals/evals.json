@@ -89,6 +89,27 @@
         {"text": "An invented integration owner cannot justify a blocker", "action": "reject_blocker"},
         {"text": "The lead executes the authorized work with active status instead of escalating owner selection"}
       ]
+    },
+    {
+      "id": 12,
+      "prompt": "Multica appended its current managed runtime block to a tracked one-line CLAUDE.md import before the agent began. Ownership and startup timing are independently confirmed. Capture accepted the exact tracked bytes plus the two-LF separator, matching original-boundary metadata and agent identity, and regular untracked checkout-local daemon_task_context.json with canonical agent and issue IDs. Only CLAUDE.md is dirty, the index is unchanged, and all other preflight checks pass. Return action continue or block and say whether to clean, stage, or preserve the overlay.",
+      "expected_output": "continue and preserve the proven startup overlay exactly without cleaning or staging it",
+      "files": [],
+      "assertions": [{"text": "A proven tracked startup overlay is preserved and does not block preflight", "action": "continue"}]
+    },
+    {
+      "id": 13,
+      "prompt": "CLAUDE.md is the only dirty tracked file and contains a managed-looking block, but the only daemon_task_context.json is in a parent directory. Runtime ownership has not been confirmed. The operator proposes accepting it by file name or staging it to get clean status. Return action continue or block and a short reason.",
+      "expected_output": "block because names and borrowed parent provenance do not prove a checkout-local startup overlay, and do not stage or modify it to pass",
+      "files": [],
+      "assertions": [{"text": "A managed-looking file and ancestor marker are insufficient proof", "action": "block"}]
+    },
+    {
+      "id": 14,
+      "prompt": "A proven tracked runtime overlay passed baseline capture. During a read-only probe, only one instruction inside the managed block changed, with no product or staged change. The operator proposes recapturing the baseline because the changed bytes are runtime-owned. Return action continue or block and a short reason.",
+      "expected_output": "block because verification requires exact preservation of the captured overlay and recapture cannot conceal a mutation",
+      "files": [],
+      "assertions": [{"text": "Runtime ownership does not exempt post-capture block mutations", "action": "block"}]
     }
   ]
 }
