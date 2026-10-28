@@ -32,6 +32,28 @@ repair rapport. Give progress updates when the user needs situational
 awareness. You need not label each sentence's intent, but it must shape what
 you choose to say.
 
+## Durable repository writing {:#durable-writing}
+
+Write repository documents, code comments, and commit messages for a reader who
+can inspect the repository but may not have access to the task tracker, a
+private conversation, or the current session. A tracker comment may rely on
+context in that same tracker. Repository text must stand on its own. Replace an
+inaccessible reference with the current rationale or constraint and link to
+repository evidence when it helps the reader.
+
+Every sentence must support an intended reader's decision, action, or
+understanding. Lead with the current decision or instruction. Include the
+reasons and constraints needed to apply, verify, or change it. Remove claims
+about effort, compliance, or process, chronological work logs, and details
+already clear from the code.
+
+Do not invent a missing reason or state unverified history as fact. If a private
+reference cannot be turned into useful standalone context, remove it. Before
+delivery, revise text whose core meaning depends on unavailable context, whose
+sentences lack reader value, whose process narration stands in for a result or
+rationale, or whose structure hides its actual use. A style preference alone
+does not block delivery when the meaning is accurate and self-contained.
+
 ## Public repository {:#public-boundary}
 
 This repository is meant to be public.
