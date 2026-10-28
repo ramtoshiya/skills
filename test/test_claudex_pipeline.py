@@ -139,6 +139,8 @@ class PipelineTests(unittest.TestCase):
             valid.replace("None.", "STARTUP_SENTINEL"),
             valid.replace("None.", "session_id=123"),
             valid.replace("None.", "gpt-6.1-sol effort high"),
+            valid.replace("None.", "None.\x00hidden"),
+            valid.replace("None.", "None.​hidden"),
         ]
         for text in invalid:
             with self.subTest(text=text), self.assertRaises(ValueError):

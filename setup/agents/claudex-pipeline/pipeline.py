@@ -132,7 +132,8 @@ def parse_worklog(text):
         prefix = f"- {label}: "
         require(line.startswith(prefix), "missing, duplicate or reordered worklog field")
         value = line[len(prefix):]
-        require(value.strip() == value and 0 < len(value) <= 300, "expected short nonempty field")
+        require(value.strip() == value and value.isprintable() and 0 < len(value) <= 300,
+                "expected short printable nonempty field")
         require(not re.search(
             r"[{}\[\]<>`#]|sentinel|provenance|session[ _-]?id|worker[ _-]?id|"
             r"actual[ _-]?(?:model|effort)|evidence[ _-]?ref|summary[ _-]?ref|"
