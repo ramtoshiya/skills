@@ -19,6 +19,8 @@ ROLES = {
 WRITERS = {"builder", "reconciliation-builder"}
 MANIFEST = ".claudex-owned.json"
 LIMIT = 32768
+BASELINE_LIMIT = 2 * 1024 * 1024
+BASELINE_ENTRIES = 2048
 SHA = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
 MODEL = re.compile(r"gpt-[0-9]+(?:\.[0-9]+)?-(?:sol|terra|luna)\Z")
 REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9_./:-]{0,239}\Z")
@@ -33,10 +35,10 @@ def require(condition, message):
         raise Rejected(message)
 
 
-def read_json(path):
+def read_json(path, limit=LIMIT):
     with Path(path).open("rb") as stream:
-        data = stream.read(LIMIT + 1)
-    require(len(data) <= LIMIT, "JSON exceeds control limit")
+        data = stream.read(limit + 1)
+    require(len(data) <= limit, "JSON exceeds size limit")
     return json.loads(data)
 
 
@@ -146,8 +148,14 @@ def parse_worklog(text):
 def git_bytes(repo, *arguments):
     environment = os.environ.copy()
     environment["GIT_OPTIONAL_LOCKS"] = "0"
-    data = subprocess.check_output(["git", "-C", str(repo), *arguments], env=environment)
-    require(len(data) <= LIMIT, "Git inventory exceeds limit")
+    with subprocess.Popen(["git", "-C", str(repo), *arguments], env=environment,
+                          stdout=subprocess.PIPE) as process:
+        data = process.stdout.read(BASELINE_LIMIT + 1)
+        if len(data) > BASELINE_LIMIT:
+            process.kill()
+            process.wait()
+            raise Rejected("Git inventory exceeds baseline size limit")
+        require(process.wait() == 0, "Git baseline command failed")
     return data
 
 
@@ -173,6 +181,7 @@ def semantic_index(repo):
         entries.append({"path": os.fsdecode(name), "mode": mode.decode(),
                         "object": oid.decode(), "stage": int(stage),
                         "flags": int(flags, 16) & 0x60008000})
+        require(len(entries) <= BASELINE_ENTRIES, "baseline index exceeds entry limit")
         position = match.end()
     return sorted(entries, key=lambda entry: (entry["path"], entry["stage"]))
 
@@ -195,10 +204,10 @@ def capture_baseline(repo):
             for directory, directories, files in os.walk(path, followlinks=False):
                 for child in directories + files:
                     names.add((Path(directory) / child).relative_to(repo).as_posix())
-                    require(len(names) <= 2048, "baseline inventory exceeds limit")
+                    require(len(names) <= BASELINE_ENTRIES, "baseline inventory exceeds limit")
         elif path.exists() or path.is_symlink():
             names.add(name)
-    require(len(names) <= 2048, "baseline inventory exceeds limit")
+    require(len(names) <= BASELINE_ENTRIES, "baseline inventory exceeds limit")
     inventory = {}
     total = 0
     for name in sorted(names):
@@ -228,7 +237,8 @@ def capture_baseline(repo):
         "runtime_paths": sorted(name for name in inventory if runtime_path(name)),
         "inventory": inventory,
     }
-    require(len(json.dumps(value).encode()) <= LIMIT, "baseline record exceeds limit")
+    require(len(json.dumps(value, sort_keys=True, separators=(",", ":")).encode())
+            <= BASELINE_LIMIT, "baseline record exceeds size limit")
     return value
 
 
@@ -239,9 +249,10 @@ def verify_baseline(repo, baseline):
     require(capture_baseline(repo) == baseline, "repository baseline changed")
 
 
-def atomic_json(path, value):
-    data = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
-    require(len(data) <= LIMIT, "JSON exceeds control limit")
+def atomic_json(path, value, limit=LIMIT, compact=False):
+    options = {"separators": (",", ":")} if compact else {"indent": 2}
+    data = (json.dumps(value, sort_keys=True, **options) + "\n").encode()
+    require(len(data) <= limit, "JSON exceeds size limit")
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     fd, temporary = tempfile.mkstemp(dir=path.parent)
     try:
@@ -443,9 +454,9 @@ def main():
             require(args.file is not None, "--file is required")
             if args.operation == "capture-baseline":
                 require(not args.file.exists(), "baseline file already exists")
-                atomic_json(args.file, capture_baseline(args.repo))
+                atomic_json(args.file, capture_baseline(args.repo), BASELINE_LIMIT, compact=True)
             elif args.operation == "verify-baseline":
-                verify_baseline(args.repo, read_json(args.file))
+                verify_baseline(args.repo, read_json(args.file, BASELINE_LIMIT))
             else:
                 with args.file.open("rb") as stream:
                     text = stream.read(2049)
