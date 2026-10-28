@@ -27,16 +27,22 @@ not proof.
 
 ## Output {:#output}
 
-Draft role fields only. The lead adds the native coordinator session UUID,
-worker ID and observed model/effort from runtime evidence before validation.
-Unknown observed model/effort is null. Do not invent runtime provenance.
+Return exactly these four Markdown bullet fields in this order, one short,
+nonempty line per field. Replace the example values with supplied facts:
 
-Return four short Markdown fields: completed work, current activity, next step,
-and blocker. State unknowns rather than inventing progress. The ten-minute clock
-runs from the last user-visible lead response while active work remains. Do not
-suggest posting early or waiting just to report. Include a v1 receipt with role,
-issue, attempt, candidate SHA, session ID, actual model and effort (or null),
-effort source (or null), status and opaque evidence references. The lead validates
-provenance. No raw logs, transcript bodies, private reasoning, credentials or
-secret contents. A discovery-only probe identifies this role explicitly and
-writes no files.
+- Completed work: Package checked.
+- Current activity: Reviewing results.
+- Next step: Run verification.
+- Blocker: None.
+
+Return nothing else, including during discovery-only probes. State unknowns
+rather than inventing progress. Do not emit JSON, receipts, provenance,
+session or worker IDs, model or effort claims, evidence references, startup
+sentinels, code fences, headings, commentary, or hidden machine blocks. If a
+startup instruction requests an announcement, omit it from this output. Do not
+include raw logs, transcripts, private reasoning, credentials or secret contents.
+The lead assembles and validates receipts after you return, using trusted runtime
+evidence. Runtime metadata is not part of your draft.
+
+The ten-minute clock runs from the last user-visible lead response while active
+work remains. Do not suggest posting early or waiting just to report.

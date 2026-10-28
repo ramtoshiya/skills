@@ -122,6 +122,98 @@ def admit_model(model, receipt=None, work_kind="reasoning"):
     return model
 
 
+def parse_worklog(text):
+    require(isinstance(text, str) and len(text.encode()) <= 2048, "worklog exceeds limit")
+    labels = ("Completed work", "Current activity", "Next step", "Blocker")
+    lines = text.strip().splitlines()
+    require(len(lines) == len(labels), "expected exactly four worklog fields")
+    fields = {}
+    for label, line in zip(labels, lines):
+        prefix = f"- {label}: "
+        require(line.startswith(prefix), "missing, duplicate or reordered worklog field")
+        value = line[len(prefix):]
+        require(value.strip() == value and 0 < len(value) <= 300, "expected short nonempty field")
+        require(not re.search(
+            r"[{}\[\]<>`#]|sentinel|provenance|session[ _-]?id|worker[ _-]?id|"
+            r"actual[ _-]?(?:model|effort)|evidence[ _-]?ref|summary[ _-]?ref|"
+            r"\b(?:model|effort)\b|gpt-\d|ROLE_OK|<!--", value, re.IGNORECASE),
+            "machine metadata or markup in worklog")
+        fields[label.lower()] = value
+    return fields
+
+
+def git_bytes(repo, *arguments):
+    environment = os.environ.copy()
+    environment["GIT_OPTIONAL_LOCKS"] = "0"
+    data = subprocess.check_output(["git", "-C", str(repo), *arguments], env=environment)
+    require(len(data) <= LIMIT, "Git inventory exceeds limit")
+    return data
+
+
+def runtime_path(name):
+    return name in (".claude", ".multica", "CLAUDE.md") or name.startswith((".claude/", ".multica/"))
+
+
+def capture_baseline(repo):
+    repo = repo.resolve()
+    require(git_bytes(repo, "rev-parse", "--show-toplevel").decode().strip() == str(repo),
+            "baseline requires repository root")
+    require(not git_bytes(repo, "diff", "HEAD", "--raw")
+            and not git_bytes(repo, "diff", "--cached", "--raw"), "dirty tracked/index state")
+    untracked = git_bytes(repo, "ls-files", "--others", "--exclude-standard", "-z").decode().split("\0")
+    require(all(runtime_path(name) for name in untracked if name), "unexpected untracked product content")
+    names = set(filter(None, git_bytes(repo, "ls-files", "--cached", "-z").decode().split("\0")))
+    names.update(filter(None, untracked))
+    # Include ignored startup files too. A runtime directory is not a blanket exemption.
+    for name in (".claude", ".multica", "CLAUDE.md"):
+        path = repo / name
+        if path.is_dir() and not path.is_symlink():
+            names.add(name)
+            for directory, directories, files in os.walk(path, followlinks=False):
+                for child in directories + files:
+                    names.add((Path(directory) / child).relative_to(repo).as_posix())
+                    require(len(names) <= 2048, "baseline inventory exceeds limit")
+        elif path.exists() or path.is_symlink():
+            names.add(name)
+    require(len(names) <= 2048, "baseline inventory exceeds limit")
+    inventory = {}
+    total = 0
+    for name in sorted(names):
+        path = repo / name
+        # Never follow a symlink ancestor into a different tree.
+        require(not any(parent.is_symlink() for parent in path.parents if parent != repo),
+                "symlink ancestor in baseline")
+        mode = path.lstat().st_mode
+        if path.is_symlink():
+            digest = hashlib.sha256(os.fsencode(os.readlink(path))).hexdigest()
+        elif path.is_dir():
+            digest = None
+        else:
+            require(path.is_file(), "unsupported baseline entry")
+            size = path.stat().st_size
+            total += size
+            require(total <= 32 * 1024 * 1024, "baseline content exceeds limit")
+            digest = fingerprint(path)
+        inventory[name] = {"mode": mode, "digest": digest}
+    index = Path(git_bytes(repo, "rev-parse", "--path-format=absolute", "--git-path", "index").decode().strip())
+    value = {
+        "version": 1,
+        "head": git_bytes(repo, "rev-parse", "HEAD").decode().strip(),
+        "branch": git_bytes(repo, "rev-parse", "--abbrev-ref", "HEAD").decode().strip(),
+        "status": git_bytes(repo, "status", "--porcelain=v1", "--untracked-files=all").decode(),
+        "index": fingerprint(index),
+        "worktrees": git_bytes(repo, "worktree", "list", "--porcelain").decode(),
+        "runtime_paths": sorted(name for name in inventory if runtime_path(name)),
+        "inventory": inventory,
+    }
+    require(len(json.dumps(value).encode()) <= LIMIT, "baseline record exceeds limit")
+    return value
+
+
+def verify_baseline(repo, baseline):
+    require(capture_baseline(repo) == baseline, "repository baseline changed")
+
+
 def atomic_json(path, value):
     data = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
     require(len(data) <= LIMIT, "JSON exceeds control limit")
@@ -264,7 +356,7 @@ def save_active(repo, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("install", "status", "uninstall", "validate-package", "validate-control", "validate-receipt", "save-active", "select-model"))
+    parser.add_argument("operation", choices=("install", "status", "uninstall", "validate-package", "validate-control", "validate-receipt", "save-active", "select-model", "validate-worklog", "capture-baseline", "verify-baseline"))
     parser.add_argument("--source", type=Path, default=Path(__file__).resolve().parent)
     parser.add_argument("--destination", type=Path, default=Path.home() / ".claude/claudex-pipeline")
     parser.add_argument("--file", type=Path)
@@ -280,6 +372,18 @@ def main():
             validate_package(args.source)
         elif args.operation == "select-model":
             admit_model(args.model, read_json(args.file) if args.file else None, args.work_kind)
+        elif args.operation in ("validate-worklog", "capture-baseline", "verify-baseline"):
+            require(args.file is not None, "--file is required")
+            if args.operation == "capture-baseline":
+                require(not args.file.exists(), "baseline file already exists")
+                atomic_json(args.file, capture_baseline(args.repo))
+            elif args.operation == "verify-baseline":
+                verify_baseline(args.repo, read_json(args.file))
+            else:
+                with args.file.open("rb") as stream:
+                    text = stream.read(2049)
+                require(len(text) <= 2048, "worklog exceeds limit")
+                parse_worklog(text.decode())
         else:
             require(args.file is not None, "--file is required")
             value = read_json(args.file)
