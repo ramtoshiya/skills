@@ -42,3 +42,18 @@ Follow the caller-approved workflow for scope, review, and completion. Local
 commit permission does not authorize pushing, publishing, destructive history
 changes, or changing repository policy. Report real blockers rather than
 silently narrowing the task.
+
+## Shared memory {:#shared-memory}
+
+When the `mem0-local` MCP server is available, search for relevant memory before
+starting a coding task. Pass the current absolute project path. Verify recalled
+claims against the repository and current instructions before acting on them.
+
+Save durable, verified decisions, constraints, conventions, and proven fixes
+when they would help a later session. Use project scope for repository knowledge
+and personal scope for preferences that apply across projects. Never store
+credentials, full transcripts, temporary plans, or unverified claims. Delete a
+memory when the user asks to forget it.
+
+If local memory is unavailable, continue the task and report the limitation
+briefly. Do not treat a memory failure as a reason to stop unrelated work.
