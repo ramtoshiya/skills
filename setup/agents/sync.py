@@ -600,13 +600,24 @@ class Sync:
     def process(self, hosts, apply=False, selected=None):
         if selected is not None:
             selected = set(selected)
-            known = {entry["name"] for entry in self.marketplace["plugins"]}
+            known = {entry["name"] for entry in self.marketplace["plugins"]} | {"claudex-pipeline"}
             known.update(key.split(":", 1)[1] for key in self.state["packages"])
             if selected - known:
                 raise Conflict(f"Unknown plugins: {', '.join(sorted(selected - known))}")
         for host in hosts:
             if not shutil.which(host):
                 self.record(host, "host", "absent", "executable not on PATH")
+                continue
+            if host == "claude" and (selected is None or "claudex-pipeline" in selected):
+                source = self.root / "setup/agents/claudex-pipeline"
+                try:
+                    run(sys.executable, "-I", str(source / "pipeline.py"),
+                        "install" if apply else "status", "--destination",
+                        str(self.homes[host] / "claudex-pipeline"))
+                    self.record(host, "claudex-pipeline", "ok", fingerprint(files(source))[:12])
+                except ERRORS as error:
+                    self.record(host, "claudex-pipeline", "conflict", str(error))
+            if selected == {"claudex-pipeline"}:
                 continue
             try:
                 if host in {"claude", "codex"}:

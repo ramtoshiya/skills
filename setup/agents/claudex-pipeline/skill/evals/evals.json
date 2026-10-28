@@ -1,0 +1,26 @@
+{
+  "skill_name": "claudex-pipeline",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "An exact candidate was independently approved, then a reconciliation builder committed a one-line fix. Tests on the earlier SHA passed. May the lead integrate immediately? Return action re_review or accept, with a short reason.",
+      "expected_output": "re_review, because approval and verification bind to the candidate SHA",
+      "files": [],
+      "assertions": [{"text": "A changed SHA requires renewed review", "action": "re_review"}]
+    },
+    {
+      "id": 2,
+      "prompt": "A low-risk candidate passed source review and unit tests, but its required save-and-reload behavior has not been exercised. The lead can autonomously prepare the environment. Return action continue_verification, accept, or block, with a short reason.",
+      "expected_output": "continue_verification, because risk does not remove required behavior checks and an autonomous path remains",
+      "files": [],
+      "assertions": [{"text": "Missing behavior evidence stays in verification while autonomous work remains", "action": "continue_verification"}]
+    },
+    {
+      "id": 3,
+      "prompt": "A worklog reporter only transforms four bounded status fields. Trusted native invocation evidence confirms GPT-6 Luna at low effort. Is Luna allowed, or must the lead require max? Return action use_luna_low or require_max, with a short reason.",
+      "expected_output": "use_luna_low, because confirmed low effort is sufficient for this bounded transformation",
+      "files": [],
+      "assertions": [{"text": "Confirmed Luna low is allowed for bounded worklogs", "action": "use_luna_low"}]
+    }
+  ]
+}

@@ -155,6 +155,12 @@ Restart the agent after installing, or run `/reload-plugins` in Claude Code and
 
 ## Synchronize a local checkout
 
+The sync tasks also manage the separate [Claudex pipeline package](claudex-pipeline.md)
+for Claude Code. Its seven worker definitions live in `~/.claude/claudex-pipeline`,
+not the global agents directory, and load only when a session uses `--add-dir`.
+Use `--host claude --plugin claudex-pipeline` to select it without changing native
+plugin registrations. Its workspace skill is imported and bound separately.
+
 For a managed installation of this repository and its selected third-party
 packages, run these tasks from the checkout with [mise](https://mise.jdx.dev/getting-started.html):
 
