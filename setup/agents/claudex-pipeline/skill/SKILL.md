@@ -123,9 +123,34 @@ verification completeness. Do not invent missing property definitions.
 
 Select required verification from the changed behavior and contract regardless
 of risk. Missing required behavior evidence keeps the issue in verification
-while an autonomous path exists. Use `blocked` only when no autonomous path
-remains. Record blocker, responsible actor, unblock condition, and last evidence
-in the issue-local active state before asking for help.
+while an autonomous path exists.
+
+## End-to-end progress ownership {:#progress-ownership}
+
+The lead owns progress through every prerequisite, not only worker dispatch.
+Before declaring a blocker, classify each remaining action as executable by the
+lead, delegable by the lead, or requiring genuinely external input or capability.
+Execute the first category and dispatch the second with a concrete scope and
+verification requirement. Keep `in_progress` for implementation and housekeeping,
+or `in_verification` while collecting required behavior evidence. A queued worker,
+unrun test, or unfinished authorized prerequisite is not a blocker.
+
+Checkout synchronization, package or skill refresh, installation checks, and
+routine verification are lead-owned when the issue and repository policy authorize
+them. Do not create a new product issue or ask the user to choose an owner for
+this housekeeping. This does not permit product-code edits by the lead, unsafe
+checkout changes, extra permissions, or installing/updating/building a CLI from
+this skill against repository policy. Delegate product fixes to a builder.
+
+Use `blocked` only when neither execution nor delegation can proceed because of
+a concrete missing authority, credential, external system, device, or user decision.
+Identify the actual actor who can remove that constraint and one actionable unblock
+condition. Never invent an unspecified "integration owner" or "pipeline owner".
+Persist references proving why the lead cannot act, why it cannot delegate, the
+unblock condition, and the last verification evidence before asking for help.
+If the actor is unknown, say what identity or authority is missing and request it
+from a verified responsible actor. Do not fabricate an actor ID to pass validation.
+Recheck the condition and resume active work when the external constraint clears.
 
 Integrate automatically only if repository-local policy explicitly permits it.
 Otherwise wait in `awaiting_approval`. No implicit merge authorization comes
@@ -186,9 +211,25 @@ Resolve `git rev-parse --git-common-dir` to an absolute directory. The only
 same-machine pointer is `<git-common-dir>/claudex-pipeline/v1/issues/<issue-uuid>/active.json`.
 Store attempt handoffs and receipts beside it under `attempts/<attempt-uuid>/`.
 Do not create a repository-wide accumulating index. `pipeline.py save-active`
-validates and atomically updates the pointer. On restart verify issue, attempt,
-base and candidate objects, session status, worktree ownership, receipts and
-follow-up comments before resuming. Do not infer completion from a stale pointer.
+validates and atomically updates the pointer. Active records require integer
+`version: 2`, with a v1 `control`, at most sixteen `receipt_refs`, and nullable
+`blocker`. A non-null blocker has exactly `actor_ref`, `lead_cannot_act_ref`,
+`lead_cannot_delegate_ref`, `condition_ref`, and `evidence_ref`. The actor is a
+verified `member:<uuid>`, `agent:<uuid>`, `system:<uuid>`, or `device:<uuid>` with
+a canonical nonzero UUID, not a role label. Other fields are safe references to
+the bounded explanations and latest verification evidence, not inline prose.
+Verify actor identity and authority from an authorized directory or inventory.
+Read the referenced evidence and confirm it proves both unavailable autonomous
+paths and one actionable condition. Syntax validation cannot prove those facts.
+
+On restart run `pipeline.py validate-active --file STATE`, then verify issue,
+attempt, base and candidate objects, session status, worktree ownership, receipts
+and follow-up comments before resuming. Reject all other active versions, including
+v1 records with null blockers. Do not upgrade by changing the version number or
+filling fields with guesses. Preserve the rejected record, recheck current authority
+and evidence, then explicitly rebuild v2 state. The `/v1/` storage namespace and
+v1 control/receipt schemas stay unchanged. Do not infer completion from a stale
+pointer.
 
 Control and provenance are typed, closed-schema JSON. Role payloads and findings
 remain Markdown. Raw logs and transcripts stay in native artifact storage.

@@ -403,17 +403,30 @@ def reconcile(source, destination, operation):
         atomic_json(manifest_path, new)
 
 
-def save_active(repo, value):
+def validate_active(value):
     keys(value, "version control receipt_refs blocker")
-    require(type(value["version"]) is int and value["version"] == 1, "unknown version")
-    control = validate_control(value["control"])
+    require(type(value["version"]) is int and value["version"] == 2,
+            "unsupported active version, revalidate current evidence and rebuild as v2")
+    validate_control(value["control"])
     require(isinstance(value["receipt_refs"], list) and len(value["receipt_refs"]) <= 16, "too many receipts")
     for ref in value["receipt_refs"]:
         reference(ref)
-    if value["blocker"] is not None:
-        keys(value["blocker"], "actor_ref condition_ref evidence_ref")
-        for ref in value["blocker"].values():
+    blocker = value["blocker"]
+    if blocker is not None:
+        keys(blocker, "actor_ref lead_cannot_act_ref lead_cannot_delegate_ref condition_ref evidence_ref")
+        for ref in blocker.values():
             reference(ref)
+        kind, separator, actor_id = blocker["actor_ref"].partition(":")
+        require(separator and kind in ("member", "agent", "system", "device"),
+                "blocker requires a typed concrete actor UUID")
+        identifier(actor_id)
+        require(uuid.UUID(actor_id).int != 0, "blocker requires a nonzero actor UUID")
+    return value
+
+
+def save_active(repo, value):
+    validate_active(value)
+    control = value["control"]
     common = Path(subprocess.check_output(
         ["git", "-C", str(repo), "rev-parse", "--path-format=absolute", "--git-common-dir"], text=True).strip())
     for sha in (control["base_sha"], control["candidate_sha"]):
@@ -427,7 +440,7 @@ def save_active(repo, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("install", "status", "uninstall", "validate-package", "validate-control", "validate-receipt", "save-active", "select-model", "validate-worklog", "capture-baseline", "verify-baseline", "package-fingerprint", "dispatcher-tools"))
+    parser.add_argument("operation", choices=("install", "status", "uninstall", "validate-package", "validate-control", "validate-receipt", "validate-active", "save-active", "select-model", "validate-worklog", "capture-baseline", "verify-baseline", "package-fingerprint", "dispatcher-tools"))
     parser.add_argument("--source", type=Path, default=Path(__file__).resolve().parent)
     parser.add_argument("--destination", type=Path, default=Path.home() / ".claude/claudex-pipeline")
     parser.add_argument("--file", type=Path)
@@ -467,6 +480,8 @@ def main():
             value = read_json(args.file)
             if args.operation == "save-active":
                 save_active(args.repo, value)
+            elif args.operation == "validate-active":
+                validate_active(value)
             elif args.operation == "validate-control":
                 validate_control(value)
             else:

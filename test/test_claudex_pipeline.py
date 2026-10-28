@@ -479,7 +479,7 @@ class PipelineTests(unittest.TestCase):
         sha = git("rev-parse", "HEAD")
         worktree = self.root / "worktree"
         git("worktree", "add", "-q", "--detach", str(worktree))
-        record = {"version": 1, "control": control() | {"base_sha": sha, "candidate_sha": sha},
+        record = {"version": 2, "control": control() | {"base_sha": sha, "candidate_sha": sha},
                   "receipt_refs": ["attempts/receipt.json"], "blocker": None}
         path = pipeline.save_active(repo, record)
         self.assertEqual(path, pipeline.save_active(worktree, record))
@@ -489,6 +489,68 @@ class PipelineTests(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError):
             pipeline.save_active(repo, record)
         self.assertEqual(json.loads(path.read_text())["control"]["candidate_sha"], sha)
+
+    def test_active_cli_requires_external_blocker_proof_and_preserves_pointer(self):
+        repo = self.root / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+        subprocess.run(["git", "-C", str(repo), "-c", "user.name=Test", "-c",
+                        "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "initial"], check=True)
+        sha = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        blocker = {
+            "actor_ref": "member:92d37d65-d673-46cd-ae57-8e55172ba60d",
+            "lead_cannot_act_ref": "attempts/credential-authority.md",
+            "lead_cannot_delegate_ref": "attempts/worker-permissions.md",
+            "condition_ref": "attempts/grant-device-access.md",
+            "evidence_ref": "native/access-check-1",
+        }
+        record = {"version": 2, "control": control() | {"base_sha": sha, "candidate_sha": sha},
+                  "receipt_refs": [], "blocker": blocker}
+        file = self.root / "active-input.json"
+        command = [sys.executable, "-I", str(SOURCE / "pipeline.py")]
+        def invoke(operation, value):
+            file.write_text(json.dumps(value))
+            return subprocess.run(command + [operation, "--file", str(file), "--repo", str(repo)],
+                                  capture_output=True, text=True)
+        result = invoke("save-active", record)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        pointer = repo / ".git/claudex-pipeline/v1/issues" / record["control"]["issue_id"] / "active.json"
+        saved = pointer.read_bytes()
+        self.assertEqual(json.loads(saved), record)
+        for actor_kind in ("member", "agent", "system", "device"):
+            value = record | {"blocker": blocker | {"actor_ref": actor_kind + ":92d37d65-d673-46cd-ae57-8e55172ba60d"}}
+            self.assertEqual(invoke("validate-active", value).returncode, 0)
+        self.assertEqual(invoke("validate-active", record | {"blocker": None}).returncode, 0)
+        invalid = [("version", record | {"version": version}) for version in (1, 3, True, "2")]
+        invalid += [("legacy-null", record | {"version": 1, "blocker": None}),
+                    ("extra-root", record | {"raw_transcript": "SECRET_SENTINEL"}),
+                    ("receipts", record | {"receipt_refs": ["native/evidence"] * 17}),
+                    ("unsafe-receipt", record | {"receipt_refs": ["../secret"]}),
+                    ("control", record | {"control": record["control"] | {"version": 2}})]
+        for field in blocker:
+            invalid.append(("missing-" + field, record | {"blocker": {k: v for k, v in blocker.items() if k != field}}))
+            for unsafe in (None, "", "../secret", "/private/secret", "https://example.invalid/secret",
+                           "arbitrary prose SECRET_SENTINEL", "x" * 241):
+                invalid.append((field, record | {"blocker": blocker | {field: unsafe}}))
+        for vague in ("integration-owner", "integration owner", "member:integration-owner",
+                      "member:00000000-0000-0000-0000-000000000000", "owner:92d37d65-d673-46cd-ae57-8e55172ba60d"):
+            invalid.append(("vague-actor", record | {"blocker": blocker | {"actor_ref": vague}}))
+        invalid += [("extra-blocker", record | {"blocker": blocker | {"reason": "SECRET_SENTINEL"}}),
+                    ("empty-blocker", record | {"blocker": {}}),
+                    ("prose-blocker", record | {"blocker": "integration owner will handle it"}),
+                    ("legacy-blocker", record | {"blocker": {k: blocker[k] for k in ("actor_ref", "condition_ref", "evidence_ref")}})]
+        for name, value in invalid:
+            with self.subTest(name=name):
+                result = invoke("save-active", value)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn("SECRET_SENTINEL", result.stdout + result.stderr)
+                self.assertEqual(pointer.read_bytes(), saved)
+        file.write_text(" " * (pipeline.LIMIT + 1))
+        result = subprocess.run(command + ["save-active", "--file", str(file), "--repo", str(repo)],
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("size limit", result.stderr)
+        self.assertEqual(pointer.read_bytes(), saved)
 
     def test_cli_does_not_echo_rejected_secret_body(self):
         bad = self.root / "bad.json"
