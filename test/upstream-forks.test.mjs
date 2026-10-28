@@ -21,6 +21,7 @@ test('monitors every fork used by the marketplace', async () => {
     { fork: 'ramtoshiya/oh-my-design', branch: 'main', upstream: 'kwakseongjae/oh-my-design', upstreamBranch: 'main' },
   ]);
   assert.deepEqual(pairs.map(({ fork }) => fork).sort(), marketplaceForks);
+  assert.equal(new Set(marketplace.plugins.map(({ name }) => name)).size, marketplace.plugins.length);
 });
 
 test('compares upstream base against fork head, including encoded branch names', () => {
