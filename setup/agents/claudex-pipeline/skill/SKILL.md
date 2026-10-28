@@ -40,7 +40,11 @@ private control storage outside the worktree. Capture bounded initial status,
 HEAD, branch, semantic index entries, worktree inventory, and file modes/fingerprints,
 including ignored runtime startup files. The helper rejects dirty tracked/index
 state and unexpected non-runtime untracked paths. It fails closed when its
-inventory or size limit is exceeded. Baseline v2 compares staged path, mode,
+inventory or size limit is exceeded: 2,048 inventory entries, 2,048 semantic
+index entries, 32 MiB of file content, and 2 MiB per JSON record or Git inventory
+output. Capture uses deterministic compact JSON. Verification also accepts
+formatted JSON within the baseline bound. Control envelopes remain limited to
+32 KiB. Baseline v2 compares staged path, mode,
 object, stage and persistent flags, ignoring Git stat/cache-tree refreshes. Do
 not use raw index bytes as an integrity assertion or accept an older schema.
 It does not authenticate runtime ownership.
@@ -50,10 +54,27 @@ allowed paths and changes separately. Never replace the baseline to conceal a
 mutation. Do not delete, ignore, stage or commit runtime-owned files to make a
 check green.
 
-Read
-`AGENTS.local.md` through `CLAUDE.local.md` importing it. Keep these files local.
-A tracked `.worktreeinclude` and the outer-worktree copier must propagate them.
-Check that bridge rather than assuming native isolation copies ignored files.
+Inspect the source repository and current project instructions for an explicit
+local-policy requirement. `AGENTS.md` and `CLAUDE.md` are ordinary repository
+instructions when present, not mandatory files or bridge members. The optional
+local-policy bridge consists of `AGENTS.local.md`, `CLAUDE.local.md` importing it,
+and a tracked `.worktreeinclude` selecting both local files.
+
+If any bridge member exists (including a dangling symlink), or source/project
+policy explicitly requires the bridge, validate all three as regular non-symlink
+files. Read the local policy through its import and verify manifest selection,
+the outer-worktree copier, and identical propagation into outer and native
+worktrees before product work. A partial bridge, missing import, untracked or
+incomplete manifest, or missing/changed propagated policy blocks preflight with
+the specific failed check. Do not assume native isolation copies ignored files.
+Keep local policy private and never create missing policy to make preflight pass.
+
+If all bridge members are absent and no source/project instruction requires them,
+record `absent-not-required` and continue. This also applies when none of
+`AGENTS.md`, `CLAUDE.md`, `AGENTS.local.md`, `CLAUDE.local.md`, or `.worktreeinclude`
+exists. Use the issue contract, ordinary tracked instructions when present,
+Multica runtime instructions, and the bound workspace skill. Absence creates no
+new authority. A check or propagation failure is not `absent-not-required`.
 
 Load the installed role root with `--add-dir ~/.claude/claudex-pipeline`.
 Use fresh sessions for each work unit. Choose model and effort by total
@@ -126,7 +147,8 @@ IDs or safe relative paths. Never paste transcript bodies into lead context.
 Parallelize independent scopes only, in separate worktrees with one writer per
 worktree. Builder and reconciliation roles use native `isolation: worktree`.
 Record the returned worktree and commit. Do not delete a worktree with active
-work. Missing local policy or conflicting ownership requires preflight repair.
+work. A required or partial policy bridge or conflicting ownership requires
+preflight repair. An absent, unrequired bridge does not.
 
 A reviewer is a separate fresh session with no builder transcript reference in
 its first-pass envelope. Give contract, base SHA, candidate SHA, diff, required

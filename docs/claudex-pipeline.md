@@ -92,10 +92,22 @@ Confirm the workspace already has the agreed lifecycle states,
 `Claudex Risk` properties. Their definitions and lead creation remain workspace
 administration tasks. Risk is consequence, not test completeness.
 
-Before product work, verify project-local `AGENTS.local.md` and its
-`CLAUDE.local.md` import are present in the outer and native worktrees. Use the
-tracked `.worktreeinclude` and the outer-worktree copier. This package does not
-copy private project policy, grant credentials, or authorize integration.
+The local-policy bridge is optional unless source repository or project
+instructions explicitly require it. Its members are `AGENTS.local.md`,
+`CLAUDE.local.md` importing it, and a tracked `.worktreeinclude` selecting both.
+If any member exists, including a dangling symlink, validate the complete bridge
+as regular non-symlink files, its import and manifest selection, the outer-worktree
+copier, and identical propagation into outer and native worktrees. A partial or
+required bridge fails preflight with the specific missing or invalid check.
+
+If no member exists and policy does not require one, record
+`absent-not-required` and continue using the issue contract, ordinary tracked
+repository instructions when present, Multica runtime instructions, and the
+bound workspace skill. `AGENTS.md` and `CLAUDE.md` are optional ordinary
+instructions, not bridge members. A repository with none of these five files
+can proceed. Do not invent missing policy or turn a failed check into absence.
+This package does not copy private project policy, grant credentials, or
+authorize integration.
 
 ## Repository baseline
 
@@ -120,8 +132,12 @@ and intent-to-add flags. Stat-cache, cache-tree, fsmonitor-valid cache state and
 index encoding changes are ignored. Ordinary Git reads can refresh these without
 changing staged content. Older baseline schemas are rejected, never interpreted
 as semantic records. Ignored runtime startup files are included. Inventory is
-limited to 2,048 entries, 32 MiB of file content and a 32 KiB record. Exceeding a
-limit rejects capture, it does not silently omit entries. Git-ignored content
+limited to 2,048 entries and 32 MiB of file content. Semantic index entries are
+separately limited to 2,048. Baseline JSON and each Git inventory output have a
+2 MiB size limit, separate from the unchanged 32 KiB control-envelope limit.
+Capture writes deterministic compact JSON. Verification accepts compact or
+formatted records within the baseline limit without dropping evidence.
+Exceeding a limit rejects capture or verification, it does not omit entries. Git-ignored content
 outside the runtime startup paths is not covered. Serialize work in the checkout
 because this is a comparison helper, not a filesystem sandbox or atomic snapshot.
 The record contains paths and status, so do not publish it without inspection.

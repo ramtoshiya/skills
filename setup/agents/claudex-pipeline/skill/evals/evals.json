@@ -21,6 +21,34 @@
       "expected_output": "use_luna_low, because confirmed low effort is sufficient for this bounded transformation",
       "files": [],
       "assertions": [{"text": "Confirmed Luna low is allowed for bounded worklogs", "action": "use_luna_low"}]
+    },
+    {
+      "id": 4,
+      "prompt": "The source repository and its outer and native worktrees have no AGENTS.md, CLAUDE.md, AGENTS.local.md, CLAUDE.local.md, or .worktreeinclude. Current project policy does not require a local bridge. The issue contract, Multica runtime instructions, and bound workspace skill are available. Other preflight checks pass. Return action continue or block, the bridge status, and whether to create policy files.",
+      "expected_output": "continue with absent-not-required, using the issue contract, runtime instructions, and bound workspace skill without creating policy files",
+      "files": [],
+      "assertions": [{"text": "An instruction-free repository does not require invented local policy", "action": "continue"}]
+    },
+    {
+      "id": 5,
+      "prompt": "The source repository has only AGENTS.local.md. CLAUDE.local.md and .worktreeinclude are missing. No project instruction explicitly requires a bridge. Return action continue or block and a specific diagnostic.",
+      "expected_output": "block because a partial bridge requires the missing CLAUDE.local.md import and tracked .worktreeinclude, not absent-not-required",
+      "files": [],
+      "assertions": [{"text": "Any bridge member requires complete validation", "action": "block"}]
+    },
+    {
+      "id": 6,
+      "prompt": "All local bridge files are absent, but current project instructions explicitly require local policy propagation. Return action continue or block and a specific diagnostic.",
+      "expected_output": "block because the explicitly required local-policy bridge is missing",
+      "files": [],
+      "assertions": [{"text": "Explicit policy requirements fail closed even when all files are absent", "action": "block"}]
+    },
+    {
+      "id": 7,
+      "prompt": "The complete source bridge is valid and reaches the outer worktree, but the native worktree has a changed AGENTS.local.md. Return action continue or block and a specific diagnostic.",
+      "expected_output": "block because propagated native policy differs from the validated source",
+      "files": [],
+      "assertions": [{"text": "Policy propagation must preserve the validated content", "action": "block"}]
     }
   ]
 }
