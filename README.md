@@ -17,6 +17,7 @@ preferences, so fork the repository and edit it before you run it.
 | CLIProxyAPI provider | A Pi extension that lists the Claude and GPT models of a [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) server and talks to each in its native protocol | [README](pi/cliproxy-provider/README.md) |
 | `sidecar` | A macOS command that connects an iPad as a Sidecar display, and an iPad shortcut that runs it over SSH | [README](cli/sidecar/README.md) |
 | `claudex` | Runs Claude Code with GPT models discovered from CLIProxyAPI | [README](cli/claudex/README.md) |
+| `worktreeinclude` | Copies selected ignored files into new Git worktrees through an explicitly installed repository hook | [README](cli/worktreeinclude/README.md) |
 | `excalidraw-board` | Proof-of-concept command for reading and editing shared Excalidraw rooms | [README](cli/excalidraw-board/README.md) |
 | `excalidraw-web-export` | Headless PNG export through a deployed Excalidraw app, from a local file or saved room snapshot | [README](cli/excalidraw-web-export/README.md) |
 
@@ -86,6 +87,7 @@ mise.toml, setup/                 Machine setup and the files it copies into pla
 pi/cliproxy-provider/             Pi provider package, installed separately
 cli/sidecar/                      Standalone macOS command
 cli/claudex/                      Claude Code launcher for CLIProxyAPI GPT models
+cli/worktreeinclude/              Ignored-file copier with explicit Git hook management
 cli/excalidraw-board/              Standalone shared-board command
 cli/excalidraw-web-export/         Headless deployed-app PNG exporter
 test/                             Tests for the hooks and the Pi package
@@ -100,6 +102,6 @@ claude plugin validate ./plugins/ramtoshiya
 claude plugin validate ./.claude-plugin/marketplace.json
 ```
 
-`npm test` needs Node.js 22.19 or newer and uv. It runs the Pi adapter tests
-and the Python tests for all three hooks and the Hermes adapter. `AGENTS.md`
-holds the rules for changing this repository.
+`npm test` needs Node.js 22.19 or newer and uv. It runs the standalone CLI and
+Pi adapter tests, plus the Python tests for all three hooks and the Hermes
+adapter. `AGENTS.md` holds the rules for changing this repository.
