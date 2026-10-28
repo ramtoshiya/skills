@@ -251,6 +251,185 @@ class PipelineTests(unittest.TestCase):
         git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "initial")
         return repo, git
 
+    def overlay_repo(self):
+        repo, git = self.clean_repo()
+        (repo / "CLAUDE.md").write_bytes(b"@AGENTS.md\n")
+        git("add", "CLAUDE.md")
+        git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "instructions")
+        (repo / ".multica").mkdir()
+        context = {"managed_by": "multica-daemon-task", "agent_id": str(uuid.uuid4()),
+                   "issue_id": str(uuid.uuid4())}
+        (repo / ".multica/daemon_task_context.json").write_text(json.dumps(context))
+        return repo, git
+
+    def test_tracked_runtime_overlay_capture_and_preservation(self):
+        repo, git = self.overlay_repo()
+        path = repo / "CLAUDE.md"
+        original = path.read_bytes()
+        clean = pipeline.capture_baseline(repo)
+        pipeline.verify_baseline(repo, clean)
+        agent_id = json.loads((repo / ".multica/daemon_task_context.json").read_bytes())["agent_id"]
+        boundaries = (
+            (original, b'"\\n"'), (b"@AGENTS.md", b'""'),
+            (b"@AGENTS.md\r\n", b'"\\r\\n"'),
+            (b"@AGENTS.md\n\n", b'"\\n\\n"'),
+            (b"", b'"" blank'), (b"\r\n", b'"\\r\\n" blank'),
+        )
+        for original, boundary in boundaries:
+            with self.subTest(original=original):
+                path.write_bytes(original)
+                git("add", "CLAUDE.md")
+                git("-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+                    "commit", "--allow-empty", "-qm", "instruction boundary")
+                block = (b"<!-- BEGIN MULTICA-RUNTIME (auto-managed; do not edit) -->\n"
+                         + b"<!-- MULTICA-RUNTIME original-boundary: " + boundary + b" -->\n"
+                         + b"# Multica Agent Runtime\n\n"
+                         + f"**You are: test** (ID: `{agent_id}`)\n\nTask instructions.\n".encode()
+                         + b"<!-- END MULTICA-RUNTIME -->\n")
+                content = original + b"\n\n" + block
+                path.write_bytes(content)
+                baseline = pipeline.capture_baseline(repo)
+                self.assertEqual(baseline["tracked_status"], " M CLAUDE.md\n")
+                overlay = baseline["runtime_overlay"]
+                self.assertEqual(overlay["position"], "append")
+                self.assertEqual(overlay["worktree_digest"], hashlib.sha256(content).hexdigest())
+                self.assertEqual(overlay["tracked_digest"], hashlib.sha256(original).hexdigest())
+                pipeline.verify_baseline(repo, baseline)
+                record = self.root / "overlay-baseline.json"
+                record.unlink(missing_ok=True)
+                command = [sys.executable, "-I", str(SOURCE / "pipeline.py")]
+                for operation in ("capture-baseline", "verify-baseline"):
+                    result = subprocess.run(command + [operation, "--repo", str(repo), "--file", str(record)],
+                                            capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                for changed in (content.replace(b"Task instructions.", b"Changed instructions."),
+                                b"outside edit\n" + content, original,
+                                content + b"\n", content.replace(b"END MULTICA", b"END OTHER")):
+                    path.write_bytes(changed)
+                    with self.assertRaises(ValueError):
+                        pipeline.verify_baseline(repo, baseline)
+                    path.write_bytes(content)
+                context = repo / ".multica/daemon_task_context.json"
+                before = context.read_bytes()
+                context.write_bytes(before + b"\n")
+                with self.assertRaises(ValueError):
+                    pipeline.verify_baseline(repo, baseline)
+                context.write_bytes(before)
+                pipeline.verify_baseline(repo, baseline)
+                self.assertEqual(git("diff", "--cached", "--name-only"), "")
+                self.assertEqual(path.read_bytes(), content)
+
+    def test_tracked_runtime_overlay_rejects_unproven_mutations(self):
+        repo, git = self.overlay_repo()
+        path = repo / "CLAUDE.md"
+        original = path.read_bytes()
+        begin = b"<!-- BEGIN MULTICA-RUNTIME (auto-managed; do not edit) -->\n"
+        end = b"<!-- END MULTICA-RUNTIME -->\n"
+        agent_id = json.loads((repo / ".multica/daemon_task_context.json").read_bytes())["agent_id"]
+        metadata = b'<!-- MULTICA-RUNTIME original-boundary: "\\n" -->\n'
+        block = (begin + metadata + b"# Multica Agent Runtime\n\n"
+                 + f"**You are: test** (ID: `{agent_id}`)\n\nTask instructions.\n".encode() + end)
+        valid = original + b"\n\n" + block
+        context = repo / ".multica/daemon_task_context.json"
+        provenance = context.read_bytes()
+        invalid_content = {
+            "outside-edit": valid.replace(b"@AGENTS.md", b"@OTHER.md"),
+            "duplicate": block + b"\n" + valid,
+            "nested": begin + block + end + b"\n" + original,
+            "missing-end": valid.replace(end, b""),
+            "missing-begin": valid.replace(begin, b""),
+            "malformed-marker": valid.replace(b"do not edit", b"modified"),
+            "reversed": end + begin + b"\n" + original,
+            "inline-marker": b"prefix" + valid,
+            "middle-block": b"@AGENTS" + block + b".md\n",
+            "extra-prefix": b"\n" + valid,
+            "extra-suffix": valid + b"unexpected\n",
+            "prepend": block + b"\n\n" + original,
+            "wrong-separator": original + b"\n" + block,
+            "missing-boundary": valid.replace(metadata, b""),
+            "wrong-boundary": valid.replace(metadata, b'<!-- MULTICA-RUNTIME original-boundary: "" -->\n'),
+            "empty-block": original + b"\n\n" + begin + metadata + end,
+            "oversized": begin + b"x" * (pipeline.BASELINE_LIMIT + 1) + end + original,
+        }
+        for name, content in invalid_content.items():
+            with self.subTest(mutation=name):
+                path.write_bytes(content)
+                with self.assertRaises(ValueError):
+                    pipeline.capture_baseline(repo)
+        path.write_bytes(valid)
+        invalid_provenance = [b"{}", b"{invalid", b"[]", b" " * (pipeline.LIMIT + 1),
+                              b'{"managed_by":"foreign",' + provenance[1:]]
+        parsed = json.loads(provenance)
+        for field, value in (("managed_by", "other"), ("agent_id", "not-an-id"),
+                             ("agent_id", str(uuid.uuid4())), ("issue_id", None)):
+            invalid_provenance.append(json.dumps(parsed | {field: value}).encode())
+        invalid_provenance.append(json.dumps(parsed | {"checkout": "/another/repo"}).encode())
+        for data in invalid_provenance:
+            with self.subTest(provenance=data[:80]):
+                context.write_bytes(data)
+                with self.assertRaises((ValueError, TypeError)):
+                    pipeline.capture_baseline(repo)
+        context.write_bytes(provenance)
+        for mutation in ("missing-context", "context-symlink", "directory-symlink",
+                         "instruction-symlink", "mode", "product", "staged-product",
+                         "staged-overlay", "index-flags", "tracked-spoof", "tracked-provenance"):
+            with self.subTest(mutation=mutation):
+                index = Path(git("rev-parse", "--path-format=absolute", "--git-path", "index"))
+                before_index = index.read_bytes()
+                if mutation == "missing-context":
+                    context.unlink()
+                elif mutation == "context-symlink":
+                    copy = self.root / "context.json"
+                    copy.write_bytes(provenance)
+                    context.unlink()
+                    context.symlink_to(copy)
+                elif mutation == "directory-symlink":
+                    (repo / ".multica").rename(self.root / "runtime")
+                    (repo / ".multica").symlink_to(self.root / "runtime", target_is_directory=True)
+                elif mutation == "instruction-symlink":
+                    copy = self.root / "instructions.md"
+                    copy.write_bytes(valid)
+                    path.unlink()
+                    path.symlink_to(copy)
+                elif mutation == "mode":
+                    path.chmod(0o755)
+                elif mutation in ("product", "staged-product"):
+                    (repo / "product.txt").write_text("changed\n")
+                    if mutation == "staged-product":
+                        git("add", "product.txt")
+                elif mutation == "staged-overlay":
+                    git("add", "CLAUDE.md")
+                elif mutation == "index-flags":
+                    git("update-index", "--assume-unchanged", "product.txt")
+                    (repo / "product.txt").write_text("hidden\n")
+                elif mutation == "tracked-spoof":
+                    path.write_bytes(block + original)
+                    git("add", "CLAUDE.md")
+                    git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "spoof")
+                    path.write_bytes(block + b"\n" + block + original)
+                elif mutation == "tracked-provenance":
+                    path.write_bytes(original)
+                    git("add", "CLAUDE.md", ".multica/daemon_task_context.json")
+                    git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "tracked context")
+                    path.write_bytes(valid)
+                with self.assertRaises((ValueError, OSError)):
+                    pipeline.capture_baseline(repo)
+                if mutation in ("tracked-spoof", "tracked-provenance"):
+                    git("reset", "--soft", "HEAD~1")
+                index.write_bytes(before_index)
+                if mutation == "directory-symlink":
+                    (repo / ".multica").unlink()
+                    (self.root / "runtime").rename(repo / ".multica")
+                if context.is_symlink():
+                    context.unlink()
+                context.write_bytes(provenance)
+                if path.is_symlink():
+                    path.unlink()
+                path.write_bytes(valid)
+                path.chmod(0o644)
+                (repo / "product.txt").write_text("original\n")
+                pipeline.capture_baseline(repo)
+
     def test_instruction_free_repository_and_large_baseline_cli(self):
         repo, git = self.clean_repo()
         for name in ("AGENTS.md", "CLAUDE.md", "AGENTS.local.md", "CLAUDE.local.md", ".worktreeinclude"):
@@ -309,7 +488,8 @@ class PipelineTests(unittest.TestCase):
         git("update-index", "--index-version=4")
         git("write-tree")
         pipeline.verify_baseline(repo, baseline)
-        for invalid in (baseline | {"version": 1}, baseline | {"version": True}, [], None):
+        for invalid in (baseline | {"version": 1}, baseline | {"version": 2},
+                        baseline | {"version": True}, [], None):
             with self.subTest(invalid=invalid), self.assertRaisesRegex(ValueError, "version"):
                 pipeline.verify_baseline(repo, invalid)
 

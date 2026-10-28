@@ -186,12 +186,87 @@ def semantic_index(repo):
     return sorted(entries, key=lambda entry: (entry["path"], entry["stage"]))
 
 
+def regular_bytes(path, limit):
+    require(not path.is_symlink() and path.is_file(), "runtime evidence must be a regular file")
+    with path.open("rb") as stream:
+        data = stream.read(limit + 1)
+    require(len(data) <= limit, "runtime evidence exceeds size limit")
+    return data
+
+
+def classify_runtime_overlay(repo, index):
+    entries = [entry for entry in index if entry["path"] == "CLAUDE.md"]
+    require(len(entries) == 1 and entries[0]["mode"] in ("100644", "100755"),
+            "runtime overlay requires tracked regular CLAUDE.md")
+    entry = entries[0]
+    path = repo / "CLAUDE.md"
+    content = regular_bytes(path, BASELINE_LIMIT)
+    require(bool(path.stat().st_mode & 0o111) == (entry["mode"] == "100755"),
+            "runtime overlay changed tracked mode")
+    tracked = git_bytes(repo, "cat-file", "blob", entry["object"])
+    begin = b"<!-- BEGIN MULTICA-RUNTIME (auto-managed; do not edit) -->\n"
+    end = b"<!-- END MULTICA-RUNTIME -->\n"
+    boundary = tracked[len(tracked.rstrip(b"\r\n")):].decode("ascii")
+    metadata = (b"<!-- MULTICA-RUNTIME original-boundary: "
+                + json.dumps(boundary).encode("ascii")
+                + (b" blank" if not tracked.rstrip(b"\r\n") else b"") + b" -->\n")
+    require(b"MULTICA-RUNTIME" not in tracked and content.count(b"MULTICA-RUNTIME") == 3
+            and content.count(begin) == 1 and content.count(end) == 1,
+            "duplicate, malformed or pre-existing runtime marker")
+    start = content.index(begin)
+    stop = content.index(end) + len(end)
+    block = content[start:stop]
+    # The writer appends a fixed managed separator and records the original
+    # boundary. Never trim or reconstruct product bytes to fit an overlay.
+    require(content == tracked + b"\n\n" + block
+            and block.startswith(begin + metadata + b"# Multica Agent Runtime\n")
+            and block.endswith(end),
+            "runtime overlay changed bytes outside supported boundary block")
+    runtime = repo / ".multica"
+    require(runtime.is_dir() and not runtime.is_symlink(), "missing checkout runtime provenance")
+    context_path = runtime / "daemon_task_context.json"
+    require(not any(item["path"] == ".multica/daemon_task_context.json" for item in index),
+            "runtime provenance is tracked product content")
+    context_bytes = regular_bytes(context_path, LIMIT)
+    def unique_object(pairs):
+        require(len(dict(pairs)) == len(pairs), "duplicate runtime provenance field")
+        return dict(pairs)
+    context = json.loads(context_bytes, object_pairs_hook=unique_object)
+    require(isinstance(context, dict)
+            and {"managed_by", "agent_id", "issue_id"} <= context.keys()
+            and context.keys() <= {"managed_by", "agent_id", "issue_id", "chat_session_id"},
+            "unexpected runtime provenance fields")
+    require(context["managed_by"] == "multica-daemon-task", "unexpected runtime provenance")
+    identifier(context["agent_id"])
+    identifier(context["issue_id"])
+    if "chat_session_id" in context:
+        identifier(context["chat_session_id"])
+    identity = rb"\*\*You are: [^\r\n]+\*\* \(ID: `" + context["agent_id"].encode() + rb"`\)"
+    require(re.search(rb"(?m)^" + identity + rb"$", block), "runtime agent identity mismatch")
+    return {
+        "path": "CLAUDE.md", "position": "append",
+        "tracked_object": entry["object"],
+        "tracked_digest": hashlib.sha256(tracked).hexdigest(),
+        "worktree_digest": hashlib.sha256(content).hexdigest(),
+        "block_digest": hashlib.sha256(block).hexdigest(),
+        "block_start": start, "block_end": stop,
+        "provenance_path": ".multica/daemon_task_context.json",
+        "provenance_digest": hashlib.sha256(context_bytes).hexdigest(),
+        "provenance": context,
+    }
+
+
 def capture_baseline(repo):
     repo = repo.resolve()
     require(git_bytes(repo, "rev-parse", "--show-toplevel").decode().strip() == str(repo),
             "baseline requires repository root")
-    require(not git_bytes(repo, "diff", "HEAD", "--raw")
-            and not git_bytes(repo, "diff", "--cached", "--raw"), "dirty tracked/index state")
+    index = semantic_index(repo)
+    require(all(entry["stage"] == 0 and entry["flags"] == 0 for entry in index)
+            and not git_bytes(repo, "diff", "--cached", "HEAD", "--raw"),
+            "dirty tracked/index state")
+    dirty = git_bytes(repo, "diff", "HEAD", "--name-only", "--no-renames", "-z")
+    overlay = classify_runtime_overlay(repo, index) if dirty == b"CLAUDE.md\0" else None
+    require(not dirty or overlay is not None, "dirty tracked/index state")
     untracked = git_bytes(repo, "ls-files", "--others", "--exclude-standard", "-z").decode().split("\0")
     require(all(runtime_path(name) for name in untracked if name), "unexpected untracked product content")
     names = set(filter(None, git_bytes(repo, "ls-files", "--cached", "-z").decode().split("\0")))
@@ -228,11 +303,13 @@ def capture_baseline(repo):
             digest = fingerprint(path)
         inventory[name] = {"mode": mode, "digest": digest}
     value = {
-        "version": 2,
+        "version": 3,
+        "runtime_overlay": overlay,
+        "tracked_status": git_bytes(repo, "status", "--porcelain=v1", "--untracked-files=no").decode(),
         "head": git_bytes(repo, "rev-parse", "HEAD").decode().strip(),
         "branch": git_bytes(repo, "rev-parse", "--abbrev-ref", "HEAD").decode().strip(),
         "status": git_bytes(repo, "status", "--porcelain=v1", "--untracked-files=all").decode(),
-        "index": semantic_index(repo),
+        "index": index,
         "worktrees": git_bytes(repo, "worktree", "list", "--porcelain").decode(),
         "runtime_paths": sorted(name for name in inventory if runtime_path(name)),
         "inventory": inventory,
@@ -244,8 +321,8 @@ def capture_baseline(repo):
 
 def verify_baseline(repo, baseline):
     require(isinstance(baseline, dict) and type(baseline.get("version")) is int
-            and baseline["version"] == 2,
-            "unknown baseline version, capture a reviewed v2 baseline")
+            and baseline["version"] == 3,
+            "unknown baseline version, capture a reviewed v3 baseline")
     require(capture_baseline(repo) == baseline, "repository baseline changed")
 
 

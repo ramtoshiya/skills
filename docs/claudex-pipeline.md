@@ -111,11 +111,31 @@ authorize integration.
 
 ## Repository baseline
 
-Preflight requires clean tracked and index state, not an empty `git status`.
-A task runtime can supply untracked `.claude/`, `.multica/` and `CLAUDE.md` before
-native work starts. Inspect their ownership and establish that they were present
-at baseline. Their names are not an ownership guarantee, and unexpected
-product-owned untracked content must be resolved before a probe.
+Preflight requires clean product content and an unchanged index, not an empty
+`git status`. A task runtime can supply untracked `.claude/`, `.multica/` and
+`CLAUDE.md` before native work starts. Inspect their ownership and confirm that
+Multica supplied them before the agent began. Their names are not an ownership
+guarantee. Resolve unexpected product-owned untracked content before a probe.
+
+A tracked `CLAUDE.md`, including a one-line `@AGENTS.md` import, can carry a
+proven startup overlay. The helper permits it only as the sole dirty tracked
+path, with no staged changes, conflict stages, or persistent index flags. It
+requires the exact index bytes followed by the Multica writer's two-LF managed
+separator and one complete appended runtime block. The block must have the
+exact begin/end markers, original-boundary metadata matching the tracked CR/LF
+suffix and blank-file state, the runtime heading, and the matching agent identity.
+Prepended blocks, legacy blocks without boundary metadata, formatter-normalized
+boundaries, duplicate or malformed markers, markers already in the tracked
+content, mode changes, and edits outside the managed insertion fail closed.
+
+Provenance must be a bounded untracked regular `.multica/daemon_task_context.json` in this
+checkout, with `managed_by` equal to `multica-daemon-task`, canonical `agent_id`
+and `issue_id` UUIDs, and at most an optional canonical `chat_session_id` UUID.
+Unknown or duplicate fields and symlinked provenance are rejected. Parent-directory
+markers are not borrowed. This is a structural check, not cryptographic task
+authentication: the daemon marker has no checkout path, signature, or timestamp.
+The operator must confirm runtime ownership and startup timing before capture.
+A forged local marker and matching body cannot establish that ownership.
 
 Capture a bounded baseline in private storage outside the worktree:
 
@@ -126,7 +146,10 @@ uv run --offline --no-project --managed-python --python '>=3.11' python -I setup
 
 Capture before the probe and verify afterward. The record includes initial
 status, HEAD, branch, semantic index entries, registered worktrees and file modes
-and SHA-256 fingerprints. Baseline schema version 2 records each index path,
+and SHA-256 fingerprints. Baseline schema version 3 also records tracked dirty
+status and the complete overlay fingerprint, block offsets and digest, tracked
+object and digest, and the local provenance fields and fingerprint. Verification
+requires this entire record to remain identical. The semantic index records each path,
 mode, object ID, conflict stage and persistent assume-unchanged, skip-worktree
 and intent-to-add flags. Stat-cache, cache-tree, fsmonitor-valid cache state and
 index encoding changes are ignored. Ordinary Git reads can refresh these without

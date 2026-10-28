@@ -28,26 +28,44 @@ the returned exit status and evidence. Read-only tools cannot execute tests.
 
 Confirm repository, worktree ownership, exact Git objects, required SDKs,
 devices, credentials and permission boundaries before starting work. Require
-clean tracked and index state. Identify unexpected product-owned untracked
-content separately from runtime-managed startup files. `.claude/`, `.multica/`
-and `CLAUDE.md` proven present at baseline are not probe or product mutations by
-themselves. Their names alone do not prove runtime ownership. Inspect ownership
-before accepting the baseline.
+clean product content and an unchanged index. Identify unexpected product-owned
+untracked content separately from runtime-managed startup files. `.claude/`,
+`.multica/` and `CLAUDE.md` proven present before the agent began are trusted
+startup baseline content, not probe or product mutations by themselves. Their
+names alone do not prove runtime ownership. Confirm ownership and startup timing
+before capture.
+
+A dirty tracked `CLAUDE.md` is permitted only when it is the sole dirty tracked
+path and the index has no staged changes, conflict stages, or persistent flags.
+Require the exact index content plus the writer's two-LF separator and exactly
+one appended managed block. Its exact begin/end markers, original-boundary
+metadata, runtime heading, and agent identity must match. Reject prepends,
+legacy or malformed blocks, duplicate or pre-existing tracked markers, mode
+changes, and every edit outside the managed insertion.
+
+Require untracked regular checkout-local `.multica/daemon_task_context.json` provenance
+within 32 KiB: `managed_by: multica-daemon-task`, canonical `agent_id` and
+`issue_id`, and only an optional canonical `chat_session_id`. Reject symlinks,
+unknown or duplicate fields, identity mismatches, and borrowed parent markers.
+The marker is unsigned and carries no checkout path or timestamp. These checks
+establish structural consistency, not authenticity against a forged marker and
+matching body. Independently confirm that Multica supplied the startup overlay.
 
 Use `pipeline.py capture-baseline --repo REPO --file BASELINE` before a read-only
 probe and `verify-baseline` with the same arguments after it. Store BASELINE in
 private control storage outside the worktree. Capture bounded initial status,
 HEAD, branch, semantic index entries, worktree inventory, and file modes/fingerprints,
-including ignored runtime startup files. The helper rejects dirty tracked/index
-state and unexpected non-runtime untracked paths. It fails closed when its
+including ignored runtime startup files. The helper rejects all other dirty
+tracked/index state and unexpected non-runtime untracked paths. It fails closed when its
 inventory or size limit is exceeded: 2,048 inventory entries, 2,048 semantic
 index entries, 32 MiB of file content, and 2 MiB per JSON record or Git inventory
 output. Capture uses deterministic compact JSON. Verification also accepts
 formatted JSON within the baseline bound. Control envelopes remain limited to
-32 KiB. Baseline v2 compares staged path, mode,
-object, stage and persistent flags, ignoring Git stat/cache-tree refreshes. Do
-not use raw index bytes as an integrity assertion or accept an older schema.
-It does not authenticate runtime ownership.
+32 KiB. Baseline v3 records tracked dirty status and the complete overlay
+fingerprint, block offsets/digest, tracked object/digest, and provenance fields
+and fingerprint. It compares staged path, mode, object, stage and persistent
+flags, ignoring Git stat/cache-tree refreshes. Do not use raw index bytes as an
+integrity assertion or accept an older schema.
 Require exact preservation or an explicitly authorized, reviewed delta. For an
 authorized implementation delta, retain the original baseline and record the
 allowed paths and changes separately. Never replace the baseline to conceal a
