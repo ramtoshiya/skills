@@ -31,41 +31,81 @@
     },
     {
       "id": 5,
-      "prompt": "The source repository has only AGENTS.local.md. CLAUDE.local.md and .worktreeinclude are missing. No project instruction explicitly requires a bridge. Return action continue or block and a specific diagnostic.",
+      "prompt": "The source repository has only AGENTS.local.md. CLAUDE.local.md and .worktreeinclude are missing. No project instruction explicitly requires a bridge. Return preflight action continue or block and a specific diagnostic. Separately classify possible repair as lead-executable, delegable, or genuinely external before choosing the issue status. A failed preflight alone does not justify blocked status.",
       "expected_output": "block because a partial bridge requires the missing CLAUDE.local.md import and tracked .worktreeinclude, not absent-not-required",
       "files": [],
       "assertions": [{"text": "Any bridge member requires complete validation", "action": "block"}]
     },
     {
       "id": 6,
-      "prompt": "All local bridge files are absent, but current project instructions explicitly require local policy propagation. Return action continue or block and a specific diagnostic.",
+      "prompt": "All local bridge files are absent, but current project instructions explicitly require local policy propagation. Return preflight action continue or block and a specific diagnostic. Separately classify possible repair as lead-executable, delegable, or genuinely external before choosing the issue status. A failed preflight alone does not justify blocked status.",
       "expected_output": "block because the explicitly required local-policy bridge is missing",
       "files": [],
       "assertions": [{"text": "Explicit policy requirements fail closed even when all files are absent", "action": "block"}]
     },
     {
       "id": 7,
-      "prompt": "The complete source bridge is valid and reaches the outer worktree, but the native worktree has a changed AGENTS.local.md. Return action continue or block and a specific diagnostic.",
+      "prompt": "The complete source bridge is valid and reaches the outer worktree, but the native worktree has a changed AGENTS.local.md. Return preflight action continue or block and a specific diagnostic. Separately classify possible repair as lead-executable, delegable, or genuinely external before choosing the issue status. A failed preflight alone does not justify blocked status.",
       "expected_output": "block because propagated native policy differs from the validated source",
       "files": [],
       "assertions": [{"text": "Policy propagation must preserve the validated content", "action": "block"}]
     },
     {
       "id": 8,
+      "prompt": "The issue and local policy authorize checkout synchronization, package/workspace-skill refresh, installation checks, and routine tests. Required CLIs are already installed, ownership checks pass, and no product code needs changing. The lead can run the approved commands now. Return action execute, delegate, or block, the issue status, and whether a new product issue or owner selection is needed.",
+      "expected_output": "execute with in_progress for housekeeping, then in_verification for required behavior checks. No new product issue or owner selection. Do not install or build a missing CLI.",
+      "files": [],
+      "assertions": [
+        {"text": "The lead executes authorized housekeeping rather than blocking", "action": "execute"},
+        {"text": "Housekeeping stays active without inventing an owner or another product issue"}
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Independent review of the current candidate found a product-code defect. A reconciliation builder is available and the issue authorizes repair. Return action dispatch, patch_directly, or block, the issue status while the builder works, and the next acceptance gate after a new commit.",
+      "expected_output": "dispatch the bounded repair to a reconciliation builder, keep in_progress, then review the new candidate SHA and rerun affected verification. The lead does not patch product code.",
+      "files": [],
+      "assertions": [
+        {"text": "Available authorized repair is dispatched, not blocked or patched by the lead", "action": "dispatch"},
+        {"text": "Repair stays in_progress and the new SHA requires renewed review and affected verification"}
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Required behavior verification needs a service administrator, verified as member:92d37d65-d673-46cd-ae57-8e55172ba60d, to grant the test account device access. Neither lead nor available workers have grant authority and no other authorized verification path exists. Safe references: attempts/credential-authority.md proves the lead limitation, attempts/worker-permissions.md proves delegation cannot grant access, attempts/grant-device-access.md specifies the single grant condition, native/access-check-1 records the last permission-denied result. Return action block or continue, issue status, and the active-state version and blocker object. Do not include credentials or raw logs.",
+      "expected_output": "block with blocked status and active-state version 2. Blocker fields are actor_ref member:92d37d65-d673-46cd-ae57-8e55172ba60d, lead_cannot_act_ref attempts/credential-authority.md, lead_cannot_delegate_ref attempts/worker-permissions.md, condition_ref attempts/grant-device-access.md, evidence_ref native/access-check-1. Recheck access after the administrator grants it.",
+      "files": [],
+      "assertions": [
+        {"text": "A verified external constraint with no execution or delegation path may block", "action": "block"},
+        {"text": "The v2 blocker records the concrete actor and all four safe evidence references without secrets"}
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Checkout sync and package/workspace-skill refresh are authorized and executable by the lead with installed tools. A draft blocker delegates them to an unspecified 'pipeline integration owner' and proposes asking the user to select that owner. Return action reject_blocker or accept_blocker, issue status, and what to do with these prerequisites.",
+      "expected_output": "reject_blocker, keep in_progress and execute authorized prerequisites. Do not invent an actor UUID, ask for owner selection, or create a separate product issue for housekeeping.",
+      "files": [],
+      "assertions": [
+        {"text": "An invented integration owner cannot justify a blocker", "action": "reject_blocker"},
+        {"text": "The lead executes the authorized work with active status instead of escalating owner selection"}
+      ]
+    },
+    {
+      "id": 12,
       "prompt": "Multica appended its current managed runtime block to a tracked one-line CLAUDE.md import before the agent began. Ownership and startup timing are independently confirmed. Capture accepted the exact tracked bytes plus the two-LF separator, matching original-boundary metadata and agent identity, and regular untracked checkout-local daemon_task_context.json with canonical agent and issue IDs. Only CLAUDE.md is dirty, the index is unchanged, and all other preflight checks pass. Return action continue or block and say whether to clean, stage, or preserve the overlay.",
       "expected_output": "continue and preserve the proven startup overlay exactly without cleaning or staging it",
       "files": [],
       "assertions": [{"text": "A proven tracked startup overlay is preserved and does not block preflight", "action": "continue"}]
     },
     {
-      "id": 9,
+      "id": 13,
       "prompt": "CLAUDE.md is the only dirty tracked file and contains a managed-looking block, but the only daemon_task_context.json is in a parent directory. Runtime ownership has not been confirmed. The operator proposes accepting it by file name or staging it to get clean status. Return action continue or block and a short reason.",
       "expected_output": "block because names and borrowed parent provenance do not prove a checkout-local startup overlay, and do not stage or modify it to pass",
       "files": [],
       "assertions": [{"text": "A managed-looking file and ancestor marker are insufficient proof", "action": "block"}]
     },
     {
-      "id": 10,
+      "id": 14,
       "prompt": "A proven tracked runtime overlay passed baseline capture. During a read-only probe, only one instruction inside the managed block changed, with no product or staged change. The operator proposes recapturing the baseline because the changed bytes are runtime-owned. Return action continue or block and a short reason.",
       "expected_output": "block because verification requires exact preservation of the captured overlay and recapture cannot conceal a mutation",
       "files": [],
