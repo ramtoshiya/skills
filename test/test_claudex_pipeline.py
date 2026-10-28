@@ -251,6 +251,50 @@ class PipelineTests(unittest.TestCase):
         git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "initial")
         return repo, git
 
+    def test_instruction_free_repository_and_large_baseline_cli(self):
+        repo, git = self.clean_repo()
+        for name in ("AGENTS.md", "CLAUDE.md", "AGENTS.local.md", "CLAUDE.local.md", ".worktreeinclude"):
+            self.assertFalse((repo / name).exists())
+        for index in range(83):
+            (repo / f"product-{index:03}-{'x' * 26}.txt").write_text("product\n")
+        git("add", ".")
+        git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "inventory")
+        (repo / ".claude").mkdir()
+        for index in range(21):
+            (repo / ".claude" / f"runtime-{index:03}-{'y' * 45}.json").write_text("{}")
+        record = self.root / "baseline.json"
+        command = [sys.executable, "-I", str(SOURCE / "pipeline.py")]
+        def run(operation):
+            return subprocess.run(command + [operation, "--repo", str(repo), "--file", str(record)],
+                                  capture_output=True, text=True)
+        result = run("capture-baseline")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        baseline = json.loads(record.read_bytes())
+        self.assertEqual(len(baseline["index"]), 84)
+        self.assertEqual(len(baseline["inventory"]), 106)
+        formatted = json.dumps(baseline, indent=2, sort_keys=True)
+        self.assertGreater(len(formatted.encode()), 32768)
+        self.assertLess(record.stat().st_size, len(formatted.encode()))
+        for data in (record.read_text(), formatted):
+            record.write_text(data)
+            result = run("verify-baseline")
+            self.assertEqual(result.returncode, 0, result.stderr)
+        baseline["index"][0]["flags"] ^= 0x8000
+        record.write_text(json.dumps(baseline))
+        result = run("verify-baseline")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("baseline changed", result.stderr)
+        for data in ("{malformed", " " * (pipeline.BASELINE_LIMIT + 1)):
+            record.write_text(data)
+            self.assertNotEqual(run("verify-baseline").returncode, 0)
+        for index in range(pipeline.BASELINE_ENTRIES):
+            (repo / ".claude" / f"extra-{index}").touch()
+        record.unlink()
+        result = run("capture-baseline")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("inventory exceeds limit", result.stderr)
+        self.assertFalse(record.exists())
+
     def test_baseline_ignores_stat_cache_and_index_encoding_refresh(self):
         repo, git = self.clean_repo()
         baseline = pipeline.capture_baseline(repo)
