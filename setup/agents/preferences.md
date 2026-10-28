@@ -6,6 +6,14 @@ Preserve the language the user or artifact requires.
 Write for a reader who has no conversation context. Use concrete language,
 remove unnecessary narration, and reread the result before delivering it.
 
+## Diagrams {:#diagrams}
+
+Use Mermaid diagrams proactively when relationships, flows, states, sequences,
+or ownership are clearer visually than in text. Do not add a diagram when a
+short sentence or list communicates the same idea more clearly. Keep labels
+concise and self-contained, and validate every Mermaid block with the real
+parser before delivery.
+
 Use short commit subjects that describe the change. Add a body only for needed
 context the diff cannot show. Put useful validation evidence in the task result
 or review artifact.
