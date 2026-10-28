@@ -26,8 +26,28 @@ the returned exit status and evidence. Read-only tools cannot execute tests.
 
 ## Preflight and selection {:#preflight}
 
-Confirm repository, clean worktree ownership, exact Git objects, required SDKs,
-devices, credentials and permission boundaries before starting work. Read
+Confirm repository, worktree ownership, exact Git objects, required SDKs,
+devices, credentials and permission boundaries before starting work. Require
+clean tracked and index state. Identify unexpected product-owned untracked
+content separately from runtime-managed startup files. `.claude/`, `.multica/`
+and `CLAUDE.md` proven present at baseline are not probe or product mutations by
+themselves. Their names alone do not prove runtime ownership. Inspect ownership
+before accepting the baseline.
+
+Use `pipeline.py capture-baseline --repo REPO --file BASELINE` before a read-only
+probe and `verify-baseline` with the same arguments after it. Store BASELINE in
+private control storage outside the worktree. Capture bounded initial status,
+HEAD, branch, index fingerprint, worktree inventory, and file modes/fingerprints,
+including ignored runtime startup files. The helper rejects dirty tracked/index
+state and unexpected non-runtime untracked paths. It fails closed when its
+inventory or size limit is exceeded. It does not authenticate runtime ownership.
+Require exact preservation or an explicitly authorized, reviewed delta. For an
+authorized implementation delta, retain the original baseline and record the
+allowed paths and changes separately. Never replace the baseline to conceal a
+mutation. Do not delete, ignore, stage or commit runtime-owned files to make a
+check green.
+
+Read
 `AGENTS.local.md` through `CLAUDE.local.md` importing it. Keep these files local.
 A tracked `.worktreeinclude` and the outer-worktree copier must propagate them.
 Check that bridge rather than assuming native isolation copies ignored files.
@@ -148,7 +168,14 @@ blocker, then post the final result separately.
 Include completed work, current activity, next step, and blocker only. No raw
 logs, stack traces, or private reasoning. The reporter gets only a bounded
 `active.json` summary, structured worker status/receipts, and reporting deadline.
-It has no tools and drafts from supplied text. The lead checks and posts it.
+It has no tools and drafts from supplied text. Its entire response is exactly
+four short Markdown bullet fields, in order: `Completed work`, `Current activity`,
+`Next step`, `Blocker`. Validate the unmodified full response with
+`pipeline.py validate-worklog --file DRAFT` before accepting it. Reject extra
+headings, prose, JSON, code fences, startup sentinels, hidden machine blocks or
+runtime metadata. Do not strip unwanted material to manufacture a passing draft.
+The reporter emits no receipt. The lead assembles and validates receipts from
+trusted runtime evidence after the worker returns, then checks and posts the draft.
 Prefer Luna off/minimal/low for this bounded transformation only when trusted
 invocation evidence confirms that setting. Use confirmed max for substantive
 Luna reasoning. Otherwise use Sol or direct lead drafting. Reporting does not justify starting a worker or waiting idly.

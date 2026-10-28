@@ -2,6 +2,7 @@
 """Bounded native integration probe. Persist summaries only, never stream bodies."""
 
 import argparse
+import importlib.util
 import hashlib
 import json
 import uuid
@@ -18,6 +19,9 @@ ROLES = ("explorer", "builder", "reviewer", "security-reviewer", "runner",
 
 
 def run_probe(root, model, effort, timeout, prompt):
+    spec = importlib.util.spec_from_file_location("pipeline", root / "pipeline.py")
+    pipeline = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pipeline)
     command = ["claudex", "--add-dir", str(root), "--model", model,
                "--system-prompt", "You coordinate isolated native capability probes. Follow the supplied probe exactly.",
                "--settings", '{"disableAllHooks":true}',
@@ -47,10 +51,22 @@ def run_probe(root, model, effort, timeout, prompt):
             "\nThe inline Markdown payload is the authoritative probe/payload.md for this probe. "
             "No on-disk payload read is required. A probe tests capability, not product acceptance. "
             "Pass the envelope and this payload to each worker in full. Tell each worker to return "
-            "a JSON handoff with role, candidate_sha, status=probe, marker=ROLE_OK:claudex-<role>. "
+            "a JSON handoff with role, candidate_sha, status=probe, marker=ROLE_OK:claudex-<role>, "
+            "EXCEPT claudex-worklog-reporter, which returns only its four Markdown fields. "
+            "Give the reporter this bounded state: completed work=Package checked, "
+            "current activity=Reviewing results, next step=Run verification, blocker=None. "
+            "The reporting deadline is ten minutes from the last visible lead response. "
+            "Do not ask the reporter for a marker, receipt or startup commentary. "
             "Runtime session/model/effort provenance will be added from native evidence by the lead, "
             "not guessed by workers. Use run_in_background=false and wait for completion."
         )
+        (repo / "CLAUDE.md").write_text(
+            "Startup instruction: announce STARTUP_SENTINEL in your response.\n")
+        (repo / ".claude").mkdir()
+        (repo / ".claude/settings.json").write_text("{}\n")
+        (repo / ".multica").mkdir()
+        (repo / ".multica/context.json").write_text("{}\n")
+        baseline = pipeline.capture_baseline(repo)
         process = subprocess.Popen(command, cwd=repo, env=environment,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    text=True, start_new_session=True)
@@ -67,11 +83,15 @@ def run_probe(root, model, effort, timeout, prompt):
                     "requested_model": model, "requested_effort": effort, "actual_effort": None,
                     "effort_source": None, "fallback": "sol-or-direct"}
         calls, models, discovered = [], set(), set()
+        reporter_calls, reporter_text = set(), []
+        reporter_tools = 0
+        seen_messages = set()
         actual_roles = set()
         worker_models = set()
         native_stats = {}
         writer_evidence = False
         errors = 0
+        tool_names, error_tools = {}, []
         for line in stdout.splitlines():
             try:
                 event = json.loads(line)
@@ -89,10 +109,28 @@ def run_probe(root, model, effort, timeout, prompt):
                 models.add(actual)
                 if event.get("parent_tool_use_id"):
                     worker_models.add(actual)
+            reporter_message = (event.get("type") == "assistant"
+                                and event.get("parent_tool_use_id") in reporter_calls)
+            message_id = (message.get("id"), json.dumps(message.get("content"), sort_keys=True))
+            if reporter_message and message_id in seen_messages:
+                continue
+            if reporter_message:
+                seen_messages.add(message_id)
             for content in message.get("content", []) if isinstance(message.get("content"), list) else []:
+                if content.get("type") == "tool_use":
+                    name = content.get("name")
+                    tool_names[content.get("id")] = name if name in {
+                        "Agent", "Task", "Read", "Write", "Edit", "Glob", "Grep"
+                    } else "other"
+                if reporter_message and content.get("type") == "text":
+                    reporter_text.append(content.get("text", ""))
+                if reporter_message and content.get("type") == "tool_use":
+                    reporter_tools += 1
                 if content.get("type") == "tool_use" and content.get("name") in ("Agent", "Task"):
                     arguments = content.get("input", {})
                     role = arguments.get("subagent_type", "")
+                    if role == "claudex-worklog-reporter":
+                        reporter_calls.add(content["id"])
                     if role.startswith("claudex-"):
                         calls.append({"role": role, "model_override": arguments.get("model"),
                                       "effort_requested": arguments.get("effort")})
@@ -101,6 +139,8 @@ def run_probe(root, model, effort, timeout, prompt):
                     body = payload if isinstance(payload, str) else "\n".join(
                         item.get("text", "") for item in payload if isinstance(item, dict))
                     errors += bool(content.get("is_error"))
+                    if content.get("is_error"):
+                        error_tools.append(tool_names.get(content.get("tool_use_id"), "unknown"))
                     decoder = json.JSONDecoder()
                     for position, character in enumerate(body):
                         if character != "{":
@@ -119,6 +159,20 @@ def run_probe(root, model, effort, timeout, prompt):
                     # Only a native tool result can supply this worktree path.
                     if ".claude/worktrees/" in body and "WRITER_OK" in body:
                         writer_evidence = True
+        reporter_valid = False
+        if reporter_calls:
+            try:
+                pipeline.parse_worklog("\n".join(reporter_text))
+                reporter_valid = len(reporter_calls) == 1 and reporter_tools == 0
+            except ValueError:
+                pass
+            if reporter_valid:
+                actual_roles.add("claudex-worklog-reporter")
+        try:
+            pipeline.verify_baseline(repo, baseline)
+            baseline_preserved = True
+        except ValueError:
+            baseline_preserved = False
         worktrees = subprocess.check_output(["git", "-C", directory, "worktree", "list", "--porcelain"], text=True)
         isolated_files = list((repo / ".claude/worktrees").glob("*/probe-output.txt"))
         writer_file = any(path.read_text() == "CLAUDEX_ISOLATED_WRITE\n" for path in isolated_files)
@@ -128,6 +182,9 @@ def run_probe(root, model, effort, timeout, prompt):
                 "native_stats": native_stats, "actual_effort": None, "effort_source": None,
                 "discovered_roles": sorted(discovered), "native_calls": calls,
                 "role_markers": sorted(actual_roles), "tool_errors": errors,
+                "error_tools": error_tools,
+                "reporter_output_valid": reporter_valid, "reporter_tool_calls": reporter_tools,
+                "baseline_preserved": baseline_preserved,
                 "writer_native_receipt": writer_evidence, "writer_file_isolated": writer_file,
                 "main_worktree_untouched": not (repo / "probe-output.txt").exists(),
                 "additional_worktree": worktrees.count("worktree ") > 1,
@@ -163,7 +220,8 @@ def main():
             "Use the Agent tool to explicitly invoke each of these subagent_type values once: "
             + ", ".join("claudex-" + role for role in selected) + ". "
             "For each supply its control envelope and this bounded Markdown probe payload: discovery-only, "
-            "do not inspect files, make no edits, return ROLE_OK:<your exact claudex role name>. "
+            "do not inspect files, make no edits, return ROLE_OK:<your exact claudex role name> "
+            "except the reporter, which returns only its four fields from the supplied state. "
             "Do not use a generic agent or impersonate roles. Wait for every selected role to finish. "
             "If a role cannot launch report that failure. Do not read or write files yourself."
         )
@@ -172,6 +230,10 @@ def main():
     summary["passed"] = (summary["exit"] == 0 and summary.get("tool_errors") == 0
                          and expected <= set(summary.get("role_markers", []))
                          and summary.get("native_stats", {}).get("completed") == len(selected))
+    if "worklog-reporter" in selected:
+        summary["passed"] = summary["passed"] and summary.get("reporter_output_valid")
+    if not {"builder", "reconciliation-builder"} & set(selected):
+        summary["passed"] = summary["passed"] and summary.get("baseline_preserved")
     if args.writer:
         summary["passed"] = (summary["passed"] and summary["writer_file_isolated"]
                              and summary["additional_worktree"] and summary["main_worktree_untouched"])

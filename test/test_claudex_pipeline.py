@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 import uuid
@@ -119,6 +120,125 @@ class PipelineTests(unittest.TestCase):
         path.write_text(path.read_text().replace('["Read", "Glob", "Grep"]', '["Read", "Glob", "Grep", "Bash"]'))
         with self.assertRaisesRegex(ValueError, "capability"):
             pipeline.validate_package(source)
+
+    def test_reporter_output_rejects_every_extra_or_missing_field(self):
+        valid = (
+            "- Completed work: Checked the package.\n"
+            "- Current activity: Reviewing results.\n"
+            "- Next step: Run verification.\n"
+            "- Blocker: None.\n"
+        )
+        self.assertEqual(pipeline.parse_worklog(valid)["blocker"], "None.")
+        invalid = [
+            valid + "## Evidence\n", "Here is the worklog.\n" + valid,
+            valid + '{"version": 1}\n', "```markdown\n" + valid + "```\n",
+            valid + "STARTUP_SENTINEL\n", valid.replace("- Blocker: None.\n", ""),
+            valid + "- Blocker: Unknown.\n", valid.replace("None.", ""),
+            valid.replace("None.", "<!-- hidden receipt -->"),
+            valid.replace("None.", '{"status":"probe"}'),
+            valid.replace("None.", "STARTUP_SENTINEL"),
+            valid.replace("None.", "session_id=123"),
+            valid.replace("None.", "gpt-6.1-sol effort high"),
+            valid.replace("None.", "None.\x00hidden"),
+            valid.replace("None.", "None.​hidden"),
+        ]
+        for text in invalid:
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                pipeline.parse_worklog(text)
+        draft = self.root / "draft.md"
+        for text, expected in ((valid, 0), (valid + "PRIVATE_STARTUP_SENTINEL\n", 1)):
+            draft.write_text(text)
+            result = subprocess.run([sys.executable, "-I", str(SOURCE / "pipeline.py"),
+                                     "validate-worklog", "--file", str(draft)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, expected)
+            self.assertNotIn("PRIVATE_STARTUP_SENTINEL", result.stdout + result.stderr)
+
+    def test_runtime_baseline_preservation_and_clean_preflight(self):
+        repo = self.root / "repo"
+        repo.mkdir()
+        def git(*args):
+            return subprocess.check_output(["git", "-C", str(repo), *args], text=True).strip()
+        git("init", "-q")
+        tracked = repo / "product.txt"
+        tracked.write_text("original\n")
+        git("add", "product.txt")
+        git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "initial")
+        runtime = {".claude/settings.json": "{}", ".multica/context.json": "{}", "CLAUDE.md": "runtime\n"}
+        for name, body in runtime.items():
+            path = repo / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(body)
+        (repo / ".git/info/exclude").write_text(".multica/\n")
+        baseline = pipeline.capture_baseline(repo)
+        pipeline.verify_baseline(repo, baseline)
+        record = self.root / "baseline.json"
+        command = [sys.executable, "-I", str(SOURCE / "pipeline.py")]
+        for operation in ("capture-baseline", "verify-baseline"):
+            result = subprocess.run(command + [operation, "--repo", str(repo), "--file", str(record)],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(pipeline.read_json(record), baseline)
+        result = subprocess.run(command + ["capture-baseline", "--repo", str(repo), "--file", str(record)],
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(pipeline.read_json(record), baseline)
+        self.assertEqual(set(baseline["runtime_paths"]), set(runtime) | {".claude", ".multica"})
+        for mutation in ("addition", "empty-directory", "removal", "content", "mode", "index", "tracked", "branch", "head", "worktree"):
+            with self.subTest(mutation=mutation):
+                path = repo / ".multica/context.json"
+                if mutation == "addition":
+                    (repo / ".claude/new.md").write_text("new")
+                elif mutation == "empty-directory":
+                    (repo / ".claude/empty").mkdir()
+                elif mutation == "mode":
+                    path.chmod(0o755)
+                elif mutation == "head":
+                    git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "next")
+                elif mutation == "worktree":
+                    git("worktree", "add", "-q", "--detach", str(self.root / "extra"))
+                elif mutation == "removal":
+                    path.unlink()
+                elif mutation == "content":
+                    path.write_text("changed")
+                elif mutation == "index":
+                    git("add", "CLAUDE.md")
+                elif mutation == "tracked":
+                    tracked.write_text("changed\n")
+                else:
+                    git("checkout", "-qb", "other")
+                with self.assertRaises(ValueError):
+                    pipeline.verify_baseline(repo, baseline)
+                if mutation == "addition":
+                    (repo / ".claude/new.md").unlink()
+                elif mutation == "empty-directory":
+                    (repo / ".claude/empty").rmdir()
+                elif mutation == "mode":
+                    path.chmod(0o644)
+                elif mutation == "head":
+                    git("reset", "--soft", baseline["head"])
+                elif mutation == "worktree":
+                    git("worktree", "remove", str(self.root / "extra"))
+                elif mutation == "index":
+                    git("reset", "-q", "HEAD", "--", "CLAUDE.md")
+                elif mutation == "tracked":
+                    tracked.write_text("original\n")
+                elif mutation == "branch":
+                    git("checkout", "-q", baseline["branch"])
+                else:
+                    path.write_text("{}")
+                # A reset can rewrite index stat data, so start a new approved baseline.
+                baseline = pipeline.capture_baseline(repo)
+                pipeline.verify_baseline(repo, baseline)
+        (repo / "unexpected.txt").write_text("product")
+        with self.assertRaisesRegex(ValueError, "unexpected untracked"):
+            pipeline.capture_baseline(repo)
+        (repo / "unexpected.txt").unlink()
+        tracked.write_text("dirty\n")
+        with self.assertRaisesRegex(ValueError, "tracked/index"):
+            pipeline.capture_baseline(repo)
+        git("add", "product.txt")
+        with self.assertRaisesRegex(ValueError, "tracked/index"):
+            pipeline.capture_baseline(repo)
 
     def test_control_rejects_invalid_provenance_and_repair_cycles(self):
         pipeline.validate_control(control())

@@ -72,6 +72,37 @@ Before product work, verify project-local `AGENTS.local.md` and its
 tracked `.worktreeinclude` and the outer-worktree copier. This package does not
 copy private project policy, grant credentials, or authorize integration.
 
+## Repository baseline
+
+Preflight requires clean tracked and index state, not an empty `git status`.
+A task runtime can supply untracked `.claude/`, `.multica/` and `CLAUDE.md` before
+native work starts. Inspect their ownership and establish that they were present
+at baseline. Their names are not an ownership guarantee, and unexpected
+product-owned untracked content must be resolved before a probe.
+
+Capture a bounded baseline in private storage outside the worktree:
+
+```sh
+uv run --offline --no-project --managed-python --python '>=3.11' python -I setup/agents/claudex-pipeline/pipeline.py capture-baseline --repo "$PWD" --file /path/to/private/baseline.json
+uv run --offline --no-project --managed-python --python '>=3.11' python -I setup/agents/claudex-pipeline/pipeline.py verify-baseline --repo "$PWD" --file /path/to/private/baseline.json
+```
+
+Capture before the probe and verify afterward. The record includes initial
+status, HEAD, branch, index fingerprint, registered worktrees and file modes and
+SHA-256 fingerprints. Ignored runtime startup files are included. Inventory is
+limited to 2,048 entries, 32 MiB of file content and a 32 KiB record. Exceeding a
+limit rejects capture, it does not silently omit entries. Git-ignored content
+outside the runtime startup paths is not covered. Serialize work in the checkout
+because this is a comparison helper, not a filesystem sandbox or atomic snapshot.
+The record contains paths and status, so do not publish it without inspection.
+
+An unchanged runtime baseline passes. Additions, removals, content or mode changes,
+index changes, tracked diffs, HEAD or branch changes and worktree changes fail.
+For authorized implementation work, preserve the original record and separately
+review the explicitly allowed delta. Never silently delete, ignore, stage or
+commit runtime files to make cleanliness pass, or recapture a baseline to hide a
+mutation. The helper never changes repository files or Git state.
+
 ## Worker capabilities
 
 | Role | Available tools | Responsibility |
@@ -89,6 +120,14 @@ reporter cannot read files. Worker instructions prohibit all Multica mutations.
 The explicit allowlists also exclude MCP/platform tools. These are Claude Code
 tool boundaries, not an OS sandbox. Product code and project instructions still
 need normal trust and review.
+
+The reporter returns exactly four short Markdown bullet fields, in order:
+`Completed work`, `Current activity`, `Next step`, and `Blocker`. Each field is one
+nonempty line. `pipeline.py validate-worklog --file DRAFT` checks the entire
+unmodified response and rejects extra headings, text, JSON, fences, sentinels,
+hidden machine blocks and runtime metadata. The reporter emits no receipt or
+provenance. The lead assembles and validates the receipt from trusted runtime
+evidence after the worker returns. Do not trim extra output to pass validation.
 
 The lead brokers approved repository test and Git commands. The runner does not
 execute tests itself. This avoids granting a general shell that could also run
@@ -181,7 +220,8 @@ nor public test output. Native transcript/artifact storage owns raw evidence.
 
 ```sh
 npm test
-uv run --offline --no-project --managed-python --python '>=3.11' python -I test/claudex-pipeline-live.py setup/agents/claudex-pipeline --output /path/to/private/discovery.json
+uv run --offline --no-project --managed-python --python '>=3.11' python -I test/claudex-pipeline-live.py "$HOME/.claude/claudex-pipeline" --role worklog-reporter --output /path/to/private/reporter.json
+uv run --offline --no-project --managed-python --python '>=3.11' python -I test/claudex-pipeline-live.py "$HOME/.claude/claudex-pipeline" --output /path/to/private/discovery.json
 uv run --offline --no-project --managed-python --python '>=3.11' python -I test/claudex-pipeline-live.py setup/agents/claudex-pipeline --writer --output /path/to/private/writer.json
 uv run --offline --no-project --managed-python --python '>=3.11' python -I test/claudex-pipeline-live.py setup/agents/claudex-pipeline --role worklog-reporter --model gpt-6-luna --effort low --fallback-model gpt-6.1-sol --output /path/to/private/luna-low.json
 uv run --offline --no-project --managed-python --python '>=3.11' python -I test/claudex-pipeline-live.py setup/agents/claudex-pipeline --role worklog-reporter --model gpt-6-luna --effort max --fallback-model gpt-6.1-sol --output /path/to/private/luna-max.json
@@ -190,6 +230,11 @@ uv run --offline --no-project --managed-python --python '>=3.11' python -I test/
 Live probes require an already-configured `claudex` and paid upstream access.
 They create disposable Git repositories, use foreground native Agent spawns,
 validate JSON handoffs against the probe SHA, and check actual worktree files.
+The reporter probe parses the complete native worker text instead of a JSON
+handoff. It supplies a startup-sentinel instruction to exercise output isolation,
+checks that the reporter uses no tools, and verifies preservation of pre-existing
+runtime-owned untracked files. Install the candidate into a disposable private
+root to probe it without updating the shared installation.
 They disable hooks and MCP only in their disposable sessions. They never use
 `--agent` as a substitute for native spawn. Subprocess groups are bounded by a
 timeout and terminated before cleanup. Output files contain allowlisted summary
