@@ -2,6 +2,7 @@ import tracemalloc
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -226,8 +227,6 @@ class PipelineTests(unittest.TestCase):
                     git("checkout", "-q", baseline["branch"])
                 else:
                     path.write_text("{}")
-                # A reset can rewrite index stat data, so start a new approved baseline.
-                baseline = pipeline.capture_baseline(repo)
                 pipeline.verify_baseline(repo, baseline)
         (repo / "unexpected.txt").write_text("product")
         with self.assertRaisesRegex(ValueError, "unexpected untracked"):
@@ -239,6 +238,146 @@ class PipelineTests(unittest.TestCase):
         git("add", "product.txt")
         with self.assertRaisesRegex(ValueError, "tracked/index"):
             pipeline.capture_baseline(repo)
+
+    def clean_repo(self):
+        repo = self.root / "repo"
+        repo.mkdir()
+        def git(*args, input=None):
+            return subprocess.check_output(["git", "-C", str(repo), *args],
+                                           input=input, text=True).strip()
+        git("init", "-q")
+        (repo / "product.txt").write_text("original\n")
+        git("add", "product.txt")
+        git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "initial")
+        return repo, git
+
+    def test_baseline_ignores_stat_cache_and_index_encoding_refresh(self):
+        repo, git = self.clean_repo()
+        baseline = pipeline.capture_baseline(repo)
+        index = Path(git("rev-parse", "--path-format=absolute", "--git-path", "index"))
+        before = index.read_bytes()
+        path = repo / "product.txt"
+        stat = path.stat()
+        os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 2_000_000_000))
+        git("update-index", "--refresh")
+        self.assertNotEqual(index.read_bytes(), before, "fixture must change raw index bytes")
+        pipeline.verify_baseline(repo, baseline)
+        git("update-index", "--index-version=4")
+        git("write-tree")
+        pipeline.verify_baseline(repo, baseline)
+        for invalid in (baseline | {"version": 1}, baseline | {"version": True}, [], None):
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(ValueError, "version"):
+                pipeline.verify_baseline(repo, invalid)
+
+    def test_semantic_index_detects_staging_conflicts_and_persistent_flags(self):
+        repo, git = self.clean_repo()
+        baseline = pipeline.capture_baseline(repo)
+        index = Path(git("rev-parse", "--path-format=absolute", "--git-path", "index"))
+        original = index.read_bytes()
+        oid = git("rev-parse", "HEAD:product.txt")
+        changed = git("hash-object", "-w", "--stdin", input="changed\n")
+        mutations = {
+            "addition": ("update-index", "--add", "--cacheinfo", "100644", oid, "staged.txt"),
+            "deletion": ("update-index", "--force-remove", "product.txt"),
+            "mode": ("update-index", "--cacheinfo", "100755", oid, "product.txt"),
+            "object": ("update-index", "--cacheinfo", "100644", changed, "product.txt"),
+            "assume-unchanged": ("update-index", "--assume-unchanged", "product.txt"),
+            "skip-worktree": ("update-index", "--skip-worktree", "product.txt"),
+            "intent-to-add": ("add", "--intent-to-add", "new.txt"),
+            "conflict-stages": ("update-index", "--index-info"),
+        }
+        for name, arguments in mutations.items():
+            with self.subTest(mutation=name):
+                if name == "intent-to-add":
+                    (repo / "new.txt").write_text("new\n")
+                conflict = (f"0 {'0' * 40}\tproduct.txt\n"
+                            + "".join(f"100644 {oid if stage != 3 else changed} {stage}\tproduct.txt\n"
+                                      for stage in (1, 2, 3)))
+                git(*arguments, input=conflict if name == "conflict-stages" else None)
+                actual = pipeline.semantic_index(repo)
+                self.assertNotEqual(actual, baseline["index"])
+                if name == "conflict-stages":
+                    self.assertEqual([entry["stage"] for entry in actual], [1, 2, 3])
+                if name == "intent-to-add":
+                    entry = next(entry for entry in actual if entry["path"] == "new.txt")
+                    self.assertEqual(entry["flags"], 0x20000000)
+                if name in ("assume-unchanged", "skip-worktree"):
+                    self.assertEqual(git("status", "--porcelain"), "")
+                with self.assertRaises(ValueError):
+                    pipeline.verify_baseline(repo, baseline)
+                index.write_bytes(original)
+                (repo / "new.txt").unlink(missing_ok=True)
+                pipeline.verify_baseline(repo, baseline)
+
+    def test_runtime_baseline_rejects_inventory_and_content_overflow(self):
+        repo, _ = self.clean_repo()
+        runtime = repo / ".multica"
+        runtime.mkdir()
+        large = runtime / "large"
+        with large.open("wb") as stream:
+            stream.truncate(32 * 1024 * 1024 + 1)
+        with self.assertRaisesRegex(ValueError, "content exceeds limit"):
+            pipeline.capture_baseline(repo)
+        large.unlink()
+        for number in range(2049):
+            (runtime / str(number)).mkdir()
+        with self.assertRaisesRegex(ValueError, "inventory exceeds limit"):
+            pipeline.capture_baseline(repo)
+
+    def test_fingerprint_exclusions_and_installed_ownership_conflicts(self):
+        source = self.root / "source"
+        shutil.copytree(SOURCE, source)
+        before = pipeline.package_fingerprint(source)
+        for name in ("__pycache__/cached.pyc", ".DS_Store", ".git/config", ".in_use", "extra.pyc"):
+            path = source / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("excluded")
+        self.assertEqual(pipeline.package_fingerprint(source), before)
+        pipeline.reconcile(source, self.destination, "install")
+        self.assertEqual(pipeline.package_fingerprint(self.destination), before)
+        owned = self.destination / "pipeline.py"
+        original = owned.read_bytes()
+        owned.write_bytes(original + b"\n# local edit\n")
+        with self.assertRaisesRegex(ValueError, "local conflict"):
+            pipeline.package_fingerprint(self.destination)
+        owned.write_bytes(original)
+        for name in ("unexpected.txt", "pipeline.py"):
+            path = self.destination / name
+            if path.exists():
+                path.unlink()
+            path.symlink_to(source / "pipeline.py")
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "symlink"):
+                pipeline.package_fingerprint(self.destination)
+            path.unlink()
+            if name == "pipeline.py":
+                path.write_bytes(original)
+        (self.destination / "unexpected.txt").write_text("unowned")
+        with self.assertRaisesRegex(ValueError, "unexpected package content"):
+            pipeline.package_fingerprint(self.destination)
+        (self.destination / "unexpected.txt").unlink()
+        manifest = self.destination / pipeline.MANIFEST
+        value = json.loads(manifest.read_text())
+        value["files"]["pipeline.py"] = "0" * 64
+        manifest.write_text(json.dumps(value))
+        with self.assertRaisesRegex(ValueError, "local conflict"):
+            pipeline.package_fingerprint(self.destination)
+
+    def test_dispatcher_cli_and_every_role_payload_boundary(self):
+        for role in sorted(pipeline.ROLES):
+            with self.subTest(role=role):
+                expected = ["Agent"]
+                if role != "worklog-reporter":
+                    expected += ["Read", "Glob", "Grep"]
+                if role in pipeline.WRITERS:
+                    expected += ["Edit", "Write"]
+                result = subprocess.run([sys.executable, "-I", str(SOURCE / "pipeline.py"),
+                                         "dispatcher-tools", "--role", role], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip().split(","), expected)
+                _, body = pipeline.role_definition(SOURCE, role)
+                output = body.split("## Output {:#output}")[1]
+                self.assertNotRegex(output, r"(?i)(?:include|return)\s+(?:a\s+)?(?:v1\s+)?receipt\b")
+                self.assertIn("The lead assembles and validates receipts", output)
 
     def test_control_rejects_invalid_provenance_and_repair_cycles(self):
         pipeline.validate_control(control())

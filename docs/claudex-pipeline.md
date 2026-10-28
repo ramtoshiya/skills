@@ -28,8 +28,10 @@ uv run --offline --no-project --managed-python --python '>=3.11' python -I setup
 ```
 
 Repeat installation after updating the checkout. `status` compares the installed
-files with this revision. `uninstall` removes only recorded owned files and the
-ownership manifest, leaving unrelated files and directories intact. Use the
+files with this revision. The installed package includes the skill's evaluation
+fixtures as well as its prompt, helper and seven role definitions. `uninstall`
+removes only recorded owned files and the ownership manifest, leaving unrelated
+files and directories intact. Use the
 repository copy of `pipeline.py` for uninstall, then omit this component from
 subsequent sync selections if it should stay absent.
 
@@ -41,6 +43,29 @@ The installer checks all managed files before changing
 any and replaces each file atomically. It is not a filesystem transaction or a
 sandbox against another process racing writes. Serialize installation and do
 not edit managed files during it. No `--force` mode is provided.
+
+## Package fingerprint
+
+Both source and installed helpers print the same full 64-character digest:
+
+```sh
+uv run --offline --no-project --managed-python --python '>=3.11' python -I setup/agents/claudex-pipeline/pipeline.py package-fingerprint
+uv run --offline --no-project --managed-python --python '>=3.11' python -I "$HOME/.claude/claudex-pipeline/pipeline.py" package-fingerprint
+```
+
+Use `--source ROOT` to inspect another package root. `agents:status` checks source
+and installed equality and reports this full value. The digest is SHA-256 of the
+logical relative-path to per-file SHA-256 mapping, serialized with Python's
+`json.dumps(mapping, sort_keys=True)` and encoded as UTF-8. Serialization has no
+indentation or trailing newline and uses the default JSON separators, including
+spaces. This matches `setup/agents/sync.py`, not a hash of concatenated file bytes.
+
+The ownership manifest is checked but excluded from the logical mapping. As in
+the synchronizer, `.git`, `__pycache__`, `.DS_Store`, `.in_use` and files ending
+in `.pyc` are excluded. Other extra files prevent a canonical fingerprint even
+though uninstall preserves unrelated files. Symlinks in included package paths,
+missing or modified owned files and invalid ownership manifests are conflicts.
+A digest detects change, it does not authenticate who installed the package.
 
 ## Configure the lead
 
@@ -88,8 +113,13 @@ uv run --offline --no-project --managed-python --python '>=3.11' python -I setup
 ```
 
 Capture before the probe and verify afterward. The record includes initial
-status, HEAD, branch, index fingerprint, registered worktrees and file modes and
-SHA-256 fingerprints. Ignored runtime startup files are included. Inventory is
+status, HEAD, branch, semantic index entries, registered worktrees and file modes
+and SHA-256 fingerprints. Baseline schema version 2 records each index path,
+mode, object ID, conflict stage and persistent assume-unchanged, skip-worktree
+and intent-to-add flags. Stat-cache, cache-tree, fsmonitor-valid cache state and
+index encoding changes are ignored. Ordinary Git reads can refresh these without
+changing staged content. Older baseline schemas are rejected, never interpreted
+as semantic records. Ignored runtime startup files are included. Inventory is
 limited to 2,048 entries, 32 MiB of file content and a 32 KiB record. Exceeding a
 limit rejects capture, it does not silently omit entries. Git-ignored content
 outside the runtime startup paths is not covered. Serialize work in the checkout
@@ -115,6 +145,28 @@ mutation. The helper never changes repository files or Git state.
 | reconciliation-builder | Read, Glob, Grep, Edit, Write | Repair conflicts/findings in native worktree isolation |
 | worklog-reporter | None | Draft four fields from supplied bounded state |
 
+Derive the coordinator's tool union from the selected role frontmatter:
+
+```sh
+ROOT="$HOME/.claude/claudex-pipeline"
+TOOLS=$(uv run --offline --no-project --managed-python --python '>=3.11' python -I "$ROOT/pipeline.py" dispatcher-tools --role explorer)
+# Supply both flags to the fresh coordinator, alongside its model and effort:
+# --tools "$TOOLS" --allowedTools "$TOOLS"
+```
+
+The helper prints `Agent` plus that role's declared tools. An Agent-only parent
+restriction also restricts the child, so it prevents an explorer's file checks.
+The reporter union is only `Agent`. Writer unions include only their declared
+file tools in addition to `Agent`, not shell or platform tools. Worker frontmatter
+still applies its own narrower boundary.
+
+The coordinator system prompt must permit exactly one `Agent` invocation naming
+the selected `claudex-ROLE`, wait for that worker, and prohibit using the extra
+role tools itself or invoking other agents. This coordinator restriction is a
+prompt contract, not a native per-caller tool sandbox. Inspect native events and
+reject direct coordinator file-tool calls, wrong roles, extra spawns or unexpected
+worker tools. Use a fresh coordinator for each selected role.
+
 All roles exclude shell, delegation, network and tool-discovery tools. The
 reporter cannot read files. Worker instructions prohibit all Multica mutations.
 The explicit allowlists also exclude MCP/platform tools. These are Claude Code
@@ -125,9 +177,10 @@ The reporter returns exactly four short Markdown bullet fields, in order:
 `Completed work`, `Current activity`, `Next step`, and `Blocker`. Each field is one
 nonempty line. `pipeline.py validate-worklog --file DRAFT` checks the entire
 unmodified response and rejects extra headings, text, JSON, fences, sentinels,
-hidden machine blocks and runtime metadata. The reporter emits no receipt or
-provenance. The lead assembles and validates the receipt from trusted runtime
-evidence after the worker returns. Do not trim extra output to pass validation.
+hidden machine blocks and runtime metadata. Every worker returns role payloads
+only, never runtime receipts or provenance. The lead assembles and validates the
+receipt from trusted native runtime evidence
+after the worker returns. Do not trim extra output to pass validation.
 
 The lead brokers approved repository test and Git commands. The runner does not
 execute tests itself. This avoids granting a general shell that could also run
@@ -228,13 +281,22 @@ uv run --offline --no-project --managed-python --python '>=3.11' python -I test/
 ```
 
 Live probes require an already-configured `claudex` and paid upstream access.
-They create disposable Git repositories, use foreground native Agent spawns,
-validate JSON handoffs against the probe SHA, and check actual worktree files.
+They run one fresh coordinator per role in disposable Git repositories, enforce
+one named foreground Agent spawn and no direct coordinator tools, validate exact
+role payloads against the probe SHA, and reject worker provenance. Explorer must
+use Glob, Read and Grep to return a token from a physical file. Both writer roles
+use Markdown implementation summaries and physically write only the authorized
+fixture in isolated worktrees. Their outer-worktree delta must contain only
+native worktree entries, preserving every pre-existing file. The default run
+checks all seven roles. Use `--writer --role builder --role reconciliation-builder`
+to select only the two writer probes.
 The reporter probe parses the complete native worker text instead of a JSON
-handoff. It supplies a startup-sentinel instruction to exercise output isolation,
-checks that the reporter uses no tools, and verifies preservation of pre-existing
-runtime-owned untracked files. Install the candidate into a disposable private
-root to probe it without updating the shared installation.
+handoff. It supplies bounded issue, attempt and candidate references, an explicit
+reporting deadline and concrete facts, then checks exact transformation and zero
+tool calls. Startup-sentinel instructions exercise output isolation. Read-only
+probes also verify preservation of pre-existing runtime-owned untracked files.
+Install the candidate into a disposable private root to probe it without updating
+the shared installation.
 They disable hooks and MCP only in their disposable sessions. They never use
 `--agent` as a substitute for native spawn. Subprocess groups are bounded by a
 timeout and terminated before cleanup. Output files contain allowlisted summary

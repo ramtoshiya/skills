@@ -90,6 +90,16 @@ class AgentSyncTests(unittest.TestCase):
         for apply in (True, False):
             rows = sync.Sync(self.root).process(["claude"], apply=apply, selected=["claudex-pipeline"])
             self.assertEqual([(row["component"], row["status"]) for row in rows], [("claudex-pipeline", "ok")])
+            source = self.root / "setup/agents/claudex-pipeline"
+            expected = sync.fingerprint(sync.files(source))
+            self.assertRegex(expected, r"^[0-9a-f]{64}$")
+            self.assertEqual(rows[0]["detail"], expected)
+            installed = self.home / ".claude/claudex-pipeline"
+            for package in (source, installed):
+                actual = subprocess.check_output([
+                    sys.executable, "-I", str(package / "pipeline.py"), "package-fingerprint"
+                ], text=True).strip()
+                self.assertEqual(actual, expected)
         root = self.home / ".claude/claudex-pipeline"
         self.assertTrue((root / ".claude/agents/claudex-builder.md").is_file())
         self.assertFalse((self.home / ".claude/settings.json").exists())

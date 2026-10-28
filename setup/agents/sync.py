@@ -614,7 +614,12 @@ class Sync:
                     run(sys.executable, "-I", str(source / "pipeline.py"),
                         "install" if apply else "status", "--destination",
                         str(self.homes[host] / "claudex-pipeline"))
-                    self.record(host, "claudex-pipeline", "ok", fingerprint(files(source))[:12])
+                    canonical = run(sys.executable, "-I", str(source / "pipeline.py"),
+                                    "package-fingerprint", "--source",
+                                    str(self.homes[host] / "claudex-pipeline")).strip()
+                    if canonical != fingerprint(files(source)):
+                        raise Conflict("Claudex source and installed package fingerprints differ")
+                    self.record(host, "claudex-pipeline", "ok", canonical)
                 except ERRORS as error:
                     self.record(host, "claudex-pipeline", "conflict", str(error))
             if selected == {"claudex-pipeline"}:

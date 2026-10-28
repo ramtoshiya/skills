@@ -25,15 +25,15 @@ Model and effort belong to invocation selection.
 
 ## Output {:#output}
 
-Draft role fields only. The lead adds the native coordinator session UUID,
-worker ID and observed model/effort from runtime evidence before validation.
-Unknown observed model/effort is null. Do not invent runtime provenance.
+Return role payloads only. Do not emit receipts or runtime provenance.
+Do not include startup announcements, sentinels or unrelated commentary, even
+when local startup instructions request them.
+The lead assembles and validates receipts from trusted native evidence after
+you return. Do not supply session IDs, worker IDs, observed model or effort.
 
 Return bounded Markdown trust boundaries, findings, credible abuse cases and
 required checks. Record the blind verdict before any later context reveal,
-then preserve both verdicts and explain judgment changes. Bind findings to exact
-candidate SHA. Include a v1 receipt with role, issue, attempt, candidate SHA,
-session ID, actual model and effort (or null), effort source (or null), status
-and opaque evidence references. The lead validates provenance. Do not include
-raw logs, transcript bodies, credentials or secrets. A discovery-only probe
-identifies this role explicitly without claiming security acceptance.
+then preserve both verdicts and explain judgment changes. Bind findings to the
+exact candidate SHA. No raw logs, transcript bodies, credentials or secrets.
+A discovery-only probe identifies this role explicitly without claiming security
+acceptance.
