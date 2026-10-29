@@ -19,8 +19,9 @@ socket directory. Set `worktree.branch_prefix = ""` in that profile's effective
 configuration, so Agent Deck does not rewrite a precreated candidate branch.
 
 The worker CLI must already authenticate normally and start without interactive
-shell-manager setup. Reuse normal authentication without copying credentials or
-requiring a new empty provider home. A separate provider home needs its own login.
+shell-manager setup. Resolve Node, its matching npm, and uv from existing working
+installations rather than inactive project-manager shims. Reuse normal
+authentication without copying credentials or requiring a new empty provider home. A separate provider home needs its own login.
 Configure explicit worker permissions without YOLO or bypass defaults. Native
 Agent Deck hooks can be passed through session-local Claude `--settings`, leaving
 shared hooks untouched. Enable the native session, prompt, tool, stop and end
@@ -39,8 +40,10 @@ Preserve an installed managed Python directory through `UV_PYTHON_INSTALL_DIR`
 when existing offline hooks need it. Preserve the required three-day release-age
 floor through `UV_EXCLUDE_NEWER=3 days` or the scoped uv configuration. Set
 `UV_CACHE_DIR` to a fork-owned cache and allow sandbox writes to that directory.
-Preapprove the required metadata, skill, test and validation commands explicitly
-in manual mode. A successful Git/Write smoke does not prove that tests can run.
+Preapprove the required metadata, skill, test and validation commands explicitly.
+Use Claude's `dontAsk` mode for unattended workers so an unapproved command is
+refused rather than waiting for a person. This does not approve extra commands or
+disable the sandbox. A successful Git/Write smoke does not prove that tests can run.
 Verify a harmless interpreter command and completion-file write before product
 dispatch. Do not disable the sandbox, weaken the release-age guard, install another
 interpreter or change shared hooks to hide a startup failure.
@@ -95,6 +98,12 @@ The adapter pins a fresh branch to the input HEAD before requesting its worktree
 A different initial HEAD is rejected before work starts. A completed builder must
 return a committed, clean candidate. Dirty source files are preserved and do not
 block a separate worker checkout.
+
+The worker uses its file-write tool to create `completion.tmp.json` in the run
+directory, then publishes it with the adapter's standalone uv rename command.
+Metadata checks stay in separate commands. Combining publication with shell
+assignments, tests or pipelines can require approval and prevent even a blocked
+result from being returned. The same publication path reports blocked work.
 
 For independent verification, point `--repo` at the builder's candidate worktree
 and use `--role reviewer --candidate FULL_COMMIT_SHA`. The reviewer receives a

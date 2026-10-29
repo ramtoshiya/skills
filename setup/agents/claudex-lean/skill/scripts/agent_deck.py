@@ -230,11 +230,18 @@ def run(args):
             if not settled.get("success") or not settled.get("settle", {}).get("ready"):
                 raise AdapterError("worker startup did not become ready")
         active()
+        temporary_result = records / "completion.tmp.json"
+        publish = shlex.join(["uv", "run", "--no-project", "python", "-I", "-c",
+                              f"import os; os.replace({str(temporary_result)!r}, {str(result_path)!r})"])
         instruction = (f"Role: {args.role}. Work only within the provided scope. "
                        f"When finished, write a UTF-8 JSON object to {result_path} with exactly "
                        "status (completed, blocked, or failed), summary (short plain text), "
                        "candidate (full commit SHA or null), and worktree (absolute path). "
-                       "Write it atomically only after the work and its checks finish. "
+                       f"After the work and checks finish, use Write to save that JSON to {temporary_result}. "
+                       f"Then publish it atomically with this standalone Bash command: {publish}. "
+                       "Run metadata checks separately. Do not prepend shell assignments, tests or pipelines "
+                       "to the publish command: they can require additional approval. "
+                       "For blocked work, publish the same artifact with blocked status and a concise reason. "
                        "A completed builder must commit its work and return its clean HEAD. "
                        "A completed reviewer must not change the worktree and must return the input HEAD. "
                        "For blocked or failed work, candidate may be null. "

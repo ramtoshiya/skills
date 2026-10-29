@@ -39,15 +39,22 @@ The configured Agent Deck `worktree.branch_prefix` must be empty, so it cannot
 rewrite the branch name. An incorrect initial HEAD is rejected before dispatch.
 The worker command is an operator-supplied argv array. Literal `{run_dir}` expands
 inside its arguments, for example a Claude `--add-dir` allowance for completion.
-The runtime must provide working noninteractive executable resolution, native
-Agent Deck hooks through session-local settings, and explicit worker permissions.
+The runtime must resolve Node, its matching npm, and uv without interactive
+project-manager setup, and provide native Agent Deck hooks through session-local
+settings. Preapprove required operations explicitly. For unattended Claude workers,
+use `dontAsk` so unapproved commands fail rather than wait for a person. Keep the
+sandbox and repository guards enabled.
 Do not change shared provider hooks or trust all projects to repair startup.
 `trust_folder` defaults to false. Operator opt-in permits native startup settling
 for the owned project, without sending a continuation message or accepting an
 unrecognized prompt. It is not permission to bypass the worker's tool checks.
 
-A worker writes `completion.json` with exactly `status`, `summary`, `candidate`,
-and `worktree`. Status is completed, blocked, or failed. Completed work requires
+A worker publishes `completion.json` with exactly `status`, `summary`, `candidate`,
+and `worktree`. Use the file-write tool for `completion.tmp.json`, then run the
+adapter-provided standalone uv rename command. Keep metadata checks separate from
+publication, without shell assignments or compound conditions. This lets blocked
+work return an artifact without requesting extra execution permission.
+Status is completed, blocked, or failed. Completed work requires
 the actual committed HEAD and no uncommitted worker changes. Blocked or failed
 work may omit the candidate. A completion artifact is a worker claim, not an
 independent review. Queued, submitted, landed, idle and exit-zero states do not
