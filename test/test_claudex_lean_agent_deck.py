@@ -25,7 +25,9 @@ if a[0] == "add":
     (p / "title").write_text(a[a.index("-t") + 1])
     (p / "received").write_text(json.dumps({"command":shlex.split(a[a.index("-c") + 1]), "trust":"--trust-folder" in a,
         "env":{k:os.environ.get(k) for k in ("MULTICA_TASK_TOKEN", "CLAUDE_CODE_MESSAGING_TOKEN", "ANTHROPIC_API_KEY")}}))
-    if mode == "slow-add": time.sleep(1)
+    if mode == "slow-add":
+        (p / "add-ready").touch()
+        time.sleep(1)
     print(json.dumps({"success":True,"id":"owned","path":worker}))
 elif a[:2] == ["session", "start"]:
     (p / "stopped-owned").unlink(missing_ok=True)
@@ -293,8 +295,10 @@ class AdapterBoundaryTests(unittest.TestCase):
         process = subprocess.Popen(command, env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             deadline = time.monotonic() + 5
+            # Finish the fixture's Git child before interrupting the delayed add response.
             while time.monotonic() < deadline:
-                if (self.state / "calls").exists() and any(row[:len(prefix)] == prefix for row in self.calls()): break
+                ready = mode != "slow-add" or (self.state / "add-ready").exists()
+                if ready and (self.state / "calls").exists() and any(row[:len(prefix)] == prefix for row in self.calls()): break
                 time.sleep(0.02)
             else: self.fail("add did not start")
             started = time.monotonic()
