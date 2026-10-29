@@ -25,6 +25,36 @@ test("patches reapply to fresh elements without overwriting a concurrent field",
   assert.throws(() => applyBatch(original, { updates: [] }), /Unknown batch/);
 });
 
+test("scene patches compare JSON content without object key order", async t => {
+  for (const [name, initial, patch, changed] of [
+    ["customData key order", { customData: { left: 1, right: 2 } }, { customData: { right: 2, left: 1 } }, false],
+    ["nested objects and objects in arrays",
+      { customData: { left: { a: 1, b: 2 }, right: [{ a: 3, b: 4 }, 5] } },
+      { customData: { right: [{ b: 4, a: 3 }, 5], left: { b: 2, a: 1 } } }, false],
+    ["negative zero", { x: 0, customData: { offset: 0, values: [0] } },
+      { x: -0, customData: { offset: -0, values: [-0] } }, false],
+    ["changed nested value", { customData: { left: { a: 1, b: 2 }, right: 2 } },
+      { customData: { right: 2, left: { b: 3, a: 1 } } }, true],
+    ["array order", { customData: { values: [1, 2] } }, { customData: { values: [2, 1] } }, true],
+    ["null instead of a missing field", {}, { customData: null }, true],
+  ]) {
+    await t.test(name, () => {
+      const original = applyBatch([], { add: [{ id: "box", type: "rectangle", x: 100, y: 100, w: 240, h: 120, ...initial }] }).elements;
+      const before = structuredClone(original);
+      const result = applyBatch(original, { update: [{ id: "box", ...patch }] });
+      assert.deepEqual(result.changed, changed ? ["box"] : []);
+      if (changed) {
+        assert.deepEqual(result.elements[0].customData, patch.customData);
+        assert.equal(result.elements[0].version, before[0].version + 1);
+        for (const key of ["id", "index", "seed", "isDeleted"]) assert.equal(result.elements[0][key], before[0][key]);
+      } else {
+        assert.deepEqual(result.elements, before);
+      }
+      assert.deepEqual(original, before);
+    });
+  }
+});
+
 test("updates reject every different type, including falsy values", async t => {
   const original = applyBatch([], { add: [{ id: "a", type: "rectangle" }] }).elements;
   for (const type of [null, "", false, 0, "ellipse"]) {
