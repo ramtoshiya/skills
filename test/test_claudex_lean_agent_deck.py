@@ -271,6 +271,10 @@ class AdapterBoundaryTests(unittest.TestCase):
         result = self.call("complete", "--cleanup-only")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertFalse(any(row[0] == "add" or row[:2] == ["session", "start"] for row in self.calls()[before:]))
+        self.prompt.write_text("Cleanup is now reconciled. Continue the preserved implementation.")
+        resumed = self.call("complete", "--resume", "--prompt", str(self.prompt), "--max-seconds", "5")
+        self.assertEqual(resumed.returncode, 0, resumed.stdout + resumed.stderr)
+        self.assertFalse(any(row[0] == "add" for row in self.calls()[before:]))
 
     def test_cancel_during_send_marks_ambiguous_and_stops_worker(self):
         elapsed = self.cancel_when("slow-send", ["session", "send"])

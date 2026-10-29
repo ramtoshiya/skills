@@ -28,6 +28,9 @@ behavior, allowed files/effects and checks. Keep its native session and worktree
 across implementation retries. Use an explicit continuation after inspecting the
 saved record and native state, not a blind resend of an ambiguous operation.
 Parallel workstreams may have separate owners and worktrees.
+A Skill expansion can break upstream wait correlation even when work finishes.
+Reconcile native output, conversation and Git state before continuing. Do not
+repeat completed work or present an uncorrelated result as a verified receipt.
 
 The adapter collects native correlated replies and Git facts. A received reply,
 idle state or zero exit is not task completion. Accept implementation only with

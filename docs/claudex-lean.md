@@ -57,8 +57,11 @@ config/run directory, `--resume` and an explicit new prompt. For a fresh review,
 add `--candidate FULL_SHA` to pin unchanged candidate state across its units.
 `--cleanup-only` needs only config and run directory and does not start work.
 An ambiguous send requires native reconciliation before `--ack-ambiguous` can
-permit a different continuation. Give a worker the requested behavior, permitted
-files/effects and required checks. The adapter pins the input HEAD and uses native correlated
+permit a different continuation. Skill-generated prompts can interrupt the native
+waiter's correlation even after work finishes. Inspect native output, conversation
+and Git facts before deciding whether any work remains. Do not repeat a completed
+operation or label an uncorrelated result as a verified transport receipt.
+Give a worker the requested behavior, permitted files/effects and required checks. The adapter pins the input HEAD and uses native correlated
 replies. There is no worker-written completion file or separate reporting service.
 A received reply is not task success. Inspect its Git candidate and evidence, then
 obtain independent verification of the original failure and agreed safety scope.

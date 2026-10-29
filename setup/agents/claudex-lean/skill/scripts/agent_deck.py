@@ -168,6 +168,17 @@ def git_facts(repo):
     return {"head": head, "dirty": bool(status), "status_digest": hashlib.sha256(status.encode()).hexdigest()}
 
 
+def checked_worktree(record):
+    worktree = Path(record["worktree"]).resolve(strict=True)
+    facts = git_facts(worktree)
+    subprocess.run(["git", "-C", str(worktree), "merge-base", "--is-ancestor", record["base"], facts["head"]],
+                   capture_output=True, check=True, timeout=20)
+    candidate = record.get("expected_candidate")
+    if candidate and (facts["head"] != candidate or facts["dirty"]):
+        raise AdapterError("candidate changed or worktree is dirty")
+    return facts
+
+
 def run(args):
     config = Path(args.config).absolute()
     prompt = Path(args.prompt).resolve(strict=True)
@@ -209,7 +220,7 @@ def run(args):
                 or Path(show.get("path", "")).resolve() != repo
                 or show.get("claude_session_id") != record["native_session_id"]):
             raise AdapterError("native session, conversation, or worktree identity changed")
-        current = git_facts(repo)
+        current = checked_worktree(record)
         if current != record.get("git"):
             raise AdapterError("worktree Git state changed since the prior unit")
     else:
@@ -356,13 +367,7 @@ def run(args):
             signal.signal(sig, handler)
     if record.get("worktree") and record["cleanup"] == "stopped":
         try:
-            worktree = Path(record["worktree"]).resolve(strict=True)
-            facts = git_facts(worktree)
-            subprocess.run(["git", "-C", str(worktree), "merge-base", "--is-ancestor", base, facts["head"]],
-                           capture_output=True, check=True, timeout=20)
-            record["git"] = facts
-            if record.get("expected_candidate") and (facts["head"] != record["expected_candidate"] or facts["dirty"]):
-                raise AdapterError("candidate changed or worktree is dirty")
+            record["git"] = checked_worktree(record)
         except (AdapterError, OSError, ValueError, subprocess.SubprocessError) as error:
             record["outcome"] = "failed"
             record["error"] = str(error)
@@ -393,6 +398,12 @@ def cleanup(args):
         record["cleanup"] = "stopped"
     except (AdapterError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         record["cleanup"] = "unresolved: " + str(error)
+    if record.get("worktree") and record["cleanup"] == "stopped":
+        try:
+            record["git"] = checked_worktree(record)
+        except (AdapterError, OSError, ValueError, subprocess.SubprocessError) as error:
+            record["outcome"] = "failed"
+            record["error"] = str(error)
     write_json(journal, record)
     print(json.dumps(record), flush=True)
     return 0 if record["cleanup"] == "stopped" else 1
