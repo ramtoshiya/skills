@@ -39,7 +39,11 @@ Agent Deck's XDG roots also relocate other tools' configuration and caches.
 Preserve an installed managed Python directory through `UV_PYTHON_INSTALL_DIR`
 when existing offline hooks need it. Preserve the required three-day release-age
 floor through `UV_EXCLUDE_NEWER=3 days` or the scoped uv configuration. Set
-`UV_CACHE_DIR` to a fork-owned cache and allow sandbox writes to that directory.
+`UV_CACHE_DIR` and `NPM_CONFIG_CACHE` to fork-owned caches and allow sandbox writes
+to those directories instead of opening the user's global caches. Tests that start
+local servers also need the sandbox's local-binding permission. Keep fixture
+listeners on loopback, short-lived, and within the requested test scope. Do not
+disable the sandbox or skip required tests to avoid these setup requirements.
 Preapprove the required metadata, skill, test and validation commands explicitly.
 Use Claude's `dontAsk` mode for unattended workers so an unapproved command is
 refused rather than waiting for a person. This does not approve extra commands or
