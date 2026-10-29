@@ -1,6 +1,6 @@
 ---
 name: claudex-lean
-description: Coordinate delegated coding work with scoped authority, independent verification, minimal recovery state, and timed Multica progress reporting. Load for work explicitly assigned to a Claudex Lean coordinator. The external worker backend is a separate integration and is not supplied by this skill.
+description: Coordinate coding work assigned to a Claudex Lean lead through independent Agent Deck CLI workers, candidate-bound verification, scoped cleanup and Multica progress reporting. Keep product implementation and tests in external worker contexts.
 ---
 
 # Claudex Lean
@@ -12,14 +12,83 @@ product tests, or proxy individual build and test commands for workers. Keep raw
 transcripts and build output in worker contexts. Collect bounded findings,
 candidate identities, verification results, and evidence references.
 
-This package supplies coordination policy and a provider-neutral reporting loop.
-It does not supply a worker adapter, messaging transport, launcher, native role
-root, or cancellation protocol. Until a backend is separately selected, authorized,
-and verified, product dispatch is unavailable. Do not silently fall back to native
-Agent/Task delegation or an inherited pipeline. Report this deployment limitation
-honestly instead of claiming a production-ready coding runtime. The lead may still
-perform authorized coordination, scope clarification, configuration read-back and
-progress reporting. Do not invent worker results.
+Use Agent Deck as the external execution backend through `scripts/agent_deck.py`.
+The operator supplies the installed CLI and a private runtime configuration at
+`$HOME/.config/claudex-lean/agent-deck.json`. If either is missing, report that
+specific setup requirement. Do not install tools, select hcom, fall back to native
+Agent/Task/Workflow delegation, or load the inherited pipeline. Normal provider
+authentication is reused without copying credentials or requiring an empty profile.
+Do not invent worker results.
+
+## Agent Deck execution {:#agent-deck-execution}
+
+Write a scoped prompt with the required behavior, permitted files and effects,
+checks, and completion evidence. Create a fresh private run directory outside
+product content. Invoke the installed adapter in the foreground, not a background
+shell or detached SDK task:
+
+```sh
+uv run --no-project python -I /path/to/claudex-lean/scripts/agent_deck.py \
+  --config "$HOME/.config/claudex-lean/agent-deck.json" \
+  --repo /path/to/input-checkout --prompt /private/prompt.md \
+  --run-dir /private/run --role builder --max-seconds 240
+```
+
+The adapter creates a branch at the exact input HEAD and an Agent Deck worktree.
+The configured Agent Deck `worktree.branch_prefix` must be empty, so it cannot
+rewrite the branch name. An incorrect initial HEAD is rejected before dispatch.
+The worker command is an operator-supplied argv array. Literal `{run_dir}` expands
+inside its arguments, for example a Claude `--add-dir` allowance for completion.
+The runtime must provide working noninteractive executable resolution, native
+Agent Deck hooks through session-local settings, and explicit worker permissions.
+Do not change shared provider hooks or trust all projects to repair startup.
+`trust_folder` defaults to false. Operator opt-in permits native startup settling
+for the owned project, without sending a continuation message or accepting an
+unrecognized prompt. It is not permission to bypass the worker's tool checks.
+
+A worker writes `completion.json` with exactly `status`, `summary`, `candidate`,
+and `worktree`. Status is completed, blocked, or failed. Completed work requires
+the actual committed HEAD and no uncommitted worker changes. Blocked or failed
+work may omit the candidate. A completion artifact is a worker claim, not an
+independent review. Queued, submitted, landed, idle and exit-zero states do not
+prove task completion.
+
+For independent verification, use the builder's candidate worktree as `--repo`,
+`--role reviewer`, and `--candidate FULL_COMMIT_SHA`. Give the reviewer the actual
+failure case and required checks. The reviewer gets a fresh CLI context and a
+separate worktree, must retain that candidate HEAD, and must not repair it in place.
+Delegate any findings back to a builder and verify the revised candidate.
+
+Workers may use native Agent Deck messaging and launch authorized children with
+`--parent THEIR_SESSION_ID`, the same profile and tmux socket, and the same scoped
+worker settings. Include a finite child budget in the job. Use deferred sends for
+busy peers. Preserve parent links, which are how cleanup discovers descendants.
+Do not launch unlinked or independently detached work. Transport deduplication is
+not application idempotency. A plain restart is not proof of inbox replay.
+
+`run.json` is the small ownership and result record. The adapter stops owned
+sessions child-first and checks for surviving processes. It keeps candidates and
+worktrees rather than deleting dirty work. On unresolved cleanup, repair the actual
+cause and run the following without relaunching the product job:
+
+```sh
+uv run --no-project python -I /path/to/claudex-lean/scripts/agent_deck.py \
+  --config "$HOME/.config/claudex-lean/agent-deck.json" \
+  --run-dir /private/run --cleanup-only
+```
+
+Collect all owned work before ending the turn. After interruption, reconcile the
+recorded session title and ID before any retry. A late ambiguous add can still
+require native session inspection. Do not restart a completed product operation
+merely to recover cleanup or reporting. Keep control diagnostics and transcripts
+private. Return only concise candidate-bound findings to the lead.
+
+Keep each foreground work unit below the worklog interval and allow time for
+startup and cleanup in the outer tool timeout. Post due natural-language worklogs
+between commands. Do not wrap this detached-session adapter in `report.py`: that
+supervisor's five-second termination grace can kill the adapter before tmux
+cleanup finishes. The adapter's own finite lifetime and cleanup-only recovery own
+this execution path.
 
 ## Authority and scope {:#authority}
 
@@ -99,10 +168,12 @@ gate. Integrate, install or publish only through the authorized repository proce
 
 ## Timed worklogs {:#worklogs}
 
-While active, report after ten minutes without a successful user-visible lead
-response, then after each further ten minutes. Internal events do not reset this
-clock. Stop periodic reporting on completion or an external blocker. Post the final
-result separately. Do not wait merely to create a worklog.
+While active, give a short natural-language update around every ten minutes without
+a successful user-visible lead response. Internal events do not reset this clock.
+Explain completed work, current activity, next action and any blocker. Exact-second
+precision is not an acceptance gate. Stop periodic reporting on completion or an
+external blocker and post the final result separately. Do not wait merely to create
+a worklog.
 
 `scripts/report.py` can wrap an approved foreground backend command. It does not
 implement or select that backend. The command must own and collect its workers

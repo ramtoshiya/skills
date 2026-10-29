@@ -1,125 +1,152 @@
 # Claudex Lean coordination
 
-Claudex Lean is a separate coordination policy and timed-reporting package.
-The lead delegates product implementation and tests, uses independent verification,
-and keeps raw worker logs out of its own context. It does not require a complete
-repository inventory or role-specific receipts for every source change.
+Claudex Lean coordinates coding work through independent Agent Deck CLI workers.
+The lead delegates implementation and product tests, then requests independent
+verification of the actual candidate. Raw worker logs stay outside the lead's
+context. Multica owns tasks and user-facing reporting. Agent Deck owns execution,
+messaging, worktrees and session lifecycle. No conductor service or hcom runtime
+is required, and native Claude delegation is not a fallback.
 
-The package does not include a worker backend. It cannot yet dispatch product work,
-exchange worker messages, or prove external worker cleanup. It never falls back to
-native Claude delegation. Select and verify an external backend separately before
-assigning product implementation. Existing agents and the original
-[Claudex pipeline](claudex-pipeline.md) are unchanged.
+Existing agents and the original [Claudex pipeline](claudex-pipeline.md) are
+unchanged. Do not migrate ongoing work merely to test the separate configuration.
 
-## Files
+## Operator setup
 
-- `setup/agents/claudex-lean/lead-instructions.md`: portable lead instructions.
-- `setup/agents/claudex-lean/skill/`: an independently importable Multica skill,
-  its reporting script and policy evaluation cases.
-- `test/test_claudex_lean.py`: reporting cadence, transport recovery, command
-  lifetime and cancellation tests.
+Install [Agent Deck](https://github.com/asheshgoplani/agent-deck) and its required
+tmux dependency using the upstream instructions. The skill never installs or
+updates missing tools. Provision a private Agent Deck profile and short tmux
+socket directory. Set `worktree.branch_prefix = ""` in that profile's effective
+configuration, so Agent Deck does not rewrite a precreated candidate branch.
 
-The skill uses repository instructions and current user authority. Security review
-is selected for concrete changes to actual boundaries, not every mention of data.
-Accepted risks and optional hardening do not silently grow the completion gate.
-Existing user changes and runtime instructions remain protected without imposing a
-universal pristine-tree or cumulative byte-limit requirement.
+The worker CLI must already authenticate normally and start without interactive
+shell-manager setup. Reuse normal authentication without copying credentials or
+requiring a new empty provider home. A separate provider home needs its own login.
+Configure explicit worker permissions without YOLO or bypass defaults. Native
+Agent Deck hooks can be passed through session-local Claude `--settings`, leaving
+shared hooks untouched. Enable the native session, prompt, tool, stop and end
+callbacks needed for identity and message handling. The native hook handler is
+`agent-deck hook-handler`. Follow the installed version's hook contract.
+
+For a Claude worker, disable native Agent, Task, Workflow and peer messaging
+fallbacks. Grant the private completion directory through `--add-dir {run_dir}`.
+If tool execution is sandboxed, its approved Git commit and Agent Deck control
+operations need explicit permissions to reach Git metadata and the tmux socket.
+These control-plane allowances are not a security sandbox for hostile workers.
+Do not grant broader access merely to turn a denied operation into a pass.
+
+Agent Deck's XDG roots can also relocate other tools' data lookup. Preserve an
+already installed managed Python directory through `UV_PYTHON_INSTALL_DIR` when
+existing offline hooks need it. Do not silently install another interpreter or
+change shared hooks to hide a startup failure.
+
+Store the private runtime JSON at
+`$HOME/.config/claudex-lean/agent-deck.json`, mode `0600`. It contains:
+
+- `agent_deck`: absolute installed executable path.
+- `worker_command`: argv array for the normally authenticated coding CLI.
+- `profile`: the dedicated Agent Deck profile.
+- `tmux_path`: absolute directory containing the installed tmux executable.
+- `tmux_socket`: the profile's isolated socket name.
+- `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_STATE_HOME`, and
+  `TMUX_TMPDIR`: existing absolute directories, owned by the operator, mode `0700`.
+- `trust_folder`: optional boolean, false by default. Explicit opt-in allows native
+  startup settling for the owned project. Unknown prompts stop dispatch.
+
+The adapter removes inherited Multica task credentials and parent CLI session
+identity from its launch environment. An existing tmux server can retain older
+environment state. Provision the dedicated socket from a clean launch, not a
+shared server. This does not isolate disk-based authentication or provide hostile
+multi-tenant containment. Do not commit runtime configuration, transcripts or
+completion records.
 
 ## Separate Multica configuration
 
-Package the `skill/` directory as a local zip and import it with Multica's supported
-skill import command. Bind the resulting new skill ID only to the new configuration.
-Use `agent copy` to preserve the source agent's portable model and runtime settings,
-then replace instructions with this package's lead instructions. Do not inherit the
-original pipeline skill or its role-root `--add-dir`. Preserve unrelated arguments
-and settings when adapting an existing configuration. Secret and machine-local
-fields are not copied by that command and must not be fetched using agent credentials.
+Package the complete `setup/agents/claudex-lean/skill/` directory as a local zip
+and import it through Multica's supported skill import command. Bind it only to
+the separate agent and use `lead-instructions.md` for that agent's instructions.
+An authorized refresh preserves the skill ID and bindings. Do not inherit the
+original pipeline skill or role-root arguments. Secret and machine-local agent
+fields must not be fetched with task credentials.
 
-A copied agent plus this skill is a coordination foundation, not a verified coding
-runtime. Keep backend selection and deployment readiness explicit. Do not migrate
-existing issues or modify the source agent merely to test the copy.
+The package has no globally registered roles or shared-profile synchronization.
+Its relevant files are `scripts/agent_deck.py`, `scripts/report.py` and
+`evals/evals.json`. Missing local runtime setup is a deployment requirement, not
+permission to invent a substitute backend.
 
-The package has no globally registered native roles, no required tool installation,
-and no automatic shared-profile synchronization. Import the complete skill archive,
-including `scripts/report.py`, so a refreshed task receives the reporting code.
+## Execution and verification
 
-## Foreground progress reporting
-
-The reporting script wraps an approved command, captures its stdout/stderr in a
-private records directory, and posts a worklog when 600 seconds pass without one
-of its own confirmed posts. Internal status updates do not reset the timer. Supply
-`--last-visible-at` with the run start or last successful visible response timestamp,
-so setup time before launching the loop is not lost. Use one reporting owner. It does
-not query or reset its timer for comments posted by another process.
-
-The wrapped command is supplied by the separately configured backend. It must
-collect its workers and exit on completion, failure, cancellation or a real external
-blocker. The reporting script does not infer lifecycle from status text. Do not use
-it to make the lead execute product tests. It creates no daemon or cron job.
-
-Write a private status file containing:
-
-```json
-{
-  "observed_at": "2030-01-02T03:04:00+00:00",
-  "completed": "Fixture prepared.",
-  "current": "Worker is verifying the candidate.",
-  "next": "Collect the independent result.",
-  "blocker": "None confirmed."
-}
-```
-
-Only include facts safe to post. Status older than ten minutes is labeled stale.
-Missing or malformed status produces an honest unavailable report, not a success
-claim. The script does not summarize raw stdout or expose it in the worklog.
-
-From an authorized working directory, run:
+Write a scoped prompt and create a private run directory outside product content.
+Run the adapter in the foreground:
 
 ```sh
-uv run --no-project --managed-python --python '>=3.11' python -I \
-  /path/to/claudex-lean/scripts/report.py \
-  --issue ISSUE_UUID --parent COMMENT_UUID --status /private/status.json \
-  --records /private/run-records --last-visible-at LAST_VISIBLE_ISO_TIME \
-  --max-seconds 3600 -- APPROVED_BACKEND_COMMAND
+uv run --no-project python -I /path/to/claudex-lean/scripts/agent_deck.py \
+  --config "$HOME/.config/claudex-lean/agent-deck.json" \
+  --repo /path/to/input-checkout --prompt /private/prompt.md \
+  --run-dir /private/builder --role builder --max-seconds 240
 ```
 
-The records directory must be private (mode `0700`). Comment bodies are temporary
-UTF-8 files in the working directory, passed with `--content-file` and removed after
-the call. The run records contain a process ID, private command output, one delivery
-journal and the terminal result. Do not commit or publish these runtime files.
-A nonblocking local lock prevents two supervisors from owning the same records.
+The adapter pins a fresh branch to the input HEAD before requesting its worktree.
+A different initial HEAD is rejected before work starts. A completed builder must
+return a committed, clean candidate. Dirty source files are preserved and do not
+block a separate worker checkout.
 
-A send counts only after a returned comment ID is checked. A lost response remains
-pending and is reconciled by its marker and reply parent before retrying. If the
-lookup fails, the loop does not blindly resend. This reduces duplicates but is not
-a transactional exactly-once delivery guarantee. On terminal command completion,
-an unresolved delivery returns exit 3 and remains in the journal. Recover it with
-`--issue ISSUE_UUID --parent COMMENT_UUID --records /private/run-records --reconcile-only`.
-That mode reconciles and, only after a successful absent lookup, retries the pending
-worklog without starting a command. A normal launch refuses pending delivery rather
-than duplicating product work. API outages and latency can delay delivery beyond its
-due time. Final-result delivery is separate.
+For independent verification, point `--repo` at the builder's candidate worktree
+and use `--role reviewer --candidate FULL_COMMIT_SHA`. The reviewer receives a
+fresh CLI context and worktree, inspects the requested behavior and leaves the
+candidate unchanged. Its conclusion still needs actual evidence. A worker-written
+`completion.json`, idle status, delivered message or zero exit is not independent
+verification.
 
-The script owns only the process group it starts. It checks the Multica daemon PID
-and group before launching any command and refreshes that check before termination.
-If initial admission fails, nothing starts. If the refresh fails, cleanup uses the
-verified launch-time identity and exclusively owned new process group, records a
-warning, and still collects its child. It attempts graceful termination, then kills
-remaining members of that group. It cannot identify detached sessions created by a future
-backend. That backend must supply verified ownership and cleanup for them before use.
-No global process-name kill or unrelated-session cleanup is appropriate.
+Workers can message peers and create authorized children using native Agent Deck
+commands under the same profile, socket and worker settings. Preserve parent links
+and an agreed finite child budget. Use deferred sends for busy peers. Plain restart
+does not establish inbox replay, and transport deduplication does not make product
+operations idempotent.
+
+The adapter stops discoverable owned sessions child-first and keeps worktrees.
+It re-enumerates descendants after stopping them and verifies the settled graph.
+Four expanding passes return unresolved cleanup rather than a false success.
+It does not stop unrelated sessions or delete dirty work. On unresolved cleanup:
+
+```sh
+uv run --no-project python -I /path/to/claudex-lean/scripts/agent_deck.py \
+  --config "$HOME/.config/claudex-lean/agent-deck.json" \
+  --run-dir /private/builder --cleanup-only
+```
+
+Recovery does not relaunch the product job. Inspect `run.json` and the recorded
+native session identity first. Detached, unlinked workers and an ambiguous add
+that appears after lookup still require operator reconciliation. Private
+`control-error.json` contains bounded native control-command diagnostics, not a
+public result. Collect owned processes before ending the lead turn.
+
+## Progress reporting
+
+Give short natural-language Multica updates around every ten minutes of active
+silence. State completed work, current activity, next action and any blocker.
+Exact-second timing is not a completion gate. Keep foreground work units shorter
+than the reporting interval and post due updates between commands. Give the outer
+tool enough time for startup and owned-session cleanup.
+
+`scripts/report.py` remains available for compatible foreground process-group
+commands. It captures private command output and reconciles ambiguous comment
+delivery through a unique marker and the required reply parent. It is not an
+exactly-once guarantee or a substitute for final delivery. Do not wrap the detached
+Agent Deck adapter in it: its five-second termination grace can kill the adapter
+before tmux cleanup completes. Agent Deck execution uses the adapter's finite
+lifetime and cleanup-only recovery instead.
 
 ## Validation
 
-Run the repository checks described in `AGENTS.md`. Focused reporting tests use:
+Run the repository checks in `AGENTS.md`. Focused adapter and reporting tests use:
 
 ```sh
-uv run --no-project --managed-python --python '>=3.11' python -m unittest discover \
-  -s test -p test_claudex_lean.py -v
+uv run --no-project python -m unittest discover -s test -p 'test_claudex_lean*.py' -v
 ```
 
-The tests cover a controlled clock, failed and ambiguous delivery, recovery,
-short command outcomes, timeout/cancellation, and exclusive ownership. Simulated
-transport does not prove live Multica delivery. Policy evaluations do not prove
-worker capability. A production backend still needs independent-worker, real failure
-case, lifecycle and long-running reporting integration checks.
+Controlled CLI fixtures cover candidate binding, startup refusal, completion,
+cancellation, owned cleanup and recovery. They do not prove real Agent Deck
+behavior. Verify the installed runtime with an actual CLI worker, the correct
+linked-checkout base, completion-file access and process cleanup before assigning
+product work. A real bug still needs its original failure reproduced and an
+independent candidate-bound check. Policy evaluations are not that evidence.
