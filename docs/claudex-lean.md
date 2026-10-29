@@ -1,171 +1,96 @@
 # Claudex Lean coordination
 
-Claudex Lean coordinates coding work through independent Agent Deck CLI workers.
-The lead delegates implementation and product tests, then requests independent
-verification of the actual candidate. Raw worker logs stay outside the lead's
-context. Multica owns tasks and user-facing reporting. Agent Deck owns execution,
-messaging, worktrees and session lifecycle. No conductor service or hcom runtime
-is required, and native Claude delegation is not a fallback.
-
-Existing agents and the original [Claudex pipeline](claudex-pipeline.md) are
-unchanged. Do not migrate ongoing work merely to test the separate configuration.
+Claudex Lean keeps implementation and product tests in independent Agent Deck CLI
+workers. The lead agrees scope, coordinates work, obtains fresh verification and
+reports through Multica. Implementation workstreams retain their session and
+worktree across retries. Review starts in a fresh context at the actual candidate.
+The original [Claudex pipeline](claudex-pipeline.md) and existing agents are unchanged.
 
 ## Operator setup
 
-Install [Agent Deck](https://github.com/asheshgoplani/agent-deck) and its required
-tmux dependency using the upstream instructions. The skill never installs or
-updates missing tools. Provision a private Agent Deck profile and short tmux
-socket directory. Set `worktree.branch_prefix = ""` in that profile's effective
-configuration, so Agent Deck does not rewrite a precreated candidate branch.
+Install [Agent Deck](https://github.com/asheshgoplani/agent-deck) and tmux through
+the upstream instructions. The skill never installs or updates tools. Keep the
+working operator runtime rather than rebuilding profiles for each task.
 
-The worker CLI must already authenticate normally and start without interactive
-shell-manager setup. Resolve Node, its matching npm, and uv from existing working
-installations rather than inactive project-manager shims. Reuse normal
-authentication without copying credentials or requiring a new empty provider home. A separate provider home needs its own login.
-Configure explicit worker permissions without YOLO or bypass defaults. Native
-Agent Deck hooks can be passed through session-local Claude `--settings`, leaving
-shared hooks untouched. Enable the native session, prompt, tool, stop and end
-callbacks needed for identity and message handling. The native hook handler is
-`agent-deck hook-handler`. Follow the installed version's hook contract.
+Use a dedicated Agent Deck profile and short tmux socket directory. Set
+`worktree.branch_prefix = ""`, so the backend does not rewrite the branch pinned
+to the requested input commit. Reuse normal provider authentication without copying
+credentials or requiring a new empty provider home. The verified integration uses
+Claude Code with session-local native Agent Deck hooks. Other harnesses need their
+native wait/output contract checked before claiming support.
 
-For a Claude worker, disable native Agent, Task, Workflow and peer messaging
-fallbacks. Grant the private completion directory through `--add-dir {run_dir}`.
-If tool execution is sandboxed, its approved Git commit and Agent Deck control
-operations need explicit permissions to reach Git metadata and the tmux socket.
-These control-plane allowances are not a security sandbox for hostile workers.
-Do not grant broader access merely to turn a denied operation into a pass.
+Store `$HOME/.config/claudex-lean/agent-deck.json` as a private `0600` file with:
 
-Agent Deck's XDG roots also relocate other tools' configuration and caches.
-Preserve an installed managed Python directory through `UV_PYTHON_INSTALL_DIR`
-when existing offline hooks need it. Preserve the required three-day release-age
-floor through `UV_EXCLUDE_NEWER=3 days` or the scoped uv configuration. Set
-`UV_CACHE_DIR` and `NPM_CONFIG_CACHE` to fork-owned caches and allow sandbox writes
-to those directories instead of opening the user's global caches. Tests that start
-local servers also need the sandbox's local-binding permission. Keep fixture
-listeners on loopback, short-lived, and within the requested test scope. Do not
-disable the sandbox or skip required tests to avoid these setup requirements.
-Preapprove the required metadata, skill, test and validation commands explicitly.
-Use Claude's `dontAsk` mode for unattended workers so an unapproved command is
-refused rather than waiting for a person. This does not approve extra commands or
-disable the sandbox. A successful Git/Write smoke does not prove that tests can run.
-Verify a harmless interpreter command and completion-file write before product
-dispatch. Do not disable the sandbox, weaken the release-age guard, install another
-interpreter or change shared hooks to hide a startup failure.
-
-Store the private runtime JSON at
-`$HOME/.config/claudex-lean/agent-deck.json`, mode `0600`. It contains:
-
-- `agent_deck`: absolute installed executable path.
-- `worker_command`: argv array for the normally authenticated coding CLI.
-- `profile`: the dedicated Agent Deck profile.
-- `tmux_path`: absolute directory containing the installed tmux executable.
-- `tmux_socket`: the profile's isolated socket name.
+- `agent_deck`: absolute installed executable.
+- `worker_command`: normally authenticated CLI argv, with literal `{run_dir}`
+  substitution available for an additional working-directory allowance.
+- `profile`, `tmux_path` and `tmux_socket`: the dedicated profile, absolute directory
+  containing tmux, and isolated socket name.
 - `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_STATE_HOME`, and
-  `TMUX_TMPDIR`: existing absolute directories, owned by the operator, mode `0700`.
-- `trust_folder`: optional boolean, false by default. Explicit opt-in allows native
-  startup settling for the owned project. Unknown prompts stop dispatch.
+  `TMUX_TMPDIR`: existing operator-owned absolute directories, mode `0700`.
+- `trust_folder`: optional, false by default. Explicit opt-in permits native
+  settling for the owned project. Unknown prompts stop dispatch.
 
-The adapter removes inherited Multica task credentials and parent CLI session
-identity from its launch environment. An existing tmux server can retain older
-environment state. Provision the dedicated socket from a clean launch, not a
-shared server. This does not isolate disk-based authentication or provide hostile
-multi-tenant containment. Do not commit runtime configuration, transcripts or
-completion records.
+Resolve Node, its matching npm, and uv from working installations rather than
+inactive shims. Preserve the managed Python lookup and required release-age policy
+when XDG roots change. Use fork-owned uv/npm caches with scoped sandbox write
+allowances. Required local-server tests need local binding, with listeners kept
+short-lived and on loopback. Do not disable guards or skip repository checks.
 
-## Separate Multica configuration
+Preapprove required operations and use Claude's `dontAsk` mode for unattended
+workers. Native Agent/Task/Workflow fallback is disabled. Git metadata and Agent
+Deck control operations need their approved permissions. These allowances are not
+hostile-worker containment. An existing tmux server may retain old environment
+state, so provision the dedicated socket from a clean launch. Shared provider
+hooks, credentials and global Git settings do not belong in this package.
 
-Package the complete `setup/agents/claudex-lean/skill/` directory as a local zip
-and import it through Multica's supported skill import command. Bind it only to
-the separate agent and use `lead-instructions.md` for that agent's instructions.
-An authorized refresh preserves the skill ID and bindings. Do not inherit the
-original pipeline skill or role-root arguments. Secret and machine-local agent
-fields must not be fetched with task credentials.
+## Use and recovery
 
-The package has no globally registered roles or shared-profile synchronization.
-Its relevant files are `scripts/agent_deck.py`, `scripts/report.py` and
-`evals/evals.json`. Missing local runtime setup is a deployment requirement, not
-permission to invent a substitute backend.
+Import the complete `setup/agents/claudex-lean/skill/` archive through Multica and
+bind it only to the separate agent. Use `lead-instructions.md` for that agent.
+A supported refresh preserves the skill ID and bindings. Runtime configuration,
+logs and workstream records stay private and outside product content.
 
-## Execution and verification
+Use the installed `scripts/agent_deck.py --help`. Start with `--config`, `--repo`,
+`--prompt`, a fresh private `--run-dir` and `--max-seconds`. Continue with the same
+config/run directory, `--resume` and an explicit new prompt. For a fresh review,
+add `--candidate FULL_SHA` to pin unchanged candidate state across its units.
+`--cleanup-only` needs only config and run directory and does not start work.
+An ambiguous send requires native reconciliation before `--ack-ambiguous` can
+permit a different continuation. Give a worker the requested behavior, permitted
+files/effects and required checks. The adapter pins the input HEAD and uses native correlated
+replies. There is no worker-written completion file or separate reporting service.
+A received reply is not task success. Inspect its Git candidate and evidence, then
+obtain independent verification of the original failure and agreed safety scope.
 
-Write a scoped prompt and create a private run directory outside product content.
-Run the adapter in the foreground:
+Continue an existing implementation session/worktree after inspecting its record
+and native state. Do not blindly repeat an ambiguously delivered operation.
+Independent review needs a fresh context, not every implementation retry. Parallel
+workstreams may have separate owners. Authorised children retain native parent links and scoped
+settings. A restart is not proof of inbox replay or application idempotency.
 
-```sh
-uv run --no-project python -I /path/to/claudex-lean/scripts/agent_deck.py \
-  --config "$HOME/.config/claudex-lean/agent-deck.json" \
-  --repo /path/to/input-checkout --prompt /private/prompt.md \
-  --run-dir /private/builder --role builder --max-seconds 240
-```
+The adapter collects discoverable owned processes before returning and retains
+worktrees. Cleanup recovery does not relaunch the product job. Unlinked workers
+and a late ambiguous launch still require explicit reconciliation. Do not delete
+dirty work or stop unrelated sessions to make cleanup appear successful.
 
-The adapter pins a fresh branch to the input HEAD before requesting its worktree.
-A different initial HEAD is rejected before work starts. A completed builder must
-return a committed, clean candidate. Dirty source files are preserved and do not
-block a separate worker checkout.
-
-The worker uses its file-write tool to create `completion.tmp.json` in the run
-directory, then publishes it with the adapter's standalone uv rename command.
-Metadata checks stay in separate commands. Combining publication with shell
-assignments, tests or pipelines can require approval and prevent even a blocked
-result from being returned. The same publication path reports blocked work.
-
-For independent verification, point `--repo` at the builder's candidate worktree
-and use `--role reviewer --candidate FULL_COMMIT_SHA`. The reviewer receives a
-fresh CLI context and worktree, inspects the requested behavior and leaves the
-candidate unchanged. Its conclusion still needs actual evidence. A worker-written
-`completion.json`, idle status, delivered message or zero exit is not independent
-verification.
-
-Workers can message peers and create authorized children using native Agent Deck
-commands under the same profile, socket and worker settings. Preserve parent links
-and an agreed finite child budget. Use deferred sends for busy peers. Plain restart
-does not establish inbox replay, and transport deduplication does not make product
-operations idempotent.
-
-The adapter stops discoverable owned sessions child-first and keeps worktrees.
-It re-enumerates descendants after stopping them and verifies the settled graph.
-Four expanding passes return unresolved cleanup rather than a false success.
-It does not stop unrelated sessions or delete dirty work. On unresolved cleanup:
-
-```sh
-uv run --no-project python -I /path/to/claudex-lean/scripts/agent_deck.py \
-  --config "$HOME/.config/claudex-lean/agent-deck.json" \
-  --run-dir /private/builder --cleanup-only
-```
-
-Recovery does not relaunch the product job. Inspect `run.json` and the recorded
-native session identity first. Detached, unlinked workers and an ambiguous add
-that appears after lookup still require operator reconciliation. Private
-`control-error.json` contains bounded native control-command diagnostics, not a
-public result. Collect owned processes before ending the lead turn.
-
-## Progress reporting
-
-Give short natural-language Multica updates around every ten minutes of active
-silence. State completed work, current activity, next action and any blocker.
-Exact-second timing is not a completion gate. Keep foreground work units shorter
-than the reporting interval and post due updates between commands. Give the outer
-tool enough time for startup and owned-session cleanup.
-
-`scripts/report.py` remains available for compatible foreground process-group
-commands. It captures private command output and reconciles ambiguous comment
-delivery through a unique marker and the required reply parent. It is not an
-exactly-once guarantee or a substitute for final delivery. Do not wrap the detached
-Agent Deck adapter in it: its five-second termination grace can kill the adapter
-before tmux cleanup completes. Agent Deck execution uses the adapter's finite
-lifetime and cleanup-only recovery instead.
+The lead gives short natural-language Multica updates around ten minutes of active
+silence, between bounded foreground calls. Internal events do not reset that clock.
+This is approximate lead-owned reporting, not an independent timer guarantee.
+Repository policy owns required checks. Additional roles and repeated full-suite
+runs are not automatic phase gates, and unchanged-candidate evidence may be reused
+where that policy permits.
 
 ## Validation
 
-Run the repository checks in `AGENTS.md`. Focused adapter and reporting tests use:
+Run the checks in `AGENTS.md`. Focused adapter tests use:
 
 ```sh
-uv run --no-project python -m unittest discover -s test -p 'test_claudex_lean*.py' -v
+uv run --no-project python -m unittest discover -s test -p test_claudex_lean_agent_deck.py -v
 ```
 
-Controlled CLI fixtures cover candidate binding, startup refusal, completion,
-cancellation, owned cleanup and recovery. They do not prove real Agent Deck
-behavior. Verify the installed runtime with an actual CLI worker, the correct
-linked-checkout base, completion-file access and process cleanup before assigning
-product work. A real bug still needs its original failure reproduced and an
-independent candidate-bound check. Policy evaluations are not that evidence.
+Controlled CLI tests check native result handling, candidate binding, resumption
+and cleanup. They do not prove live backend behavior. Verify real correlated
+replies and stopped-session context/worktree continuity before replacing a native
+contract. Product acceptance still requires the actual failure case and fresh
+candidate-bound verification, not merely flags, an idle session or a zero exit.
