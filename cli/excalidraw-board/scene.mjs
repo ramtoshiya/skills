@@ -1,4 +1,5 @@
 import { randomBytes, randomInt } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 
 const digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const managed = new Set(["version", "versionNonce", "updated", "index", "seed", "isDeleted"]);
@@ -61,6 +62,11 @@ function expand(input) {
   return result;
 }
 
+function jsonValue(value) {
+  const json = JSON.stringify(value);
+  return json === undefined ? undefined : JSON.parse(json);
+}
+
 export function applyBatch(elements, batch, { imageFiles = [] } = {}) {
   if (!batch || typeof batch !== "object" || Array.isArray(batch)) throw new Error("Expected a batch object");
   for (const key of Object.keys(batch)) if (!["add", "update", "delete"].includes(key)) throw new Error(`Unknown batch field: ${key}`);
@@ -86,7 +92,7 @@ export function applyBatch(elements, batch, { imageFiles = [] } = {}) {
       if (operation === "add" && patch.type === "image" && (!imageFiles.includes(patch.fileId) || patch.status !== "saved")) throw new Error("Use the image command to upload and verify image files");
       if (operation === "update" && Object.hasOwn(patch, "type") && patch.type !== old.type) throw new Error("Cannot change an element type");
       const changes = operation === "delete" ? { isDeleted: true } : patch;
-      if (old && Object.entries(changes).every(([key, value]) => JSON.stringify(old[key]) === JSON.stringify(value))) continue;
+      if (old && Object.entries(changes).every(([key, value]) => isDeepStrictEqual(jsonValue(old[key]), jsonValue(value)))) continue;
       let base = old;
       if (!base) {
         tail = nextIndex(tail);
