@@ -11,6 +11,8 @@ installed separately, as described in [Agent plugins](agent-pack.md).
 The `agents:sync` and `agents:status` tasks also manage the scoped
 [Claudex pipeline role root](claudex-pipeline.md) from
 `setup/agents/claudex-pipeline/`, without registering its roles globally.
+The separate [Claudex Lean coordination package](claudex-lean.md) is imported
+explicitly into a new Multica configuration and is not part of shared role sync.
 
 ## Requirements
 

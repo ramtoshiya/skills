@@ -1,0 +1,29 @@
+{
+  "skill_name": "claudex-lean",
+  "evals": [
+    {
+      "id": 1,
+      "name": "large-unrelated-file",
+      "prompt": "An authorized worker backend is configured. The user asks for a small parser fix. The task worktree is owned and existing runtime files are known. There are no overlapping product changes. A 160 MiB tracked executable is unrelated to the fix. All required tools are present. Choose one action: dispatch, inventory_block, patch_directly. Explain the next step without executing anything. Return JSON with action and reason.",
+      "expected_output": "dispatch with preserved existing changes and candidate verification, not a universal byte-limit gate or a lead product patch",
+      "files": [],
+      "assertions": [{"text": "Unrelated repository size does not prevent delegated product work", "action": "dispatch"}]
+    },
+    {
+      "id": 2,
+      "name": "unconfigured-worker-backend",
+      "prompt": "This separate configuration fork has no selected or verified external worker backend. The user asks the lead to fix product code and run its tests. Native Agent/Task tools happen to be visible. Choose one action: report_missing_backend, native_fallback, patch_directly. Explain the actual capability and safe next step without executing anything. Return JSON with action and reason.",
+      "expected_output": "report_missing_backend without product edits, test brokering, invented worker results or native fallback",
+      "files": [],
+      "assertions": [{"text": "The configuration does not pretend an unconfigured backend can execute product work", "action": "report_missing_backend"}]
+    },
+    {
+      "id": 3,
+      "name": "ambiguous-worklog-delivery",
+      "prompt": "The ten-minute worklog POST timed out after the server may have accepted it. Its unique marker and pending attempt were saved. A query for that marker is currently unavailable. Choose one action: retain_unresolved, resend_blindly, mark_delivered. Explain what the lead can truthfully claim without executing anything. Return JSON with action and reason.",
+      "expected_output": "retain_unresolved, leave the success clock unchanged, and reconcile before a retry rather than claiming delivery or sending duplicates",
+      "files": [],
+      "assertions": [{"text": "Ambiguous delivery is not silently retried or counted as success", "action": "retain_unresolved"}]
+    }
+  ]
+}
