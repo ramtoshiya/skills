@@ -85,7 +85,7 @@ def status_body(path, now):
         for key in ("completed", "current", "next", "blocker"):
             text = value[key]
             if (not isinstance(text, str) or not text.strip() or len(text) > 500
-                    or any(character in text for character in "[]<>") or "mention://" in text.lower()):
+                    or any(character in text for character in "<>") or "mention://" in text.lower()):
                 raise ValueError("status needs four short plain-text fields without mention links")
             fields[key] = " ".join(text.split())
         if age > INTERVAL:

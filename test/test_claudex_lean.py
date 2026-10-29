@@ -114,14 +114,27 @@ else:
         self.assertIn("Current worker status is unavailable", body)
         self.assertIn("No new completion verified", body)
 
-    def test_status_cannot_enqueue_agents_through_a_mention(self):
+    def test_bracketed_status_progress_is_preserved_in_worklog(self):
         value = json.loads(self.status.read_text())
-        value["current"] = f"Ask [worker](mention://agent/{uuid.uuid4()}) to run."
+        value["observed_at"] = report.timestamp(600)
+        value["current"] = "CTest [3/4] running"
         self.status.write_text(json.dumps(value))
         self.tick(600)
         body = self.mail.rows[0]["content"]
-        self.assertNotIn("mention://", body)
-        self.assertIn("Current worker status is unavailable", body)
+        self.assertIn(f"- Current activity: Observed at {value['observed_at']}. CTest [3/4] running", body)
+        self.assertNotIn("Current worker status is unavailable", body)
+
+    def test_status_cannot_enqueue_agents_through_a_mention(self):
+        for index, scheme in enumerate(("mention://", "MeNtIoN://", "MENTION://"), start=1):
+            with self.subTest(scheme=scheme):
+                value = json.loads(self.status.read_text())
+                value["observed_at"] = report.timestamp(600 * index)
+                value["current"] = f"Ask [worker]({scheme}agent/{uuid.uuid4()}) to run."
+                self.status.write_text(json.dumps(value))
+                self.tick(600 * index)
+                body = self.mail.rows[-1]["content"]
+                self.assertNotIn("mention://", body.lower())
+                self.assertIn("Current worker status is unavailable", body)
 
     def test_lost_send_response_is_reconciled_across_restart_without_duplicate(self):
         self.mail.fail = "after"
