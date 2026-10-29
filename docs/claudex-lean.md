@@ -34,10 +34,16 @@ operations need explicit permissions to reach Git metadata and the tmux socket.
 These control-plane allowances are not a security sandbox for hostile workers.
 Do not grant broader access merely to turn a denied operation into a pass.
 
-Agent Deck's XDG roots can also relocate other tools' data lookup. Preserve an
-already installed managed Python directory through `UV_PYTHON_INSTALL_DIR` when
-existing offline hooks need it. Do not silently install another interpreter or
-change shared hooks to hide a startup failure.
+Agent Deck's XDG roots also relocate other tools' configuration and caches.
+Preserve an installed managed Python directory through `UV_PYTHON_INSTALL_DIR`
+when existing offline hooks need it. Preserve the required three-day release-age
+floor through `UV_EXCLUDE_NEWER=3 days` or the scoped uv configuration. Set
+`UV_CACHE_DIR` to a fork-owned cache and allow sandbox writes to that directory.
+Preapprove the required metadata, skill, test and validation commands explicitly
+in manual mode. A successful Git/Write smoke does not prove that tests can run.
+Verify a harmless interpreter command and completion-file write before product
+dispatch. Do not disable the sandbox, weaken the release-age guard, install another
+interpreter or change shared hooks to hide a startup failure.
 
 Store the private runtime JSON at
 `$HOME/.config/claudex-lean/agent-deck.json`, mode `0600`. It contains:
