@@ -1,8 +1,11 @@
 import { webcrypto } from "node:crypto";
 import { inflateSync } from "node:zlib";
 import { loadScene } from "./protocol.mjs";
+import { checkSize } from "./size-limit.mjs";
 
+// excalidraw.com caps each image data URL at 4 MiB. Downloads and decompression stay within it.
 const maxFileBytes = 4 * 1024 * 1024;
+const snapshotName = "excalidraw-board snapshot image data";
 const storage = "https://firebasestorage.googleapis.com/v0/b/excalidraw-room-persistence.appspot.com/o/";
 
 function unpack(bytes, count) {
@@ -78,9 +81,11 @@ export async function readSnapshot(room, { ids, excludeIds } = {}) {
   for (const fileId of new Set(elements.filter(element => element.type === "image").map(element => element.fileId))) {
     const file = await loadFile(room, fileId);
     totalBytes += Buffer.byteLength(file.dataURL);
-    if (totalBytes > 48 * 1024 * 1024) throw new Error("Snapshot image data exceeds 48 MiB");
+    // Stop downloading at the hard limit, and warn once about the soft limit afterwards.
+    checkSize(snapshotName, totalBytes, Infinity);
     files[fileId] = file;
   }
+  checkSize(snapshotName, totalBytes, 48 * 1024 * 1024);
   return { type: "excalidraw", version: 2, revision: saved.revision, elements, files,
     appState: { viewBackgroundColor: "#ffffff", exportEmbedScene: false } };
 }
