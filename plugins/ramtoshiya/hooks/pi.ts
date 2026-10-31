@@ -1,4 +1,7 @@
 import { execFile } from "node:child_process";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
 	AgentBeforeSettleEventResult,
@@ -19,6 +22,27 @@ const unavailable: ToolCallEventResult = {
 		"and the guard source. The command was not executed.",
 };
 
+// Guard output past maxBuffer kills the child, so the buffer is the 1 GiB hard
+// limit. Output past the soft limit is still used and logged, because Pi's
+// terminal UI does not keep extension stderr. commit-trailer-guard.py writes the
+// same log.
+export const hardLimit = 1024 ** 3;
+
+export function sizeWarningLog() {
+	return join(process.env.XDG_STATE_HOME || join(homedir(), ".local/state"), "ramtoshiya", "size-warnings.log");
+}
+
+export function checkSize(name: string, bytes: number, softLimit: number) {
+	if (bytes <= softLimit) return;
+	try {
+		const log = sizeWarningLog();
+		mkdirSync(dirname(log), { recursive: true });
+		appendFileSync(log, `${new Date().toISOString()} warning: ${name} is ${bytes} bytes, over the soft limit of ${softLimit} bytes\n`);
+	} catch {
+		// A log failure must not change the guard decision.
+	}
+}
+
 export default function hooks(pi: ExtensionAPI) {
 	packageGuard(pi);
 	gitHygieneGuard(pi);
@@ -34,9 +58,10 @@ function packageGuard(pi: ExtensionAPI) {
 			const child = execFile(
 				"uv",
 				[...runner, packageGuardScript],
-				{ cwd: ctx.cwd, signal: ctx.signal, timeout: 5_000, maxBuffer: 64 * 1024, encoding: "utf8" },
+				{ cwd: ctx.cwd, signal: ctx.signal, timeout: 5_000, maxBuffer: hardLimit, encoding: "utf8" },
 				(error, stdout) => {
 					if (error) return resolve({ ...unavailable });
+					checkSize("Pi package guard output", Buffer.byteLength(stdout), 64 * 1024);
 					if (!stdout.trim()) return resolve(undefined);
 					try {
 						const output = JSON.parse(stdout).hookSpecificOutput;
@@ -89,9 +114,10 @@ function stopReason(cwd: string, signal: AbortSignal | undefined) {
 		const child = execFile(
 			"uv",
 			[...runner, gitHygieneScript],
-			{ cwd, signal, timeout: 10_000, maxBuffer: 256 * 1024, encoding: "utf8" },
+			{ cwd, signal, timeout: 10_000, maxBuffer: hardLimit, encoding: "utf8" },
 			(error, stdout) => {
 				if (error || !stdout.trim()) return resolve(undefined);
+				checkSize("Pi Git hygiene guard output", Buffer.byteLength(stdout), 256 * 1024);
 				try {
 					const output = JSON.parse(stdout);
 					const blocked = output?.decision === "block" && typeof output.reason === "string" && output.reason.trim();

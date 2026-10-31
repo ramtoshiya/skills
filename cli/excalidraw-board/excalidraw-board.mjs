@@ -7,6 +7,7 @@ import { createScene, loadScene, writeScene } from "./protocol.mjs";
 import { compact } from "./scene.mjs";
 import { uploadImage, uploadImages } from "./images.mjs";
 import { readSnapshot } from "./snapshot.mjs";
+import { checkSize } from "./size-limit.mjs";
 
 const help = `excalidraw-board (proof of concept, Node.js 24.21+)
   room create <name>
@@ -23,7 +24,7 @@ const help = `excalidraw-board (proof of concept, Node.js 24.21+)
 
 function input() {
   const value = readFileSync(0, "utf8");
-  if (Buffer.byteLength(value) > 5000000) throw new Error("Input exceeds 5 MB");
+  checkSize("excalidraw-board stdin input", Buffer.byteLength(value), 5_000_000);
   return value;
 }
 function argumentsFor(args, options, positionalCount = 0) {

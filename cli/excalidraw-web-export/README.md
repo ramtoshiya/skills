@@ -118,7 +118,10 @@ guaranteed.
   PNG and JPEG room uploads have been verified end to end. Missing, inaccessible,
   corrupt, or unsupported encrypted files fail instead of producing image
   placeholders. The snapshot reader supports the version-2 AES-GCM/pako file
-  format, caps each image data URL at 4 MiB, and caps their total at 48 MiB.
+  format and caps each image data URL at the service's 4 MiB. Image data above
+  48 MiB in total, or snapshot output above 64 MiB, produces a stderr warning
+  that names the limit and the byte counts. Output above 1 GiB fails. Warnings
+  from `excalidraw-board` are passed through to stderr.
 - Local scenes can embed PNG/JPEG/WebP/GIF files. SVG image payloads are rejected.
   Iframes and video are not supported by this PoC.
 - Existing output files are never overwritten. Browser downloads are copied
