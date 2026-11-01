@@ -163,8 +163,9 @@ directory, not the manifest file:
 
 Each entry accepts the same placement fields as `image`: `file`, `elementId`,
 `x`, `y`, `width`, and optional `frame`. The command validates every entry before
-uploading. It accepts 1 to 128 placements and at most 128 MiB of unique image
-data URLs. Repeated content is uploaded and verified once, even when it has
+uploading. It accepts 1 to 128 placements. Unique image data URLs above 128 MiB
+in total produce a size warning, and only a total above 1 GiB stops the
+command. Repeated content is uploaded and verified once, even when it has
 several placements. Give each placement a unique `elementId`.
 
 The default concurrency is four, adjustable from one to eight. This is a local
@@ -213,7 +214,8 @@ is meant to be shared. Room background state is unavailable and defaults to
 white. No image placeholders are returned after a file read or decrypt failure.
 
 Supported encrypted files use the version-2 AES-GCM/pako envelope. Each image
-data URL is limited to 4 MiB and their total to 48 MiB. Unknown formats, corrupt
+data URL is limited to the service's 4 MiB. A total above 48 MiB produces a size
+warning, and only a total above 1 GiB stops the command. Unknown formats, corrupt
 envelopes, missing files, and inaccessible files fail explicitly. Downloads
 are sequential to bound concurrent transfer memory.
 
@@ -224,6 +226,11 @@ snapshot to render selected objects through a deployed Excalidraw app.
 
 This is a small usable proof of concept, not the full handoff specification.
 
+- Size limits the command sets itself are soft. Standard input above
+  5,000,000 bytes, batch image data above 128 MiB, and snapshot image data
+  above 48 MiB still run, with a stderr warning that names the limit, the actual
+  byte count, and the soft limit. Only data above 1 GiB is rejected. The
+  service's 4 MiB image limit and the relay's payload limit stay hard.
 - New rectangles, ellipses, diamonds, text, frames, and PNG/JPEG uploads cover
   the tested drawing path. New line, arrow, and freehand paths are unsupported.
   The tool does not render or export pictures.

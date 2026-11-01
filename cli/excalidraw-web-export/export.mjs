@@ -4,6 +4,7 @@ import { access, copyFile, open, readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify, parseArgs } from "node:util";
 import { chromium } from "playwright";
+import { checkSize, hardLimit } from "./size-limit.mjs";
 
 const run = promisify(execFile);
 const help = `Usage:
@@ -55,16 +56,19 @@ try {
     let scene;
     let revision;
     if (roomId !== undefined) {
-      let stdout;
+      let stdout, stderr;
       try {
         const args = ["snapshot", "--id", roomId];
         if (values.ids !== undefined) args.push("--ids", values.ids);
         if (values["exclude-ids"] !== undefined) args.push("--exclude-ids", values["exclude-ids"]);
-        ({ stdout } = await run("excalidraw-board", args, { timeout, maxBuffer: 64 * 1024 * 1024 }));
+        ({ stdout, stderr } = await run("excalidraw-board", args, { timeout, maxBuffer: hardLimit }));
       } catch (error) {
         if (error.code === "ENOENT") throw new Error("excalidraw-board is missing from PATH. Install it separately before exporting rooms.");
         throw new Error("excalidraw-board snapshot failed. Use a version with the snapshot command, then check room and image access before retrying.");
       }
+      // Keep the snapshot's own size warnings visible.
+      if (stderr) process.stderr.write(stderr);
+      checkSize("excalidraw-board snapshot output", Buffer.byteLength(stdout), 64 * 1024 * 1024);
       scene = JSON.parse(stdout);
       revision = scene.revision;
       if (typeof revision !== "string") throw new Error("Expected a revision from excalidraw-board snapshot");

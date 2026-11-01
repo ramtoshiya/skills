@@ -14,7 +14,7 @@ if [ -e "$link" ] || [ -L "$link" ]; then
     esac
 fi
 mkdir -p "$install_dir" "$HOME/.local/bin"
-for file in export.mjs package.json package-lock.json .npmrc; do
+for file in export.mjs size-limit.mjs package.json package-lock.json .npmrc; do
     install -m 644 "$source_dir/$file" "$install_dir/$file"
 done
 (

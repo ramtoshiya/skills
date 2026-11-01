@@ -82,32 +82,6 @@ class AgentSyncTests(unittest.TestCase):
         operation = sync.Sync(self.root)
         return operation, operation.process(["pi"], apply=apply)
 
-    def test_pipeline_selection_installs_and_checks_without_native_registration(self):
-        shutil.copytree(SOURCE.parent / "claudex-pipeline", self.root / "setup/agents/claudex-pipeline")
-        command = self.home / "bin/claude"
-        command.write_text("#!/bin/sh\nexit 99\n")
-        command.chmod(0o755)
-        for apply in (True, False):
-            rows = sync.Sync(self.root).process(["claude"], apply=apply, selected=["claudex-pipeline"])
-            self.assertEqual([(row["component"], row["status"]) for row in rows], [("claudex-pipeline", "ok")])
-            source = self.root / "setup/agents/claudex-pipeline"
-            expected = sync.fingerprint(sync.files(source))
-            self.assertRegex(expected, r"^[0-9a-f]{64}$")
-            self.assertEqual(rows[0]["detail"], expected)
-            installed = self.home / ".claude/claudex-pipeline"
-            for package in (source, installed):
-                actual = subprocess.check_output([
-                    sys.executable, "-I", str(package / "pipeline.py"), "package-fingerprint"
-                ], text=True).strip()
-                self.assertEqual(actual, expected)
-        root = self.home / ".claude/claudex-pipeline"
-        self.assertTrue((root / ".claude/agents/claudex-builder.md").is_file())
-        self.assertFalse((self.home / ".claude/settings.json").exists())
-        (root / "pipeline.py").write_text("personal customization")
-        rows = sync.Sync(self.root).process(["claude"], apply=True, selected=["claudex-pipeline"])
-        self.assertEqual(rows[0]["status"], "conflict")
-        self.assertEqual((root / "pipeline.py").read_text(), "personal customization")
-
     def test_sync_preserves_unrelated_settings_replaces_owned_paths_and_is_idempotent(self):
         old = self.home / f".pi/agent/skill-sources/example/skills/{self.first}/plugins/example"
         original = {

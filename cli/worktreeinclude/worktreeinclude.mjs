@@ -14,9 +14,18 @@ const env = { ...process.env };
 for (const key of Object.keys(env)) {
   if (key.startsWith('GIT_') && !['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM'].includes(key)) delete env[key];
 }
+// A copy of cli/excalidraw-board/size-limit.mjs, because this command installs as one file.
+// test/size-limit.test.mjs keeps it equal.
+const hardLimit = 1024 ** 3;
+function checkSize(name, bytes, softLimit, warn = message => process.stderr.write(`${message}\n`)) {
+  if (bytes > hardLimit) throw new Error(`${name} is ${bytes} bytes, over the hard limit of ${hardLimit} bytes`);
+  if (bytes > softLimit) warn(`warning: ${name} is ${bytes} bytes, over the soft limit of ${softLimit} bytes`);
+  return bytes;
+}
 function git(cwd, args, input, allowed = [0]) {
-  const result = spawnSync('git', ['-C', cwd, ...args], { env, input, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const result = spawnSync('git', ['-C', cwd, ...args], { env, input, encoding: 'utf8', maxBuffer: hardLimit });
   if (result.error || !allowed.includes(result.status)) throw new Error('Git operation failed');
+  checkSize(`worktreeinclude git ${args[0]} output`, Buffer.byteLength(result.stdout), 64 * 1024 * 1024);
   return result.stdout;
 }
 const split = value => value.split('\0').filter(Boolean);
@@ -274,7 +283,7 @@ try {
   else throw new Error('Unknown command. Use --help');
 } catch (error) {
   // Never print subprocess output, file data, stacks, or arbitrary system error messages.
-  const known = /^(Git operation failed|Unsafe |Symlink rejected:|Non-directory parent:|Path outside|Manifest must|Unsupported manifest|Tracked path rejected:|Target tracked path rejected:|A non-bare|Cannot resolve|Per-worktree|Unrecognized integration|Invalid integration|Integration files changed|Hook configuration changed|Multiple hook paths|Unsupported hook path|Unknown command)/;
+  const known = /^(Git operation failed|Unsafe |Symlink rejected:|Non-directory parent:|Path outside|Manifest must|Unsupported manifest|Tracked path rejected:|Target tracked path rejected:|A non-bare|Cannot resolve|Per-worktree|Unrecognized integration|Invalid integration|Integration files changed|Hook configuration changed|Multiple hook paths|Unsupported hook path|Unknown command|worktreeinclude git \S+ output is \d+ bytes)/;
   console.error(`${name}: ${known.test(error.message) ? error.message : 'Operation failed. Check repository permissions and integration state'}`);
   process.exitCode = 1;
 }

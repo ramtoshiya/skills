@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkSize, hardLimit } from "../cli/excalidraw-board/size-limit.mjs";
 
 const [skillPath, outputPath, configuration = "with_skill"] = process.argv.slice(2);
 if (!skillPath || !outputPath || !["with_skill", "old_skill"].includes(configuration)) {
@@ -54,12 +55,13 @@ for (const item of suite.evals) {
 		"-p", "--tools", "", "--disable-slash-commands", "--no-session-persistence",
 		"--setting-sources", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
 		"--output-format", "json", "--json-schema", JSON.stringify(schema), prompt,
-	], { env, cwd: output, encoding: "utf8", timeout: 120_000, maxBuffer: 4 * 1024 * 1024 });
+	], { env, cwd: output, encoding: "utf8", timeout: 120_000, maxBuffer: hardLimit });
 	const duration = performance.now() - started;
 	writeFileSync(join(runPath, "response.json"), child.stdout || "", { flag: "wx" });
 	if (child.error || child.status !== 0) {
 		throw new Error(`Evaluation ${item.name} failed: ${child.error?.message || child.stderr || child.stdout}`);
 	}
+	checkSize(`claude evaluation ${item.name} output`, Buffer.byteLength(child.stdout), 4 * 1024 * 1024);
 	const response = JSON.parse(child.stdout);
 	if (response.is_error) throw new Error(`Model error: ${response.result}`);
 	const decision = response.structured_output;

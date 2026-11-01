@@ -109,6 +109,9 @@ exit reports errors or conflicts. Git's hook runs after checkout, so a failed co
 cannot undo the already created worktree. Inspect the report and resolve conflicts
 manually. The CLI writes no persistent copy logs.
 
+Git output above 64 MiB from one command produces a stderr warning that names the
+Git command, the byte count, and the soft limit. Only output above 1 GiB fails.
+
 Use trusted local checkouts. Path checks reject existing symlinks, but this
 portable Node implementation does not lock out another process that maliciously
 renames parent directories while copying. Do not run it against trees being

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs, promisify } from "node:util";
 import { PNG } from "pngjs";
 import { chromium } from "playwright";
+import { checkSize, hardLimit } from "./size-limit.mjs";
 
 const { values } = parseArgs({ options: { live: { type: "boolean" }, "output-dir": { type: "string" } } });
 if (!values.live) throw new Error("Pass --live to create a disposable remote room and upload test images");
@@ -16,7 +17,12 @@ const home = await mkdtemp(join(tmpdir(), "excalidraw-image-room-"));
 const output = values["output-dir"] ? resolve(values["output-dir"]) : join(home, "artifacts");
 await mkdir(output, { recursive: true, mode: 0o700 });
 const env = { ...process.env, HOME: home };
-const board = async args => JSON.parse((await run("excalidraw-board", args, { env, timeout: 60_000, maxBuffer: 64 * 1024 * 1024 })).stdout);
+const board = async args => {
+  const { stdout, stderr } = await run("excalidraw-board", args, { env, timeout: 60_000, maxBuffer: hardLimit });
+  if (stderr) process.stderr.write(stderr);
+  checkSize(`excalidraw-board ${args[0]} output`, Buffer.byteLength(stdout), 64 * 1024 * 1024);
+  return JSON.parse(stdout);
+};
 const room = await board(["room", "create", "room-image-export-validation"]);
 const source = new PNG({ width: 64, height: 48 });
 const colors = [[255, 0, 0, 255], [0, 128, 0, 255], [0, 0, 255, 255], [255, 255, 0, 255]];

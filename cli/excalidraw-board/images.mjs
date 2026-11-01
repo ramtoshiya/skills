@@ -4,6 +4,7 @@ import { deflateSync, inflateSync } from "node:zlib";
 import { applyBatch } from "./scene.mjs";
 import { loadScene, writeScene } from "./protocol.mjs";
 import { request } from "./request.mjs";
+import { checkSize } from "./size-limit.mjs";
 
 const maxBytes = 4 * 1024 * 1024;
 const storage = "https://firebasestorage.googleapis.com/v0/b/excalidraw-room-persistence.appspot.com/o";
@@ -170,7 +171,6 @@ export async function uploadImages(room, images, { concurrency = 4 } = {}) {
     const file = await readImage(path);
     if (!files.has(file.id)) {
       bytes += Buffer.byteLength(file.dataURL);
-      if (bytes > 128 * 1024 * 1024) throw new Error("Batch image data URLs exceed 128 MiB");
       files.set(file.id, file);
     }
     const imageWidth = width ?? file.width;
@@ -180,6 +180,7 @@ export async function uploadImages(room, images, { concurrency = 4 } = {}) {
     ids.add(element.id);
     elements.push(element);
   }
+  checkSize("excalidraw-board batch image data URLs", bytes, 128 * 1024 * 1024);
   const current = await loadScene(room, { onRetry });
   const batch = { add: [], update: [] };
   for (const element of elements) {

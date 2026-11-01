@@ -21,6 +21,16 @@ uv run --offline --no-project --managed-python --python '>=3.11' --no-config --e
 None of the hooks is a sandbox. They read command text and never execute it, so
 a dynamic script, an alias, or a deliberate workaround gets past them.
 
+Size limits in the hooks are soft. The Pi extension reads up to 1 GiB of guard
+output, and the commit attribution guard reads message files up to 1 GiB. Guard
+output above 64 KiB for the package guard or 256 KiB for the Git hygiene check,
+and message files above 1 MiB, are still used. Each such case adds a line with
+the limit name, the byte count, and the soft limit to
+`$XDG_STATE_HOME/ramtoshiya/size-warnings.log`, or
+`~/.local/state/ramtoshiya/size-warnings.log`. Pi's terminal UI and Claude Code
+do not keep hook stderr, so the warnings go to this log. A message file above
+1 GiB is logged and not checked.
+
 ## Package and Python guard
 
 `plugins/ramtoshiya/hooks/global-package-guard.py` checks shell commands for these

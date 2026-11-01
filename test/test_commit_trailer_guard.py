@@ -1,10 +1,12 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[1] / "plugins/ramtoshiya-cc/hooks/commit-trailer-guard.py"
 spec = importlib.util.spec_from_file_location("commit_trailer_guard", SCRIPT)
@@ -45,6 +47,23 @@ class CommitTrailerGuardTests(unittest.TestCase):
             self.assertIsNotNone(self.check("gh pr create --title T --body-file msg.txt", directory))
             self.assertIsNone(self.check("git commit -F clean.txt", directory))
             self.assertIsNone(self.check("git commit -F missing.txt", directory))
+
+    def test_checks_large_message_files_and_logs_the_size(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(os.environ, {"XDG_STATE_HOME": directory}):
+            message = Path(directory, "large.txt")
+            message.write_text("x" * guard.SOFT_FILE_BYTES + f"\n\n{TRAILER}\n")
+            self.assertIsNotNone(self.check("git commit -F large.txt", directory))
+            self.assertTrue(guard.check_size("message file", guard.HARD_LIMIT, guard.SOFT_FILE_BYTES))
+            self.assertFalse(guard.check_size("message file", guard.HARD_LIMIT + 1, guard.SOFT_FILE_BYTES))
+            self.assertTrue(guard.check_size("message file", guard.SOFT_FILE_BYTES, guard.SOFT_FILE_BYTES))
+            lines = Path(directory, "ramtoshiya/size-warnings.log").read_text().splitlines()
+            self.assertEqual(len(lines), 3)
+            size = message.stat().st_size
+            self.assertRegex(lines[0], rf"Z warning: commit-trailer-guard message file '.*large\.txt' is {size} bytes, "
+                             rf"over the soft limit of {guard.SOFT_FILE_BYTES} bytes$")
+            self.assertTrue(lines[1].endswith(f"is {guard.HARD_LIMIT} bytes, over the soft limit of {guard.SOFT_FILE_BYTES} bytes"))
+            self.assertTrue(lines[2].endswith(f"is {guard.HARD_LIMIT + 1} bytes, "
+                                              f"over the hard limit of {guard.HARD_LIMIT} bytes, so it was not checked"))
 
     def test_allows_clean_commits_and_reading_history(self):
         for command in [
