@@ -8,9 +8,6 @@ home directory, edits a few existing files, and adds mise's shell activation.
 The values are the author's preferences. Fork the repository and change them
 before you run it, and delete any entry you do not want. The agent plugins are
 installed separately, as described in [Agent plugins](agent-pack.md).
-The `agents:sync` and `agents:status` tasks also manage the scoped
-[Claudex pipeline role root](claudex-pipeline.md) from
-`setup/agents/claudex-pipeline/`, without registering its roles globally.
 
 ## Requirements
 
