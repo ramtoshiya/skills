@@ -85,6 +85,28 @@ element's type, including replacing it with a null or empty value. Element
 versions, nonces, seeds, indices, deletion state, and timestamps are managed
 by the command.
 
+Lines and arrows need `points`, a list of at least two `[x, y]` pairs relative
+to the element's `x` and `y`. The first point must be `[0, 0]`. The command
+derives `width` and `height` from the points, so do not send them. Arrows get
+an end arrowhead by default. Set `startArrowhead` or `endArrowhead` to an
+Excalidraw arrowhead name such as `"arrow"` or `"triangle"`, or to `null`.
+
+```sh
+printf '%s\n' '{"add":[{"id":"link","type":"arrow","x":340,"y":160,"points":[[0,0],[200,0]],"startBinding":{"elementId":"box","fixedPoint":[1,0.5]},"endBinding":{"elementId":"photo","mode":"inside","fixedPoint":[0.1,0.2]}}]}' |
+  excalidraw-board write --name sketch
+```
+
+An arrow's `startBinding` and `endBinding` attach its ends to a live
+rectangle, ellipse, diamond, text, image, frame, or embed. A binding has an
+`elementId`, a `mode` of `"orbit"` (the end stays outside the shape, the
+default) or `"inside"`, and a `fixedPoint` that gives the attachment point as
+fractions of the target's width and height (default `[0.5, 0.5]`). The command
+adds or removes the matching `boundElements` entry on the target, and clears an
+arrow's binding when its target is deleted. It does not route arrows. Choose
+points whose ends sit at the bound positions. A browser moves bound arrows when
+someone drags the target there, but this command does not move them when it
+moves a target.
+
 A write reads the saved scene, collects available peer updates, and saves with
 an `updateTime` precondition. On conflict it rereads and reapplies the original
 field patches, up to six attempts. A no-op does not save or broadcast. A missing
@@ -231,8 +253,9 @@ This is a small usable proof of concept, not the full handoff specification.
   above 48 MiB still run, with a stderr warning that names the limit, the actual
   byte count, and the soft limit. Only data above 1 GiB is rejected. The
   service's 4 MiB image limit and the relay's payload limit stay hard.
-- New rectangles, ellipses, diamonds, text, frames, and PNG/JPEG uploads cover
-  the tested drawing path. New line, arrow, and freehand paths are unsupported.
+- New rectangles, ellipses, diamonds, text, frames, lines, arrows, and
+  PNG/JPEG uploads cover the tested drawing path. Freehand paths and elbow
+  arrows are unsupported.
   The tool does not render or export pictures.
 - Reads return saved state. A browser can have unsaved edits. The short peer
   bootstrap window on write does not guarantee capture of every in-flight
