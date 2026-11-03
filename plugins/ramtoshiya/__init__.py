@@ -29,6 +29,7 @@ SKILLS = {
         "approved surface-brief context without implementing UI."
     ),
     "mermaid-check": "Validate Mermaid diagrams with the real parser before delivery.",
+    "read-x": "Read public X posts, profiles, and searches through the mdfromx API.",
     "reorganize-commits": "Reorganize branch commits when explicitly requested.",
     "stable-refs": "Keep document and plan identifiers stable through edits.",
 }
