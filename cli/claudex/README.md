@@ -106,11 +106,13 @@ Use base model IDs such as `gpt-6.1-sol`. Hermes's `-900k` suffix is a local ali
 that claudex does not translate.
 
 The wrapper also enables effort controls, limits concurrent tool use to three,
-and disables tool search. Other Claude Code settings and hooks still apply.
+and turns on tool search, so MCP tools and less common built-in tools load
+only when the model asks for them. Other Claude Code settings and hooks still
+apply.
 
 Tested with Claude Code 2.1.308 for fast request capture and a live GPT-6.1 Sol
-fast request, and 2.1.304 for live discovery and 872k-input requests to GPT-6
-Astra, GPT-6.1 Sol, GPT-6 Sol, and GPT-6 Luna.
+fast request, 2.1.309 for deferred tool loading, and 2.1.304 for live discovery
+and 872k-input requests to GPT-6 Astra, GPT-6.1 Sol, GPT-6 Sol, and GPT-6 Luna.
 
 ## Checks
 
