@@ -36,6 +36,60 @@ test("updates reject every different type, including falsy values", async t => {
   assert.deepEqual(applyBatch(original, { update: [{ id: "a", type: "rectangle" }] }).changed, []);
 });
 
+test("arrows and lines take points, arrowheads, and two-sided bindings", () => {
+  const shapes = applyBatch([], { add: [
+    { id: "from", type: "rectangle", x: 0, y: 0, w: 100, h: 50 },
+    { id: "to", type: "image", fileId: "f", status: "saved", x: 300, y: 0, w: 100, h: 50 },
+  ] }, { imageFiles: ["f"] }).elements;
+  const added = applyBatch(shapes, { add: [
+    { id: "link", type: "arrow", x: 100, y: 25, points: [[0, 0], [200, -10], [150, 30]],
+      startBinding: { elementId: "from" }, endBinding: { elementId: "to", mode: "inside", fixedPoint: [0, 0.5] } },
+    { id: "rule", type: "line", x: 0, y: 80, points: [[0, 0], [400, 0]] },
+  ] });
+  const byId = id => added.elements.find(element => element.id === id);
+  assert.deepEqual(added.changed, ["link", "rule", "from", "to"]);
+  assert.equal(byId("link").width, 200);
+  assert.equal(byId("link").height, 40);
+  assert.equal(byId("link").endArrowhead, "arrow");
+  assert.equal(byId("link").startArrowhead, null);
+  assert.deepEqual(byId("link").startBinding, { elementId: "from", mode: "orbit", fixedPoint: [0.5, 0.5] });
+  assert.deepEqual(byId("link").endBinding, { elementId: "to", mode: "inside", fixedPoint: [0, 0.5] });
+  assert.equal(byId("rule").endArrowhead, null);
+  assert.equal(byId("rule").polygon, false);
+  assert.deepEqual(byId("from").boundElements, [{ id: "link", type: "arrow" }]);
+  assert.deepEqual(byId("to").boundElements, [{ id: "link", type: "arrow" }]);
+
+  const rebound = applyBatch(added.elements, { update: [{ id: "link", endBinding: null, points: [[0, 0], [50, 0]] }] });
+  const after = id => rebound.elements.find(element => element.id === id);
+  assert.deepEqual(rebound.changed, ["link", "to"]);
+  assert.equal(after("link").width, 50);
+  assert.deepEqual(after("to").boundElements, []);
+  assert.deepEqual(after("from").boundElements, [{ id: "link", type: "arrow" }]);
+
+  const targetGone = applyBatch(rebound.elements, { delete: ["from"] });
+  assert.equal(targetGone.elements.find(element => element.id === "link").startBinding, null);
+  const arrowGone = applyBatch(rebound.elements, { delete: ["link"] });
+  assert.deepEqual(arrowGone.elements.find(element => element.id === "from").boundElements, []);
+});
+
+test("paths reject missing or malformed points and invalid bindings", () => {
+  const shapes = applyBatch([], { add: [{ id: "box", type: "rectangle" }, { id: "other", type: "line", points: [[0, 0], [1, 1]] }] }).elements;
+  const add = element => () => applyBatch(shapes, { add: [{ id: "new", type: "arrow", points: [[0, 0], [10, 0]], ...element }] });
+  assert.throws(() => applyBatch(shapes, { add: [{ type: "arrow" }] }), /need points/);
+  assert.throws(add({ points: [[0, 0]] }), /at least two/);
+  assert.throws(add({ points: [[5, 5], [10, 0]] }), /first point/);
+  assert.throws(add({ w: 10 }), /come from points/);
+  assert.throws(add({ elbowed: true }), /Elbow/);
+  assert.throws(add({ startBinding: { elementId: "missing" } }), /Cannot bind/);
+  assert.throws(add({ startBinding: { elementId: "other" } }), /Cannot bind/);
+  assert.throws(add({ startBinding: { elementId: "new" } }), /Cannot bind/);
+  assert.throws(add({ startBinding: { elementId: "box", mode: "edge" } }), /orbit or inside/);
+  assert.throws(add({ startBinding: { elementId: "box", focus: 0 } }), /Unknown startBinding field/);
+  assert.throws(() => applyBatch(shapes, { add: [{ type: "line", points: [[0, 0], [1, 0]], startBinding: { elementId: "box" } }] }), /Only arrows/);
+  assert.throws(() => applyBatch(shapes, { add: [{ type: "freedraw", points: [[0, 0], [1, 0]] }] }), /Freehand/);
+  assert.throws(() => applyBatch(shapes, { add: [{ id: "new", type: "arrow", points: [[0, 0], [10, 0]], endBinding: { elementId: "box" } }], delete: ["box"] }), /Cannot bind/);
+});
+
 test("scene reconciliation uses version then lower nonce and retains tombstones", () => {
   const local = [{ id: "a", index: "a0", version: 2, versionNonce: 50 }, { id: "b", index: "a1", version: 1, versionNonce: 1 }];
   const remote = [{ id: "a", index: "a0", version: 2, versionNonce: 20, isDeleted: true }];

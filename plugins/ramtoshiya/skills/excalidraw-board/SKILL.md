@@ -55,7 +55,13 @@ browser tab without permission. Use a separate tab for rendering checks.
    boundaries, clear members' `frame` fields to null, and delete only the frames.
    Preserve content positions and connector bindings. Supply text width and
    height yourself. Keep batches small. Use `image` for existing PNG/JPEG files,
-   not an image element in a `write` batch. Path creation is unsupported.
+   not an image element in a `write` batch.
+   Draw a connector as an `arrow` element, never as a text glyph. Give it
+   `points` that start at `[0, 0]` and omit its width and height. Bind its ends
+   with `startBinding` and `endBinding` (`{"elementId":"capture-home",
+   "fixedPoint":[0.2,0.4]}`) so it follows the target in a browser. Place the
+   end points at those positions yourself, because the command does not route
+   arrows. Freehand paths are unsupported.
 4. Write a single batch on stdin. Use explicit, unique element ids when a
    retry must not duplicate an add. Send only changed fields in updates, not
    stale whole elements. Never supply managed version, nonce, seed, index,
