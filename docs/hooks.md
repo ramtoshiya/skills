@@ -130,6 +130,10 @@ input, or processes started directly by another plugin.
 
 ## Git hygiene check
 
+Multica tasks skip this check when `MULTICA_TASK_ID` is non-empty. Multica owns
+its generated runtime files and task completion flow. Other hooks remain active,
+and sessions outside Multica still run the Git hygiene check.
+
 `plugins/ramtoshiya/hooks/git-hygiene-guard.py` runs when the agent is about to
 stop. It runs `git status --porcelain` in the repository that contains the
 session's working directory. If anything is uncommitted, it blocks the stop

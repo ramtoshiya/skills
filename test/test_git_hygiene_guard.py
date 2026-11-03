@@ -24,10 +24,10 @@ class GitHygieneGuardTests(unittest.TestCase):
     def git(self, *args):
         subprocess.run(["git", "-C", str(self.repo), *args], check=True, env=GIT_ENV)
 
-    def stop(self, payload):
+    def stop(self, payload, task_id=""):
         text = payload if isinstance(payload, str) else json.dumps({"hook_event_name": "Stop", **payload})
         result = subprocess.run([sys.executable, str(SCRIPT)], input=text, capture_output=True,
-                                text=True, env=GIT_ENV, timeout=30)
+                                text=True, env={**GIT_ENV, "MULTICA_TASK_ID": task_id}, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout) if result.stdout.strip() else None
 
@@ -40,6 +40,10 @@ class GitHygieneGuardTests(unittest.TestCase):
         self.assertIn(" M tracked.txt", output["reason"])
         self.assertIn("?? src/", output["reason"])
         self.assertIn("Commit completed work locally by default", output["reason"])
+
+    def test_skips_dirty_repository_in_a_multica_task(self):
+        (self.repo / "tracked.txt").write_text("two\n")
+        self.assertIsNone(self.stop({"cwd": str(self.repo)}, task_id="task-test"))
 
     def test_allows_clean_repository(self):
         self.assertIsNone(self.stop({"cwd": str(self.repo), "stop_hook_active": False}))

@@ -6,6 +6,7 @@ and the retry passes, so a deliberate decision to leave the tree dirty still
 wins. Any error allows the stop. This hook must never trap an agent.
 """
 import json
+import os
 import subprocess
 import sys
 
@@ -38,6 +39,8 @@ def reason(cwd):
 
 
 def main():
+    if os.environ.get("MULTICA_TASK_ID"):
+        return
     try:
         payload = json.load(sys.stdin)
         if payload.get("stop_hook_active") is True:
