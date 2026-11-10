@@ -65,3 +65,17 @@ hand the cleanup to the user as a list of leftovers.
   delete its source.
 - Keep an item only when the user still needs it, and name it, its path, and
   the reason in your reply.
+
+## Agent test runs {:#agent-test-runs}
+
+A `claude` or `codex` process that you start to test agent behavior, such as an
+eval, a probe, a proof of concept, or a hook test, must not receive or record
+agentmemory sessions. `AGENTMEMORY_SDK_CHILD=1` turns off agentmemory's hooks
+in that process. Your shell commands already export it, so a run that inherits
+your shell environment needs nothing more. Pass it yourself when the run does
+not inherit that environment: a harness or script that clears or rebuilds the
+environment (`env -i`, a child process given an explicit environment), a tmux
+server that was already running, or `launchd`. A T3 server passes its own
+environment to the agents it starts. A test of agentmemory's own hooks needs
+them on: run it with `env -u AGENTMEMORY_SDK_CHILD`, or set the variable to
+`0` under `env -i`, and delete the sessions it records afterward.

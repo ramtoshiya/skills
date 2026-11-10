@@ -1,7 +1,7 @@
 # Hooks
 
-The plugins add three hooks. One comes with `ramtoshiya` and runs in Claude
-Code and Codex. Two come with `ramtoshiya-cc` and run only in Claude Code. The
+The plugins add four hooks. One comes with `ramtoshiya` and runs in Claude
+Code and Codex. Three come with `ramtoshiya-cc` and run only in Claude Code. The
 `ramtoshiya` plugin also ships a Git hygiene check that is not registered, so
 no agent runs it.
 
@@ -10,6 +10,7 @@ no agent runs it.
 | Package and Python guard | Before each shell command | `ramtoshiya` |
 | Commit attribution guard | Before each shell command | `ramtoshiya-cc` |
 | Context budget | After each tool call, on each prompt, and after a compaction | `ramtoshiya-cc` |
+| Agent shell environment | When a session starts, resumes, clears, or compacts | `ramtoshiya-cc` |
 
 Each hook is a Python script that uses only the standard library. Claude Code
 and Codex run it through `hooks/hooks.json`. Every hook runs as:
@@ -178,6 +179,20 @@ Limits:
   mark the continuation with `stop_hook_active`, and changes made during it are
   not checked when it stops.
 
+The same shared guard checks agent test runs that clear the environment. A
+`claude` or `codex` process started under `env -i`, `env -`, or
+`env --ignore-environment` loses `AGENTMEMORY_SDK_CHILD`, which the agent
+shell environment hook below and the Codex setting in [Machine setup](setup.md)
+give to shell commands. The guard denies such a
+command when it starts `claude`, `codex`, or a T3 Code server (`t3 serve`, or
+`node`, `bun`, or `deno` running a `bin.mjs` under a `t3`, `t3-wb`, or similar
+directory with `serve`) and does not assign `AGENTMEMORY_SDK_CHILD` after the
+`env -i`. Add
+`AGENTMEMORY_SDK_CHILD=1` to the assignments. A T3 Code server passes its
+environment to the agents it starts. To test agentmemory's own hooks, assign
+`AGENTMEMORY_SDK_CHILD=0` instead. The guard reads only the command text, so a
+script that clears the environment inside itself gets past it.
+
 ## Commit attribution guard
 
 `plugins/ramtoshiya-cc/hooks/commit-trailer-guard.py` blocks Claude Code shell
@@ -232,8 +247,39 @@ Limits:
   `~/.local/state/ramtoshiya/context-budget.json`, for the newest 100 sessions.
 - On any error the hook adds nothing.
 
+## Agent shell environment
+
+`plugins/ramtoshiya-cc/hooks/agent-shell-env.py` keeps agent-started test runs
+out of agentmemory. A test run here is a separate `claude` or `codex` process
+that an agent starts from its shell, such as an eval, a probe, or a hook test.
+The agentmemory plugin's hooks do nothing in a process where
+`AGENTMEMORY_SDK_CHILD` is `1`, so such a run neither receives summaries of
+earlier sessions nor gets recorded.
+
+When a Claude Code session starts, resumes, clears, or compacts, Claude Code
+gives the hook a `CLAUDE_ENV_FILE` path. The hook adds
+`export AGENTMEMORY_SDK_CHILD=1` to that file once. Claude Code sources the
+file before each Bash command, in the foreground or the background, so every
+process the agent starts from Bash inherits the variable, including through a
+script. Claude Code runs its own hooks without that file, so the session itself
+still receives and records memory. Codex has no such hook. The machine setup
+sets the same variable through Codex's `shell_environment_policy`, which
+applies to the commands Codex runs and not to its hooks.
+
+To keep memory on for one command, for example to test agentmemory's own hooks,
+run it with `env -u AGENTMEMORY_SDK_CHILD`.
+
+Limits:
+
+- A process started with a cleared or rebuilt environment loses the variable.
+  The package guard denies `env -i` agent launches it can see in the command
+  text. Scripts that rebuild the environment inside themselves, tmux servers
+  that were already running, and `launchd` jobs are covered only by the
+  agent instructions in [Machine setup](setup.md).
+- On any error the hook adds nothing.
+
 ## Tests
 
 `test/test_global_package_guard.py`, `test/test_git_hygiene_guard.py`,
-`test/test_commit_trailer_guard.py`, and `test/test_context_budget.py` cover the
-rules. Run them with `npm test`.
+`test/test_commit_trailer_guard.py`, `test/test_context_budget.py`, and
+`test/test_agent_shell_env.py` cover the rules. Run them with `npm test`.

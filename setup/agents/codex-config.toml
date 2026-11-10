@@ -1,0 +1,6 @@
+# Commands that Codex runs for an agent get AGENTMEMORY_SDK_CHILD=1, so a
+# `claude` or `codex` test run started from them stays out of agentmemory.
+# Codex hooks do not receive these variables, so the session that runs the
+# command keeps its memory.
+[shell_environment_policy.set]
+AGENTMEMORY_SDK_CHILD = "1"

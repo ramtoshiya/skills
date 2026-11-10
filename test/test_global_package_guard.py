@@ -268,6 +268,36 @@ class GlobalPackageGuardTests(unittest.TestCase):
         custom = self.write("custom-env/pyvenv.cfg", "home = /example\n")
         self.assertFalse(self.check(f"{custom.parent}/bin/python -m pip list"))
 
+    def test_cleared_environment_agent_runs_must_set_agentmemory_flag(self):
+        # Shapes of real eval commands: a T3 server started under env -i from an
+        # install or from a checkout, which then starts claude or codex.
+        server = ("tmp=/tmp/u07.X; env -i HOME=$HOME USER=me PATH=/usr/bin:/bin TMPDIR=$tmp {flag}"
+                  "/usr/local/bin/node $HOME/.local/share/t3-wb/current/bin.mjs serve --base-dir $tmp/t3 "
+                  "--port 3795 --no-browser $tmp/cwd > $tmp/raw.log 2>&1")
+        checkout = "cd /src/t3-wb && env -i HOME=/tmp/h PATH=/usr/bin {flag}node apps/server/dist/bin.mjs serve --port 3796"
+        for command in [
+            server.format(flag=""),
+            checkout.format(flag=""),
+            "env -i HOME=$HOME PATH=/usr/bin claude -p 'Reply with ok'",
+            "env - PATH=/usr/bin codex exec 'Reply with ok'",
+            "env --ignore-environment PATH=/usr/bin bash -c 'claude -p ok'",
+            "export AGENTMEMORY_SDK_CHILD=1; env -i PATH=/usr/bin claude -p ok",
+        ]:
+            with self.subTest(command=command):
+                self.assertEqual(guard.reason(command, self.cwd, self.environment), guard.AGENT_DENIAL)
+        for command in [
+            server.format(flag="AGENTMEMORY_SDK_CHILD=1 "),
+            checkout.format(flag="AGENTMEMORY_SDK_CHILD=0 "),
+            "env -i PATH=/usr/bin bash -c 'export AGENTMEMORY_SDK_CHILD=1; claude -p ok'",
+            "cd /src/t3-wb && env -i PATH=/usr/bin node apps/server/dist/bin.mjs thread list --json",
+            "cd /src/t3-wb && env -i PATH=/usr/bin node ./node_modules/vite/bin/vite.js serve",
+            "env -i PATH=/usr/bin /bin/echo /src/t3-wb serve",
+            "env -i PATH=/usr/bin /bin/echo claude",
+            "claude -p 'Reply with ok'",
+        ]:
+            with self.subTest(command=command):
+                self.assertFalse(self.check(command))
+
     def test_variable_cd_tracks_unknown_directory(self):
         for command in ['cd "$W" && git status', 'cd $W; ls', 'cd $W && python3 x.py',
                         'cd "$W" && .venv/bin/pip list',

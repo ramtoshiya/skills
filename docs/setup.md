@@ -136,6 +136,7 @@ Agents:
 | --- | --- |
 | `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md` | Copies of `setup/agents/preferences.md`, the coding-agent instructions |
 | `~/.claude/settings.json` | The keys in `setup/agents/claude-settings.json` |
+| `~/.codex/config.toml` | `AGENTMEMORY_SDK_CHILD = "1"` under `[shell_environment_policy.set]`, from `setup/agents/codex-config.toml`. Commands that Codex runs get the variable, so a `claude` or `codex` test run started from them stays out of agentmemory. Codex hooks do not get it, so your own Codex sessions keep their memory |
 | `~/.claude/status-line.sh` | Copy of `setup/agents/claude-statusline.sh` |
 | `~/.local/bin/claude-review` | Copy of `setup/agents/claude-review`, an executable shell script that starts the review launcher |
 | `~/.local/share/claude-review/claude-review.py` | Copy of `setup/agents/claude-review.py`, the review launcher and its hook handler |

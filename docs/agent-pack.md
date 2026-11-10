@@ -36,6 +36,8 @@ instructions, not automatic hook enforcement.
 `ramtoshiya` hooks, described in [Hooks](hooks.md):
 
 - A package and Python guard that checks each shell command before it runs.
+  It also denies a `claude`, `codex`, or T3 Code server run started under
+  `env -i` unless the command sets `AGENTMEMORY_SDK_CHILD`.
 - A Git hygiene check for the moment the agent is about to stop. It ships
   unregistered, so no agent runs it until you add it to `hooks/hooks.json`.
 
@@ -99,6 +101,10 @@ instructions, not automatic hook enforcement.
   without you. Elsewhere Claude Code's automatic compaction still decides when,
   and the hook points the agent to the note afterward.
 - A hook that blocks AI attribution lines in commits and pull requests.
+- A hook that exports `AGENTMEMORY_SDK_CHILD=1` to the session's Bash
+  commands. A `claude` or `codex` test run that the agent starts from Bash,
+  such as an eval or a probe, then neither receives nor records agentmemory
+  sessions. The session itself keeps its memory.
 
 Excalidraw board requests update a shared room. A `.excalidraw` attachment is
 an export or an agreed fallback, not a replacement for that room. The agent
