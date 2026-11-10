@@ -1,7 +1,7 @@
 # Hooks
 
-The plugins add three hooks. Two come with `ramtoshiya` and run in Claude Code,
-Codex, Pi, and Hermes. One comes with `ramtoshiya-cc` and runs only in Claude Code.
+The plugins add three hooks. Two come with `ramtoshiya` and run in Claude Code
+and Codex. One comes with `ramtoshiya-cc` and runs only in Claude Code.
 
 | Hook | Runs | Plugin |
 | --- | --- | --- |
@@ -10,9 +10,7 @@ Codex, Pi, and Hermes. One comes with `ramtoshiya-cc` and runs only in Claude Co
 | Commit attribution guard | Before each shell command | `ramtoshiya-cc` |
 
 Each hook is a Python script that uses only the standard library. Claude Code
-and Codex run it through `hooks/hooks.json`. Pi runs the `ramtoshiya` hooks through
-the extension `hooks/pi.ts`. Hermes uses the native plugin adapter
-`__init__.py`. Every hook runs as:
+and Codex run it through `hooks/hooks.json`. Every hook runs as:
 
 ```sh
 uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python <hook>
@@ -21,15 +19,13 @@ uv run --offline --no-project --managed-python --python '>=3.11' --no-config --e
 None of the hooks is a sandbox. They read command text and never execute it, so
 a dynamic script, an alias, or a deliberate workaround gets past them.
 
-Size limits in the hooks are soft. The Pi extension reads up to 1 GiB of guard
-output, and the commit attribution guard reads message files up to 1 GiB. Guard
-output above 64 KiB for the package guard or 256 KiB for the Git hygiene check,
-and message files above 1 MiB, are still used. Each such case adds a line with
-the limit name, the byte count, and the soft limit to
+The commit attribution guard's size limits are soft. It reads message files up
+to 1 GiB, and a message file above 1 MiB is still used. Each such case adds a
+line with the limit name, the byte count, and the soft limit to
 `$XDG_STATE_HOME/ramtoshiya/size-warnings.log`, or
-`~/.local/state/ramtoshiya/size-warnings.log`. Pi's terminal UI and Claude Code
-do not keep hook stderr, so the warnings go to this log. A message file above
-1 GiB is logged and not checked.
+`~/.local/state/ramtoshiya/size-warnings.log`. Claude Code does not keep hook
+stderr, so the warnings go to this log. A message file above 1 GiB is logged and
+not checked.
 
 ## Package and Python guard
 
@@ -111,22 +107,8 @@ and review first, then use a local path with a separately isolated runtime.
 splits command sequences, follows `sh -c` and similar wrappers, and skips
 heredoc bodies. A denial reaches the agent as the hook's reason.
 
-When the guard cannot run, the outcome depends on the agent. Pi blocks the
-command if uv fails, times out after five seconds, or returns output it cannot
-read. Hermes does the same. Claude Code and Codex apply their own rules for a
+When the guard cannot run, Claude Code and Codex apply their own rules for a
 failing hook process.
-
-In Pi, the guard sees calls to the `bash` tool, including calls that other
-extensions make through `ctx.executeTool()`. It does not see commands you type
-with `!` or `!!`, processes that extensions start themselves, or shells hidden
-inside other tools.
-
-In Hermes, the package guard sees `terminal` tool calls. It checks an explicit
-`workdir` when supplied, otherwise `TERMINAL_CWD` or the Hermes process's working
-directory. It does not track persistent `cd` commands. The guards inspect the
-local host filesystem, so use them with the local terminal backend. They do not
-inspect remote or container package settings, interactive `process_manage`
-input, or processes started directly by another plugin.
 
 ## Git hygiene check
 
@@ -147,20 +129,10 @@ once, lists up to 80 changed paths, and tells the agent to:
 The second stop in the same prompt is allowed, so an instruction to leave work
 uncommitted still wins.
 
-| Agent | Event | Retry signal |
-| --- | --- | --- |
-| Claude Code, Codex | `Stop`, answered with `{"decision":"block","reason":...}` | `stop_hook_active` |
-| Pi | `agent_before_settle`, answered with a message and `continue: true` | One warning per run, reset on `agent_settled` |
-| Hermes | `pre_verify`, answered with the shared `decision: block` result | `attempt > 0` allows the retry |
-
-Pi skips runs that were aborted or failed. Every error allows the stop: no
-repository, no uv, a timeout after ten seconds, or unreadable output.
-
-Hermes fires `pre_verify` only after it records file edits and while its
-`agent.max_verify_nudges` budget remains. A turn with no recorded edits does not
-run the Git check, even if the repository was already dirty. The check uses
-`TERMINAL_CWD` or the Hermes process's working directory, not the last terminal
-`workdir` or `cd`. A previous verification continuation also allows the retry.
+Claude Code and Codex run it on the `Stop` event. It blocks with
+`{"decision":"block","reason":...}` and treats `stop_hook_active` as the retry.
+Any error allows the stop, for example no repository, a Git command that times
+out, or hook input it cannot read.
 
 Limits:
 
@@ -192,8 +164,4 @@ command, so a bug in the hook cannot block every shell call.
 ## Tests
 
 `test/test_global_package_guard.py`, `test/test_git_hygiene_guard.py`, and
-`test/test_commit_trailer_guard.py` cover the rules. `test/*.test.mjs` cover the
-Pi extension, including its behavior when uv fails. The Hermes adapter has
-protocol and failure tests in `test/test_hermes.py`. Plugin Doctor checks its
-registration against an installed Hermes runtime. Run them all with
-`npm test`.
+`test/test_commit_trailer_guard.py` cover the rules. Run them with `npm test`.

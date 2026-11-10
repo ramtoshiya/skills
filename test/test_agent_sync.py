@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import sys
@@ -22,6 +23,12 @@ def git(path, *args):
     return subprocess.check_output(["git", "-C", str(path), *args], text=True).strip()
 
 
+def commit(path, message):
+    git(path, "add", ".")
+    git(path, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", message)
+    return git(path, "rev-parse", "HEAD")
+
+
 class AgentSyncTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -30,268 +37,230 @@ class AgentSyncTests(unittest.TestCase):
         self.root = self.home / "repository"
         (self.root / ".claude-plugin").mkdir(parents=True)
         (self.root / "setup/agents").mkdir(parents=True)
-        shutil.copyfile(SOURCE.with_name("hermes-skills.py"), self.root / "setup/agents/hermes-skills.py")
         self.policy = self.root / "setup/agents/hosts.json"
-        sync.write_json(self.policy, {"hosts": ["pi"], "plugins": {}})
+        sync.write_json(self.policy, {"hosts": ["claude", "codex"], "plugins": {}})
         self.marketplace = self.root / ".claude-plugin/marketplace.json"
         commands = self.home / "bin"
         commands.mkdir()
-        (commands / "pi").write_text("#!/bin/sh\nexit 99\n")
-        (commands / "pi").chmod(0o755)
+        # These stubs keep a test that forgets fake_cli from reaching a real host command.
+        for host in ("claude", "codex"):
+            (commands / host).write_text("#!/bin/sh\nexit 99\n")
+            (commands / host).chmod(0o755)
         self.environment = patch.dict(os.environ, {
             "PATH": str(commands) + os.pathsep + os.environ["PATH"],
             "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
             "HOME": str(self.home), "XDG_STATE_HOME": str(self.home / "state"),
-            "PI_CODING_AGENT_DIR": str(self.home / ".pi/agent"),
             "CLAUDE_CONFIG_DIR": str(self.home / ".claude"),
             "CODEX_HOME": str(self.home / ".codex"),
-            "HERMES_HOME": str(self.home / ".hermes"),
         })
         self.environment.start()
         self.addCleanup(self.environment.stop)
-        self.settings = self.home / ".pi/agent/settings.json"
         self.upstream = self.home / "upstream"
         (self.upstream / "plugins/example/skills/writing").mkdir(parents=True)
-        (self.upstream / "plugins/example/hooks").mkdir()
         (self.upstream / "plugins/example/skills/writing/SKILL.md").write_text("original skill\n")
-        (self.upstream / "plugins/example/hooks/pi.ts").write_text("original extension\n")
         git(self.upstream, "init", "-q")
-        git(self.upstream, "add", ".")
-        git(self.upstream, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Initial")
-        self.first = git(self.upstream, "rev-parse", "HEAD")
-        self.install_source(self.first)
+        self.first = commit(self.upstream, "Initial")
+        self.source = self.install_source(self.first)
         self.entry = {"name": "example", "source": {
             "source": "git-subdir", "url": "example/skills", "path": "plugins/example", "sha": self.first,
         }}
         self.set_entries([self.entry])
         git(self.root, "init", "-q")
-        git(self.root, "add", ".")
-        git(self.root, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Approve source")
+        commit(self.root, "Approve source")
 
     def set_entries(self, entries):
         sync.write_json(self.marketplace, {"name": "example", "plugins": entries})
 
     def install_source(self, revision):
-        target = self.home / ".pi/agent/skill-sources/example/skills" / revision
+        """Check out a revision where sync looks for pinned sources and return the plugin directory."""
+        target = self.home / "state/ramtoshiya-agents/sources/example/skills" / revision
         target.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "clone", "-q", str(self.upstream), str(target)], check=True)
         git(target, "checkout", "--detach", "-q", revision)
         return target / "plugins/example"
 
-    def execute(self, apply):
-        operation = sync.Sync(self.root)
-        return operation, operation.process(["pi"], apply=apply)
+    def cache(self, host):
+        return self.home / f".{host}/plugins/cache/example/example/local"
 
-    def test_sync_preserves_unrelated_settings_replaces_owned_paths_and_is_idempotent(self):
-        old = self.home / f".pi/agent/skill-sources/example/skills/{self.first}/plugins/example"
-        original = {
-            "defaultModel": "personal-model",
-            "skills": ["personal/skill", str(old / "skills/writing")],
-            "extensions": ["orca.ts", str(old / "hooks/pi.ts")],
-            "packages": ["unrelated-package"],
-        }
-        sync.write_json(self.settings, original)
-        _, rows = self.execute(True)
-        self.assertEqual(rows[0]["status"], "ok")
-        (self.upstream / "plugins/example/skills/writing/SKILL.md").write_text("updated skill\n")
-        git(self.upstream, "add", ".")
-        git(self.upstream, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Update")
-        revision = git(self.upstream, "rev-parse", "HEAD")
-        new = self.install_source(revision)
-        self.entry["source"]["sha"] = revision
-        self.set_entries([self.entry])
-        _, rows = self.execute(True)
-        self.assertEqual(rows[0]["status"], "updated")
-        expected = {
-            **original, "skills": ["personal/skill", str(new / "skills/writing")],
-            "extensions": ["orca.ts", str(new / "hooks/pi.ts")],
-        }
-        self.assertEqual(json.loads(self.settings.read_text()), expected)
+    def deploy(self, host, source):
+        """Return a shell snippet that leaves a copy of source in the host's plugin cache."""
+        cache = shlex.quote(str(self.cache(host)))
+        return f"rm -rf {cache} && mkdir -p {shlex.quote(str(self.cache(host).parent))} && cp -R {shlex.quote(str(source))} {cache}"
+
+    def fake_cli(self, host, commands=None):
+        """Replace the host command with a script that logs every call.
+
+        The script reports this checkout as the marketplace and lists the example
+        plugin once its cache directory exists. It runs the shell snippet that
+        commands maps to an exact call and exits with an error for any other call."""
+        if host == "claude":
+            marketplaces = [{"name": "example", "path": str(self.root)}]
+            listing = "plugin list --json"
+            present = [{"id": "example@example", "scope": "user", "installPath": str(self.cache(host)), "enabled": True}]
+            absent = []
+        else:
+            marketplaces = {"marketplaces": [{"name": "example", "root": str(self.root)}]}
+            listing = "plugin list --json --marketplace example"
+            present = {"installed": [{"pluginId": "example@example", "installed": True, "enabled": True, "version": "local"}]}
+            absent = {"installed": []}
+        cases = "".join(f"  {shlex.quote(call)}) {snippet} ;;\n" for call, snippet in (commands or {}).items())
+        script = (
+            "#!/bin/sh\n"
+            f"printf '%s\\n' \"$*\" >> {shlex.quote(str(self.home / (host + '.log')))}\n"
+            'case "$*" in\n'
+            f"  'plugin marketplace list --json') printf '%s\\n' {shlex.quote(json.dumps(marketplaces))} ;;\n"
+            f"  '{listing}') if [ -d {shlex.quote(str(self.cache(host)))} ]; then printf '%s\\n' {shlex.quote(json.dumps(present))}; "
+            f"else printf '%s\\n' {shlex.quote(json.dumps(absent))}; fi ;;\n"
+            f"{cases}"
+            "  *) exit 98 ;;\n"
+            "esac\n"
+        )
+        (self.home / "bin" / host).write_text(script)
+
+    def changes(self, host):
+        """Return the calls sync made to the host command, without its read-only queries."""
+        log = self.home / f"{host}.log"
+        calls = log.read_text().splitlines() if log.exists() else []
+        return [call for call in calls if not call.startswith(("plugin marketplace list", "plugin list"))]
+
+    def execute(self, apply, host="claude"):
         operation = sync.Sync(self.root)
-        before = self.settings.read_bytes(), self.settings.stat().st_mtime_ns
+        return operation, operation.process([host], apply=apply)
+
+    def test_sync_installs_repeats_without_writes_and_updates_after_a_pin_change(self):
+        self.fake_cli("claude", {"plugin install example@example --scope user": self.deploy("claude", self.source)})
+        operation, rows = self.execute(True)
+        self.assertEqual(rows[0]["status"], "updated")
         state_before = operation.state_path.read_bytes(), operation.state_path.stat().st_mtime_ns
         _, rows = self.execute(True)
         self.assertEqual(rows[0]["status"], "ok")
-        self.assertEqual((self.settings.read_bytes(), self.settings.stat().st_mtime_ns), before)
         self.assertEqual((operation.state_path.read_bytes(), operation.state_path.stat().st_mtime_ns), state_before)
-
-    def test_repeated_sync_does_not_reorder_or_rewrite_a_shared_multi_package_settings_file(self):
-        other = self.upstream / "plugins/other/skills/research/SKILL.md"
-        other.parent.mkdir(parents=True)
-        other.write_text("other package\n")
-        git(self.upstream, "add", ".")
-        git(self.upstream, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Add other package")
-        revision = git(self.upstream, "rev-parse", "HEAD")
-        self.install_source(revision)
+        (self.upstream / "plugins/example/skills/writing/SKILL.md").write_text("updated skill\n")
+        revision = commit(self.upstream, "Update")
+        new = self.install_source(revision)
         self.entry["source"]["sha"] = revision
-        second = {"name": "other", "source": {**self.entry["source"], "path": "plugins/other"}}
-        self.set_entries([self.entry, second])
-        sync.write_json(self.settings, {"skills": ["personal"], "extensions": ["orca.ts"]})
-        self.execute(True)
-        before = self.settings.read_bytes(), self.settings.stat().st_mtime_ns
+        self.set_entries([self.entry])
+        self.fake_cli("claude", {"plugin update example@example --scope user": self.deploy("claude", new)})
         _, rows = self.execute(True)
-        self.assertEqual([row["status"] for row in rows], ["ok", "ok"])
-        self.assertEqual((self.settings.read_bytes(), self.settings.stat().st_mtime_ns), before)
+        self.assertEqual(rows[0]["status"], "updated")
+        self.assertEqual((self.cache("claude") / "skills/writing/SKILL.md").read_text(), "updated skill\n")
+        self.assertEqual(sync.read_json(operation.state_path)["packages"]["claude:example"]["pin"], revision)
+        self.assertEqual(self.changes("claude"), [
+            "plugin install example@example --scope user", "plugin update example@example --scope user",
+        ])
 
     def test_plugin_selection_limits_installation_and_retirement(self):
         other = self.upstream / "plugins/other/skills/research/SKILL.md"
         other.parent.mkdir(parents=True)
         other.write_text("other package\n")
-        git(self.upstream, "add", ".")
-        git(self.upstream, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Add other package")
-        revision = git(self.upstream, "rev-parse", "HEAD")
-        source = self.install_source(revision)
+        revision = commit(self.upstream, "Add other package")
+        self.install_source(revision)
         self.entry["source"]["sha"] = revision
         second = {"name": "other", "source": {**self.entry["source"], "path": "plugins/other"}}
         self.set_entries([self.entry, second])
+        example = sync.Sync(self.root).sources.package(self.entry)
+        self.fake_cli("claude", {
+            "plugin install example@example --scope user": self.deploy("claude", example.root),
+            "plugin uninstall example@example --scope user --keep-data": "",
+        })
+        rows = sync.Sync(self.root).process(["claude"])
+        self.assertEqual([row["component"] for row in rows], ["example", "other"])
+        rows = sync.Sync(self.root).process(["claude"], apply=True, selected=["example"])
+        self.assertEqual([(row["component"], row["status"]) for row in rows], [("example", "updated")])
+        self.assertEqual(self.changes("claude"), ["plugin install example@example --scope user"])
         operation = sync.Sync(self.root)
-        rows = operation.process(["pi"], apply=True, selected=["example"])
-        self.assertEqual([row["component"] for row in rows], ["example"])
-        self.assertEqual(set(operation.state["packages"]), {"pi:example"})
-        operation = sync.Sync(self.root)
-        operation.process(["pi"], apply=True)
+        package = operation.sources.package(second)
+        installed = self.home / "installed-other"
+        shutil.copytree(package.root, installed)
+        operation.remember("claude", "other", installed, package)
         self.set_entries([])
-        operation = sync.Sync(self.root)
-        rows = operation.process(["pi"], selected=["example"])
+        rows = sync.Sync(self.root).process(["claude"], selected=["example"])
         self.assertEqual([(row["component"], row["status"]) for row in rows], [("example", "drift")])
         operation = sync.Sync(self.root)
-        rows = operation.process(["pi"], apply=True, selected=["example"])
-        self.assertEqual([row["component"] for row in rows], ["example"])
-        self.assertEqual(set(sync.read_json(operation.state_path)["packages"]), {"pi:other"})
-        self.assertEqual(sync.read_json(self.settings)["skills"], [str(source.parent / "other/skills/research")])
+        rows = operation.process(["claude"], apply=True, selected=["example"])
+        self.assertEqual([(row["component"], row["status"]) for row in rows], [("example", "updated")])
+        self.assertEqual(self.changes("claude")[1:], ["plugin uninstall example@example --scope user --keep-data"])
+        self.assertEqual(set(sync.read_json(operation.state_path)["packages"]), {"claude:other"})
         with self.assertRaisesRegex(sync.Conflict, "Unknown plugins"):
-            sync.Sync(self.root).process(["pi"], apply=True, selected=["typo"])
+            sync.Sync(self.root).process(["claude"], apply=True, selected=["typo"])
 
-    def test_status_is_offline_and_does_not_create_state_or_settings(self):
-        operation, rows = self.execute(False)
-        self.assertEqual(rows[0]["status"], "drift")
-        self.assertFalse(self.settings.exists())
-        self.assertFalse(operation.state_dir.exists())
+    def test_status_is_offline_and_does_not_create_state(self):
+        self.fake_cli("claude")
+        self.fake_cli("codex")
+        operation = sync.Sync(self.root)
+        rows = operation.process(["claude", "codex"])
+        self.assertEqual([(row["host"], row["status"]) for row in rows], [("claude", "drift"), ("codex", "drift")])
+        shutil.rmtree(self.home / "state/ramtoshiya-agents/sources")
+        rows = sync.Sync(self.root).process(["claude"])
+        self.assertEqual(rows[0]["status"], "conflict")
+        self.assertIn("not cached", rows[0]["detail"])
+        self.assertEqual(self.changes("claude") + self.changes("codex"), [])
+        self.assertFalse(operation.state_path.exists())
 
-    def test_modified_pinned_source_is_not_adopted_or_overwritten(self):
-        source = self.home / f".pi/agent/skill-sources/example/skills/{self.first}/plugins/example"
-        (source / "skills/writing/SKILL.md").write_text("local customization\n")
+    def test_modified_pinned_source_is_not_installed_or_overwritten(self):
+        (self.source / "skills/writing/SKILL.md").write_text("local customization\n")
+        self.fake_cli("claude")
         _, rows = self.execute(True)
         self.assertEqual(rows[0]["status"], "conflict")
         self.assertIn("Modified source", rows[0]["detail"])
-        self.assertFalse(self.settings.exists())
-        self.assertEqual((source / "skills/writing/SKILL.md").read_text(), "local customization\n")
+        self.assertEqual(self.changes("claude"), [])
+        self.assertEqual((self.source / "skills/writing/SKILL.md").read_text(), "local customization\n")
 
-    def test_adoption_uses_the_referenced_checkout_when_another_cache_has_the_same_pin(self):
-        source = self.home / f".pi/agent/skill-sources/example/skills/{self.first}/plugins/example"
-        operation = sync.Sync(self.root)
-        cached = operation.sources.directory / "example/skills" / self.first
-        cached.parent.mkdir(parents=True)
-        subprocess.run(["git", "clone", "-q", str(self.upstream), str(cached)], check=True)
-        sync.write_json(self.settings, {"skills": [str(source / "skills/writing")], "extensions": [str(source / "hooks/pi.ts")]})
+    def test_installation_from_an_earlier_approved_pin_is_updated(self):
+        shutil.copytree(self.source, self.cache("claude"))
+        (self.upstream / "plugins/example/skills/writing/SKILL.md").write_text("updated skill\n")
+        revision = commit(self.upstream, "Update")
+        new = self.install_source(revision)
+        self.entry["source"]["sha"] = revision
+        self.set_entries([self.entry])
+        commit(self.root, "Update pin")
+        self.fake_cli("claude", {"plugin update example@example --scope user": self.deploy("claude", new)})
         _, rows = self.execute(True)
         self.assertEqual(rows[0]["status"], "updated")
-        settings = json.loads(self.settings.read_text())
-        self.assertEqual(settings["skills"], [str(cached / "plugins/example/skills/writing")])
-        self.assertEqual(settings["extensions"], [str(cached / "plugins/example/hooks/pi.ts")])
+        self.assertEqual(self.changes("claude"), ["plugin update example@example --scope user"])
+        self.assertEqual((self.cache("claude") / "skills/writing/SKILL.md").read_text(), "updated skill\n")
 
     def test_committed_but_unapproved_customization_is_not_adopted(self):
         (self.upstream / "plugins/example/skills/writing/SKILL.md").write_text("committed local customization\n")
-        git(self.upstream, "add", ".")
-        git(self.upstream, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Customize")
-        revision = git(self.upstream, "rev-parse", "HEAD")
-        custom = self.install_source(revision)
-        sync.write_json(self.settings, {"skills": [str(custom / "skills/writing")]})
-        before = self.settings.read_bytes()
+        custom = self.install_source(commit(self.upstream, "Customize"))
+        shutil.copytree(custom, self.cache("claude"))
+        self.fake_cli("claude")
         _, rows = self.execute(True)
         self.assertEqual(rows[0]["status"], "conflict")
-        self.assertIn("not approved", rows[0]["detail"])
-        self.assertEqual(self.settings.read_bytes(), before)
+        self.assertIn("Unrecognized or modified installation", rows[0]["detail"])
+        self.assertEqual(self.changes("claude"), [])
+        self.assertEqual((self.cache("claude") / "skills/writing/SKILL.md").read_text(), "committed local customization\n")
 
-    def test_adoption_leaves_other_packages_from_the_same_repository_alone(self):
-        other = self.upstream / "plugins/other/skills/research/SKILL.md"
-        other.parent.mkdir(parents=True)
-        other.write_text("other package\n")
-        git(self.upstream, "add", ".")
-        git(self.upstream, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Add other package")
-        revision = git(self.upstream, "rev-parse", "HEAD")
-        checkout = self.install_source(revision).parents[1]
-        other_skill = str(checkout / "plugins/other/skills/research")
-        sync.write_json(self.settings, {"skills": [other_skill]})
-        _, rows = self.execute(True)
-        self.assertEqual(rows[0]["status"], "updated")
-        settings = json.loads(self.settings.read_text())
-        self.assertEqual(settings["skills"][0], other_skill)
-        self.assertEqual(len(settings["skills"]), 2)
-
-    def test_humanize_without_its_advisory_flag_is_not_reported_as_current(self):
-        operation = sync.Sync(self.root)
-        entry = {**self.entry, "name": "humanize"}
-        package = operation.sources.package(entry)
-        wrapper = self.home / ".hermes/plugins/humanize"
-        sync.write_json(wrapper / "source.json", {
-            **entry["source"], "root": str(package.root), "skills": ["skills/writing"], "managed_adapter": False,
-        })
-        command = self.home / "bin/hermes"
-        command.write_text('#!/bin/sh\nprintf \'%s\\n\' \'[{"name":"humanize","status":"enabled"}]\'\n')
-        command.chmod(0o755)
-        status, _ = operation.hermes(entry, package, False)
-        self.assertEqual(status, "drift")
-
-    def test_generated_hermes_adapters_follow_template_changes_but_preserve_local_edits(self):
-        command = self.home / "bin/hermes"
-        flag = self.home / "hermes-enabled"
-        command.write_text('#!/bin/sh\ncase "$2" in\n list) if test -f "' + str(flag) + '"; then printf \'%s\\n\' \'[{"name":"example","status":"enabled"}]\'; else printf \'[]\\n\'; fi ;;\n enable) printf enabled > "' + str(flag) + '" ;;\n doctor) exit 0 ;;\n *) exit 98 ;;\nesac\n')
-        command.chmod(0o755)
-        operation = sync.Sync(self.root)
-        package = operation.sources.package(self.entry)
-        status, _ = operation.hermes(self.entry, package, True)
-        self.assertEqual(status, "updated")
-        template = self.root / "setup/agents/hermes-skills.py"
-        template.write_text(template.read_text() + "\n# Updated registration adapter.\n")
-        operation = sync.Sync(self.root)
-        status, _ = operation.hermes(self.entry, package, True)
-        self.assertEqual(status, "updated")
-        installed = self.home / ".hermes/plugins/example/__init__.py"
-        self.assertEqual(installed.read_bytes(), template.read_bytes())
-        before = installed.stat().st_mtime_ns
-        operation = sync.Sync(self.root)
-        self.assertEqual(operation.hermes(self.entry, package, True)[0], "ok")
-        self.assertEqual(installed.stat().st_mtime_ns, before)
-        installed.write_text("local adapter customization\n")
-        operation = sync.Sync(self.root)
-        with self.assertRaisesRegex(sync.Conflict, "Locally changed"):
-            operation.hermes(self.entry, package, True)
-        self.assertEqual(installed.read_text(), "local adapter customization\n")
-
-    def test_user_changes_to_managed_array_entries_are_conflicts(self):
+    def test_locally_changed_installation_is_neither_updated_nor_retired(self):
+        self.fake_cli("claude", {"plugin install example@example --scope user": self.deploy("claude", self.source)})
         self.execute(True)
-        settings = json.loads(self.settings.read_text())
-        settings["skills"] = ["replacement/custom-skill"]
-        sync.write_json(self.settings, settings)
-        before = self.settings.read_bytes()
-        _, rows = self.execute(True)
-        self.assertEqual(rows[0]["status"], "conflict")
-        self.assertEqual(self.settings.read_bytes(), before)
+        edited = self.cache("claude") / "skills/writing/SKILL.md"
+        edited.write_text("local edit\n")
+        for declared in (True, False):
+            with self.subTest(declared=declared):
+                self.set_entries([self.entry] if declared else [])
+                operation, rows = self.execute(True)
+                self.assertEqual(rows[0]["status"], "conflict")
+                self.assertIn("Locally changed", rows[0]["detail"])
+                self.assertEqual(self.changes("claude"), ["plugin install example@example --scope user"])
+                self.assertEqual(edited.read_text(), "local edit\n")
+                self.assertIn("claude:example", sync.read_json(operation.state_path)["packages"])
 
-    def test_retiring_a_package_removes_only_recorded_settings_and_keeps_sources(self):
-        sync.write_json(self.settings, {"skills": ["personal"], "extensions": ["orca.ts"]})
-        operation, _ = self.execute(True)
-        self.set_entries([])
-        _, rows = self.execute(True)
-        self.assertEqual(rows[0]["status"], "updated")
-        self.assertEqual(json.loads(self.settings.read_text()), {"skills": ["personal"], "extensions": ["orca.ts"]})
-        self.assertEqual(json.loads(operation.state_path.read_text())["packages"], {})
-        self.assertTrue((self.home / f".pi/agent/skill-sources/example/skills/{self.first}/plugins/example/skills/writing/SKILL.md").exists())
-
-    def test_retirement_preserves_a_skill_shared_with_a_surviving_package(self):
-        selection = {"name": "writing-only", "source": {**self.entry["source"], "path": "plugins/example/skills"}, "skills": ["./writing"]}
-        self.set_entries([self.entry, selection])
-        self.execute(True)
-        self.set_entries([selection])
-        _, rows = self.execute(True)
-        self.assertEqual([row["status"] for row in rows], ["ok", "updated"])
-        settings = sync.read_json(self.settings)
-        self.assertEqual(len(settings["skills"]), 1)
-        self.assertTrue(Path(settings["skills"][0], "SKILL.md").is_file())
-        self.assertEqual(settings["extensions"], [])
-        _, rows = self.execute(True)
-        self.assertEqual([row["status"] for row in rows], ["ok"])
+    def test_retiring_a_package_unregisters_it_and_forgets_its_record(self):
+        for host, install, retire in (
+            ("claude", "plugin install example@example --scope user", "plugin uninstall example@example --scope user --keep-data"),
+            ("codex", "plugin add example@example", "plugin remove example@example"),
+        ):
+            with self.subTest(host=host):
+                self.set_entries([self.entry])
+                self.fake_cli(host, {install: self.deploy(host, self.source), retire: ""})
+                self.execute(True, host)
+                self.set_entries([])
+                operation, rows = self.execute(True, host)
+                self.assertEqual([row["status"] for row in rows], ["updated"])
+                self.assertEqual(self.changes(host), [install, retire])
+                self.assertNotIn(f"{host}:example", sync.read_json(operation.state_path)["packages"])
+                self.assertTrue((self.source / "skills/writing/SKILL.md").is_file())
 
     def test_native_install_does_not_enable_an_already_enabled_plugin(self):
         operation = sync.Sync(self.root)
@@ -332,28 +301,20 @@ class AgentSyncTests(unittest.TestCase):
         with self.assertRaisesRegex(sync.Conflict, "Unexpected capabilities"):
             operation.native_files(self.entry, installed, package.expected)
 
-    def test_symlinked_settings_are_not_replaced_or_written_through(self):
-        target = self.home / "dotfiles/pi.json"
-        sync.write_json(target, {"skills": ["personal"]})
-        self.settings.parent.mkdir(parents=True, exist_ok=True)
-        self.settings.symlink_to(target)
+    def test_symlinked_state_file_is_not_replaced_or_written_through(self):
+        shutil.copytree(self.source, self.cache("claude"))
+        self.fake_cli("claude")
+        target = self.home / "dotfiles/state.json"
+        sync.write_json(target, {"version": 1, "packages": {}})
+        state = sync.Sync(self.root).state_path
+        state.parent.mkdir(parents=True, exist_ok=True)
+        state.symlink_to(target)
         before = target.read_bytes()
         _, rows = self.execute(True)
         self.assertEqual(rows[0]["status"], "conflict")
-        self.assertTrue(self.settings.is_symlink())
+        self.assertIn("symlinked", rows[0]["detail"])
+        self.assertTrue(state.is_symlink())
         self.assertEqual(target.read_bytes(), before)
-
-    def test_failed_link_replacement_restores_the_original_directory(self):
-        operation = sync.Sync(self.root)
-        plugin = self.home / ".hermes/plugins/example"
-        plugin.mkdir(parents=True)
-        (plugin / "original.txt").write_text("original plugin\n")
-        with patch.object(sync.os, "replace", side_effect=OSError("replacement failed")):
-            with self.assertRaisesRegex(OSError, "replacement failed"):
-                operation.install_link(plugin, self.upstream / "plugins/example")
-        self.assertEqual((plugin / "original.txt").read_text(), "original plugin\n")
-        self.assertFalse(plugin.is_symlink())
-        self.assertFalse(plugin.with_name("example.sync-link").is_symlink())
 
     def test_lock_rejects_concurrent_sync(self):
         first = sync.Sync(self.root)
@@ -364,8 +325,8 @@ class AgentSyncTests(unittest.TestCase):
                     self.fail("concurrent sync acquired the lock")
 
     def test_git_source_checks_include_untracked_files_and_symlinks(self):
-        source = self.home / f".pi/agent/skill-sources/example/skills/{self.first}/plugins/example"
-        (source / "unexpected").symlink_to(self.home / "private")
+        (self.source / "unexpected").symlink_to(self.home / "private")
+        self.fake_cli("claude")
         _, rows = self.execute(True)
         self.assertEqual(rows[0]["status"], "conflict")
         self.assertIn("unexpected", rows[0]["detail"])

@@ -114,7 +114,6 @@ def git_files(repository, ref, prefix):
 
 @dataclass
 class Package:
-    entry: dict
     root: Path
     repository: Path
     ref: str
@@ -129,24 +128,10 @@ class Package:
         if changed:
             raise Conflict(f"Modified source {self.root}: {', '.join(changed[:5])}")
 
-    def skills(self):
-        selected = self.entry.get("skills")
-        if selected is not None:
-            paths = [self.root / relative_path(value) for value in selected]
-        else:
-            paths = sorted((self.root / "skills").glob("*/"))
-        for path in paths:
-            if not (path / "SKILL.md").is_file():
-                raise Conflict(f"Missing skill: {path / 'SKILL.md'}")
-        if not paths:
-            raise Conflict(f"No skills found in {self.root}")
-        return paths
-
 
 class Sources:
-    def __init__(self, root, homes, state_dir):
+    def __init__(self, root, state_dir):
         self.root = root
-        self.homes = homes
         self.directory = state_dir / "sources"
         self.history = {}
 
@@ -170,25 +155,12 @@ class Sources:
         self.history[name] = list(dict.fromkeys(refs))
         return self.history[name]
 
-    def require_approved(self, entry, ref):
-        if ref != entry["source"]["sha"] and ref not in self.approved_refs(entry):
-            raise Conflict(f"Source revision {ref} was not approved in the marketplace")
-
-    def referenced(self, entry, checkout, ref):
-        self.require_approved(entry, ref)
-        if run("git", "-C", str(checkout), "rev-parse", "HEAD").strip() != ref:
-            raise Conflict(f"Checkout at {checkout} is not pinned to {ref}")
-        prefix = str(relative_path(entry["source"]["path"]))
-        package = Package(entry, checkout / prefix, checkout, ref, prefix)
-        package.check()
-        return package
-
     def package(self, entry, fetch=False, ref=None):
         source = entry["source"]
         if isinstance(source, str):
             prefix = str(relative_path(source))
             revision = ref or run("git", "-C", str(self.root), "rev-parse", "HEAD").strip()
-            return Package(entry, self.root / prefix, self.root, revision, prefix)
+            return Package(self.root / prefix, self.root, revision, prefix)
         revision = ref or source["sha"]
         repo = source["url"]
         if not re.fullmatch(r"[\w.-]+/[\w.-]+", repo) or not re.fullmatch(r"[0-9a-f]{40}", revision):
@@ -196,13 +168,12 @@ class Sources:
         prefix = str(relative_path(source["path"]))
         suffix = Path(repo) / revision
         candidates = [self.directory / suffix]
-        candidates += [home / "skill-sources" / suffix for home in self.homes.values()]
         for candidate in candidates:
             if (candidate / ".git").exists():
                 actual = run("git", "-C", str(candidate), "rev-parse", "HEAD").strip()
                 if actual != revision:
                     raise Conflict(f"Checkout at {candidate} is not pinned to {revision}")
-                return Package(entry, candidate / prefix, candidate, revision, prefix)
+                return Package(candidate / prefix, candidate, revision, prefix)
         if not fetch:
             raise Conflict(f"Source {repo}@{revision[:12]} not cached, run agents:sync")
         target = candidates[0]
@@ -216,19 +187,7 @@ class Sources:
             run("git", "-C", str(staging), "fetch", "--depth=1", "origin", revision)
             run("git", "-C", str(staging), "-c", "core.hooksPath=/dev/null", "checkout", "--detach", revision)
             staging.rename(target)
-        return Package(entry, target / prefix, target, revision, prefix)
-
-
-def reconcile_array(current, previous, desired):
-    """Remove only previously owned entries, retaining unrelated order and values."""
-    if not isinstance(current, list):
-        raise Conflict("Expected a settings array")
-    missing = [item for item in previous if item not in current]
-    if missing:
-        raise Conflict("Previously managed settings entries were removed or changed")
-    result = [item for item in current if item not in previous or item in desired]
-    result.extend(item for item in desired if item not in result)
-    return result
+        return Package(target / prefix, target, revision, prefix)
 
 
 class Sync:
@@ -239,8 +198,6 @@ class Sync:
         self.homes = {
             "claude": Path(os.environ.get("CLAUDE_CONFIG_DIR", home / ".claude")),
             "codex": Path(os.environ.get("CODEX_HOME", home / ".codex")),
-            "pi": Path(os.environ.get("PI_CODING_AGENT_DIR", home / ".pi/agent")),
-            "hermes": Path(os.environ.get("HERMES_HOME", home / ".hermes")),
         }
         self.state_dir = Path(os.environ.get("XDG_STATE_HOME", home / ".local/state")) / "ramtoshiya-agents"
         self.state_path = self.state_dir / "state.json"
@@ -249,9 +206,8 @@ class Sync:
             raise Conflict("Unsupported ownership state version")
         self.marketplace = read_json(root / ".claude-plugin/marketplace.json")
         self.policy = read_json(root / "setup/agents/hosts.json")
-        self.sources = Sources(root, self.homes, self.state_dir)
+        self.sources = Sources(root, self.state_dir)
         self.results = []
-        self.hermes_inventory = None
 
     def record(self, host, name, status, detail):
         self.results.append({"host": host, "component": name, "status": status, "detail": detail})
@@ -312,62 +268,6 @@ class Sync:
             if self.native_files(entry, path, expected) == expected:
                 return
         raise Conflict(f"Unrecognized or modified installation: {path}. Preserve local edits before syncing")
-
-    def pi(self, entry, package, apply):
-        host = "pi"
-        name = entry["name"]
-        home = self.homes[host]
-        path = home / "settings.json"
-        before = path.read_bytes() if path.exists() else None
-        settings = read_json(path, {})
-        previous = self.owned(host, name)
-        desired = {"skills": [], "extensions": [], "packages": []}
-        if isinstance(entry["source"], str):
-            desired["packages"] = [str(self.root)]
-        else:
-            desired["skills"] = [str(p) for p in package.skills()]
-            extension = package.root / "hooks/pi.ts"
-            if extension.exists():
-                desired["extensions"] = [str(extension)]
-        old = previous.get("settings", {}) if previous else {key: [] for key in desired}
-        if previous:
-            old_path = Path(previous["path"])
-            if old_path.resolve() != package.root.resolve() or previous["pin"] == package.ref:
-                self.check_owned(host, name, old_path)
-        else:
-            # Adopt only paths in the documented layout whose bytes match their pin.
-            for key in desired:
-                for item in settings.get(key, []):
-                    if not isinstance(item, str):
-                        continue
-                    absolute = (home / item).resolve()
-                    if isinstance(entry["source"], str):
-                        if key == "packages" and absolute == self.root:
-                            old[key].append(item)
-                        continue
-                    source = entry["source"]
-                    match = re.search(r"/skill-sources/" + re.escape(source["url"]) + r"/([0-9a-f]{40})/", str(absolute))
-                    if not match:
-                        continue
-                    checkout = Path(str(absolute)[:match.end()])
-                    if not absolute.is_relative_to((checkout / relative_path(source["path"])).resolve()):
-                        continue
-                    old_package = self.sources.referenced(entry, checkout, match[1])
-                    if absolute in [p.resolve() for p in old_package.skills()] or absolute == (old_package.root / "hooks/pi.ts").resolve():
-                        old[key].append(item)
-        updated = dict(settings)
-        for key, values in desired.items():
-            if old.get(key) or values:
-                updated[key] = reconcile_array(settings.get(key, []), old.get(key, []), values)
-        changed = updated != settings
-        if not apply:
-            return "drift" if changed else "ok", "settings differ" if changed else package.ref[:12]
-        if changed:
-            if (path.read_bytes() if path.exists() else None) != before:
-                raise Conflict(f"Settings changed during sync: {path}")
-            write_json(path, updated)
-        self.remember(host, name, package.root, package, settings=desired)
-        return "updated" if changed else "ok", "run /reload in Pi" if changed else package.ref[:12]
 
     def marketplace_setup(self, host, apply):
         if host == "claude":
@@ -441,115 +341,6 @@ class Sync:
             detail += ". Review hook trust in /hooks (never granted by sync)"
         return "updated" if changed else "ok", detail
 
-    def hermes_enabled(self):
-        if self.hermes_inventory is None:
-            output = run("hermes", "plugins", "list", "--user", "--json")
-            try:
-                self.hermes_inventory = json.loads(output)
-            except ValueError:
-                # Hermes prints a human message instead of JSON for an empty inventory.
-                if any((self.homes["hermes"] / "plugins").glob("*/plugin.yaml")):
-                    raise Conflict("Hermes returned an invalid plugin inventory")
-                self.hermes_inventory = []
-        return [row["name"] for row in self.hermes_inventory if row["status"] == "enabled"]
-
-    def install_link(self, path, target):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        staging = path.with_name(path.name + ".sync-link")
-        if staging.exists() or staging.is_symlink():
-            raise Conflict(f"Unexpected staging link: {staging}")
-        staging.symlink_to(target, target_is_directory=True)
-        backup = None
-        try:
-            if path.exists() and not path.is_symlink():
-                backups = self.state_dir / "backups"
-                backups.mkdir(parents=True, exist_ok=True)
-                backup = Path(tempfile.mkdtemp(prefix=path.name + "-", dir=backups)) / path.name
-                path.rename(backup)
-            os.replace(staging, path)
-        except OSError:
-            if backup is not None and backup.exists() and not path.exists():
-                backup.rename(path)
-            raise
-        finally:
-            if staging.is_symlink():
-                staging.unlink()
-
-    def hermes(self, entry, package, apply):
-        host = "hermes"
-        name = entry["name"]
-        home = self.homes[host]
-        enabled = name in self.hermes_enabled()
-        native = (package.root / "plugin.yaml").exists()
-        path = home / ("skills" if name == "open-pencil" else "plugins") / ("open-pencil" if name == "open-pencil" else name)
-        if name == "open-pencil":
-            source = package.skills()[0]
-            expected = files(source)
-            if path.exists():
-                self.check_owned(host, name, path)
-                if not self.owned(host, name) and files(path) != expected:
-                    raise Conflict(f"Locally modified standalone skill: {path}")
-            matches = path.exists() and files(path) == expected
-            if apply and not matches:
-                self.install_link(path, source)
-            enabled = True
-        elif native:
-            if path.is_symlink() and not path.exists():
-                raise Conflict(f"Broken plugin link: {path}")
-            if path.exists():
-                if path.resolve() != package.root.resolve():
-                    self.adopt_native(host, entry, path, package, None, apply)
-            matches = path.exists() and files(path) == package.expected
-            if apply and not matches:
-                self.install_link(path, package.root)
-        else:
-            metadata_path = path / "source.json"
-            metadata = read_json(metadata_path)
-            managed_adapter = metadata.get("managed_adapter", False) if metadata else True
-            template = (self.root / "setup/agents/hermes-skills.py").read_bytes()
-            manifest = f"name: {name}\ndescription: Skills from the pinned marketplace source\n"
-            if name == "humanize":
-                manifest += "provides_hooks:\n  - pre_tool_call\n  - transform_tool_result\n"
-            desired = {
-                "source": "git-subdir", **entry["source"],
-                "checkout": str(package.repository), "root": str(package.root),
-                "skills": [str(p.relative_to(package.root)) for p in package.skills()],
-                "advisory_hooks": name == "humanize", "managed_adapter": managed_adapter,
-            }
-            if path.exists():
-                self.check_owned(host, name, path)
-                if not metadata or metadata.get("url") != entry["source"]["url"] or metadata.get("path") != entry["source"]["path"]:
-                    raise Conflict(f"Unrecognized Hermes wrapper: {path}")
-                checkout = Path(metadata["root"])
-                for _ in relative_path(entry["source"]["path"]).parts:
-                    checkout = checkout.parent
-                self.sources.referenced(entry, checkout, metadata["sha"])
-            matches = metadata is not None and all(metadata.get(k) == desired[k] for k in ["sha", "root", "skills", "advisory_hooks", "managed_adapter"])
-            if managed_adapter and path.exists():
-                template_matches = (path / "__init__.py").read_bytes() == template and (path / "plugin.yaml").read_text() == manifest
-                if not template_matches and not self.owned(host, name):
-                    raise Conflict(f"Unrecognized generated Hermes adapter: {path}")
-                matches = matches and template_matches
-            if apply and not matches:
-                path.mkdir(parents=True, exist_ok=True)
-                if managed_adapter:
-                    (path / "plugin.yaml").write_text(manifest)
-                    (path / "__init__.py").write_bytes(template)
-                write_json(metadata_path, desired)
-        changed = not matches or not enabled
-        if apply:
-            if changed or not self.owned(host, name):
-                if name != "open-pencil":
-                    run("hermes", "plugins", "doctor", str(path), "--ci")
-                    if not enabled:
-                        run("hermes", "plugins", "enable", name, "--no-allow-tool-override")
-                        self.hermes_inventory = None
-                        if name not in self.hermes_enabled():
-                            raise Conflict(f"Hermes did not enable {name}")
-            self.remember(host, name, path, package)
-            return "updated" if changed else "ok", "restart Hermes" if changed else package.ref[:12]
-        return ("ok", package.ref[:12]) if not changed else ("drift", "missing, disabled, or outdated plugin")
-
     def retire(self, host, names, apply, selected=None):
         retiring = {
             key for key in self.state["packages"]
@@ -566,31 +357,10 @@ class Sync:
                 if not apply:
                     self.record(host, name, "drift", "no longer declared for this host")
                     continue
-                if host == "pi":
-                    settings_path = self.homes[host] / "settings.json"
-                    before = settings_path.read_bytes()
-                    settings = read_json(settings_path)
-                    for field, entries in previous.get("settings", {}).items():
-                        retained = {
-                            item for other_key, other in self.state["packages"].items()
-                            if other_key.startswith(host + ":") and other_key not in retiring
-                            for item in other.get("settings", {}).get(field, [])
-                        }
-                        if entries:
-                            settings[field] = reconcile_array(settings.get(field, []), entries, [item for item in entries if item in retained])
-                    if settings_path.read_bytes() != before:
-                        raise Conflict(f"Settings changed during sync: {settings_path}")
-                    write_json(settings_path, settings)
-                elif host == "claude":
+                if host == "claude":
                     run(host, "plugin", "uninstall", name + "@" + self.marketplace["name"], "--scope", "user", "--keep-data")
                 elif host == "codex":
                     run(host, "plugin", "remove", name + "@" + self.marketplace["name"])
-                elif name == "open-pencil":
-                    if not path.is_symlink():
-                        raise Conflict(f"Preserve the standalone skill before removing {path}")
-                    path.unlink()
-                elif name in self.hermes_enabled():
-                    run("hermes", "plugins", "disable", name)
                 del self.state["packages"][key]
                 self.save()
                 self.record(host, name, "updated", "retired managed registration, source checkouts retained")
@@ -609,8 +379,7 @@ class Sync:
                 self.record(host, "host", "absent", "executable not on PATH")
                 continue
             try:
-                if host in {"claude", "codex"}:
-                    self.marketplace_setup(host, apply)
+                self.marketplace_setup(host, apply)
             except ERRORS as error:
                 self.record(host, "marketplace", "conflict", str(error))
                 continue
@@ -627,8 +396,7 @@ class Sync:
                 try:
                     package = self.sources.package(entry, fetch=apply)
                     package.check()
-                    method = self.pi if host == "pi" else self.hermes if host == "hermes" else self.native
-                    status, detail = method(entry, package, apply) if host in {"pi", "hermes"} else method(host, entry, package, apply)
+                    status, detail = self.native(host, entry, package, apply)
                     self.record(host, name, status, detail)
                 except ERRORS as error:
                     self.record(host, name, "conflict", str(error))
@@ -650,7 +418,7 @@ class Sync:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["status", "sync"])
-    parser.add_argument("--host", action="append", choices=["claude", "codex", "pi", "hermes"])
+    parser.add_argument("--host", action="append", choices=["claude", "codex"])
     parser.add_argument("--plugin", action="append", help="check or sync only this plugin (repeatable)")
     parser.add_argument("--json", action="store_true", help="print machine-readable results")
     args = parser.parse_args()

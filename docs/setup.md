@@ -134,49 +134,14 @@ Agents:
 
 | Target | Change |
 | --- | --- |
-| `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.pi/agent/AGENTS.md` | Copies of `setup/agents/preferences.md`, the coding-agent instructions |
-| `~/.hermes/AGENTS.md` | Copy of `setup/agents/hermes-preferences.md`, the personal-assistant instructions |
+| `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md` | Copies of `setup/agents/preferences.md`, the coding-agent instructions |
 | `~/.claude/settings.json` | The keys in `setup/agents/claude-settings.json` |
-| `~/.hermes/config.yaml` | The keys in `setup/agents/hermes-config.yaml` |
 | `~/.claude/status-line.sh` | Copy of `setup/agents/claude-statusline.sh` |
 
 The managed plugin synchronization workflow reads host selections from
-`setup/agents/hosts.json`. Both humanizers are selected together on Claude Code,
-Codex, Pi, and Hermes so Korean delegation has an installed target. This policy
-file does not install plugins during `mise bootstrap`.
-
-Hermes reads its shared preferences through the `ramtoshiya` native plugin,
-which must be installed separately as described in [Agent plugins](agent-pack.md).
-
-`hermes-config.yaml` enables approval protection for instruction-file writes.
-Its `skills.disabled` list hides development and product-design workflows,
-plus selected personal-service skills that are not in use. It retains the
-shared Excalidraw, Mermaid validation, and Codex session-reading skills.
-Image generation uses Hermes' native `image_generate` tool instead of the
-shared image skill. The `openai-codex` provider uses ChatGPT/Codex OAuth with
-`gpt-image-2-medium`, not an OpenAI API key. Sign in with
-`hermes auth add openai-codex` if needed. Subscription limits apply, and the
-backend can return a different quality or size from the request. Credentials
-stay in Hermes' local authentication store, outside this repository.
-The config also disables the Orca lifecycle plugin `orca-status`.
-
-mise merges these keys without replacing other Hermes configuration. Lists
-are replaced as a whole, so add local exclusions to the source before applying.
-A disabled skill stays on disk and does not become active after a bundle update.
-New bundled skill names are not automatically excluded.
-
-Hermes handles personal tasks and disposable scripts, not project or product
-implementation. Its instructions require approval before handing coding work
-to Claudex or Codex. They also default email to reading and drafting, with
-confirmation for sending, reservations, payments, and destructive actions
-unless a specific authorization or standing rule covers the action. The
-package selection in [Agent plugins](agent-pack.md) retains Korean writing
-without installing the full design workflow at user level. The shared disabled
-plugin list leaves `omd` available for an explicitly enabled project plugin.
-Keep its full package out of the user plugin directory and opt into project
-discovery only when launching in that project. Orca can recreate its managed
-plugin when launching Hermes, so avoid that launch path if no Orca integration
-is wanted.
+`setup/agents/hosts.json`. Both humanizers are selected together on Claude Code
+and Codex so Korean delegation has an installed target. This policy file does
+not install plugins during `mise bootstrap`.
 
 The coding-agent instructions authorize local commits of completed, validated
 task-owned changes on the current branch, including the default branch. They
@@ -241,18 +206,18 @@ the edit within that file. It is not part of the path.
 | Line (`line = ...`) | Appends the line if that exact line is missing |
 
 The `agents:status` and `agents:sync` tasks manage agent package installations
-separately from these dotfile operations. They use an ownership record to
-reconcile shared settings lists without replacing unrelated entries. Run them
-from the checkout after changing marketplace pins. They do not run
-`mise bootstrap` or apply dotfiles. [Agent plugins](agent-pack.md) describes
-host support, conflicts, state storage, and reload requirements.
+separately from these dotfile operations. They keep an ownership record, so
+they remove only the registrations they created. Run them from the checkout
+after changing marketplace pins. They do not run `mise bootstrap` or apply
+dotfiles. [Agent plugins](agent-pack.md) describes host support, conflicts,
+state storage, and reload requirements.
 
 Deleting an entry from `mise.toml` leaves the file as it is.
 [`mise dot unapply`](https://mise.jdx.dev/cli/dotfiles/unapply.html) removes a
 block with its markers.
 
 Target paths are fixed. If you set `CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
-`HERMES_HOME`, `NPM_CONFIG_USERCONFIG`, or `XDG_CONFIG_HOME` (pnpm then reads
+`NPM_CONFIG_USERCONFIG`, or `XDG_CONFIG_HOME` (pnpm then reads
 `$XDG_CONFIG_HOME/pnpm/config.yaml`), change the matching targets in
 `mise.toml`.
 

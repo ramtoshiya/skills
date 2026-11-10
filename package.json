@@ -3,18 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Personal skills, a package and Python guard, and a Git hygiene stop check for Pi, Claude Code, Codex, and Hermes",
-  "keywords": ["pi-package"],
-  "files": ["plugins/ramtoshiya/", "docs/agent-pack.md", "docs/hooks.md"],
-  "pi": {
-    "extensions": ["./plugins/ramtoshiya/hooks/pi.ts"],
-    "skills": ["./plugins/ramtoshiya/skills"],
-    "prompts": [],
-    "themes": []
-  },
+  "description": "Personal skills, a package and Python guard, and a Git hygiene stop check for Claude Code and Codex",
   "scripts": {
     "test": "node --test test/*.test.mjs && uv run --no-project --managed-python --python '>=3.11' python -m unittest discover -s test -p 'test_*.py'"
   },
-  "engines": { "node": ">=22.19.0" },
-  "peerDependencies": { "@earendil-works/pi-coding-agent": "*" }
+  "engines": { "node": ">=22.19.0" }
 }

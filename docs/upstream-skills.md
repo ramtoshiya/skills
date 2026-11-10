@@ -58,12 +58,10 @@ It uses the caller's output paths and document schema. Other locales remain
 caller-owned.
 
 The marketplace source points at the OmD skills directory but exposes only
-`omd-kr-writer`. It does not load OmD's design-system workflows, roles,
-preference hooks, Pi extension, or native Hermes plugin. Claude Code and Codex
-use the marketplace's `skills` selection. Pi should list only the pinned
-`plugins/omd/skills/omd-kr-writer` directory. Hermes should register that same
-directory through a writing-only adapter. Restart or reload the affected agent
-after changing the installation.
+`omd-kr-writer`. It does not load OmD's design-system workflows, roles, or
+preference hooks. Claude Code and Codex use the marketplace's `skills`
+selection. Restart or reload the affected agent after changing the
+installation.
 
 The `humanize` skill handles English writing and existing code/configuration
 changes. Korean text, including new publication drafts, goes to
@@ -75,17 +73,16 @@ writing files, publishing, or explicitly humanizing text.
 Its hook checks file writes, commits, pull requests, and Slack or Linear
 posts for AI-sounding wording. Findings are advisory warnings and do not block
 the call or override normal permissions. The fork runs the hook through
-uv-managed Python instead of a bare `python3` and includes a Pi adapter
-(`hooks/pi.ts`). These changes are included at the pinned commit.
-When the hook itself fails, it lets the call through, as upstream does.
-For Codex patches, the hook skips files it cannot read or reconstruct and
-checks the remaining files. Codex reports any patch errors.
+uv-managed Python instead of a bare `python3`. This change is included at the
+pinned commit. When the hook itself fails, it lets the call through, as
+upstream does. For Codex patches, the hook skips files it cannot read or
+reconstruct and checks the remaining files. Codex reports any patch errors.
 
 `humanize-korean` packages a pinned commit from the
 [ramtoshiya/im-not-ai fork](https://github.com/ramtoshiya/im-not-ai), not a local
-source path. Claude Code, Codex, Pi, and Hermes load the paired skills. The
-managed host selection in `setup/agents/hosts.json` enables the Korean companion
-where the English skill delegates to it.
+source path. Claude Code and Codex load the paired skills. The managed host
+selection in `setup/agents/hosts.json` enables the Korean companion where the
+English skill delegates to it.
 
 For new Korean publication text, including issue replies without an editing
 request, the Korean skill reads its rulebook and drafts from the caller's facts.
@@ -97,8 +94,8 @@ verification scripts. The advisory English-wording hook remains separate.
 The fork builds a self-contained package with the upstream MIT license.
 `scripts/build_hermes_plugin.py --check` checks the packaged copies against
 their source files. Run it after merging upstream changes, then exercise the
-packaged helpers and a fresh Hermes session before updating the marketplace
-pin. A matching rulebook alone does not prove that the workflow still works.
+packaged helpers before updating the marketplace pin. A matching rulebook alone
+does not prove that the workflow still works.
 
 ## Measure humanizer routing
 
@@ -140,13 +137,13 @@ publication and private discussion that mentions posting without requesting it.
 Keep this separate from the optimization corpus when reporting results.
 
 Keep experimental source clones at explicit base commits and record each local
-candidate commit. Edit the Korean fork's canonical Claude, Codex, and Hermes
-skill sources, then rebuild and check its self-contained package with
-`scripts/build_hermes_plugin.py`. Evaluate the rebuilt package, not a generated
-file edited by hand. A new-writing mode must not invent an empty editing source
-or claim source-relative gate results. Smoke-test the full skill body separately
-from description-only routing. Local evaluation does not update marketplace
-pins, plugin versions, or installed agents.
+candidate commit. Edit the Korean fork's canonical skill sources, then rebuild
+and check its self-contained package with `scripts/build_hermes_plugin.py`.
+Evaluate the rebuilt package, not a generated file edited by hand. A new-writing
+mode must not invent an empty editing source or claim source-relative gate
+results. Smoke-test the full skill body separately from description-only
+routing. Local evaluation does not update marketplace pins, plugin versions, or
+installed agents.
 
 Report each skill's calls divided by valid runs, grouped by conversation language
 and task type. Also report target-text language, both/neither selections, and
@@ -158,7 +155,7 @@ contract is the current scope or a proposed language-exclusive writing policy.
 Keep generated results outside the repository and attach them to
 the review. Three repetitions of a small synthetic corpus are a routing check,
 not a production usage estimate. This evaluator does not measure later calls,
-editing quality, hook warnings, or Codex, Pi, and Hermes behavior. Do not use
+editing quality, hook warnings, or Codex behavior. Do not use
 Claude Code's `--bare` mode here. It omits automatic skill context even when the
 initialization event lists the skills.
 
@@ -167,8 +164,8 @@ initialization event lists the skills.
 To keep all installed supported hosts on the marketplace's approved pins, use
 `mise run agents:status` and `mise run agents:sync` from a local checkout.
 [Agent plugins](agent-pack.md) describes the managed installation, including
-conflict handling and Hermes adapters. The commands below install individual
-entries without enrolling them in that workflow.
+conflict handling. The commands below install individual entries without
+enrolling them in that workflow.
 
 Claude Code and Codex read the marketplace. After adding it as described in
 [Agent plugins](agent-pack.md), install each entry by name:
@@ -180,57 +177,8 @@ codex plugin add mattpocock-productivity@ramtoshiya
 
 Codex runs the `humanize` hook only after you trust it in `/hooks`.
 
-Pi does not read the marketplace. Clone each repository at the pinned commit
-and list the skill folders in `~/.pi/agent/settings.json`. For example:
-
-```sh
-sha=660effa621300eb6c388c7e9347fbf1d4cb3ba4f
-dir=~/.pi/agent/skill-sources/ramtoshiya/mattpocock-skills/$sha
-git clone https://github.com/ramtoshiya/mattpocock-skills.git "$dir"
-git -C "$dir" checkout --detach "$sha"
-```
-
-```json
-{
-  "skills": [
-    "skill-sources/ramtoshiya/mattpocock-skills/660effa621300eb6c388c7e9347fbf1d4cb3ba4f/skills/productivity/grilling"
-  ]
-}
-```
-
-Paths in Pi's settings resolve from `~/.pi/agent/`. For `humanize`, also add
-`plugins/humanize/hooks/pi.ts` from the fork's checkout to `extensions`.
-Changing a pin in the marketplace does not update these checkouts. Clone the
-new commit and change the paths.
-
 A loose copy of the same skill makes it load twice, as described in
 [Agent plugins](agent-pack.md).
-
-### Hermes
-
-For `humanize-korean`, install the whole package rather than copying its
-`SKILL.md`. From this repository, read its marketplace pin and create a detached
-checkout under the active Hermes profile:
-
-```sh
-home=${HERMES_HOME:-"$HOME/.hermes"}
-sha=$(uv run --no-project --managed-python --python '>=3.11' python -c 'import json; from pathlib import Path; entries=json.loads(Path(".claude-plugin/marketplace.json").read_text())["plugins"]; print(next(p["source"]["sha"] for p in entries if p["name"] == "humanize-korean"))')
-dir="$home/skill-sources/ramtoshiya/im-not-ai/$sha"
-git clone https://github.com/ramtoshiya/im-not-ai.git "$dir"
-git -C "$dir" checkout --detach "$sha"
-hermes plugins doctor "$dir/plugins/humanize-korean" --ci
-mkdir -p "$home/plugins"
-ln -s "$dir/plugins/humanize-korean" "$home/plugins/humanize-korean"
-hermes plugins enable humanize-korean --no-allow-tool-override
-hermes plugins list --plain --no-bundled
-```
-
-If that plugin path already exists, inspect it before replacing it. Do not use
-`ln -sf` to overwrite another installation. Start a new Hermes conversation to
-load `humanize-korean:humanize-korean`. Request Korean editing in natural
-language, with `정밀 모드` for the full diagnosis, rewrite, and finalizer route.
-Results stay in the working directory's `_workspace/`. On a pin update, verify
-the new checkout before changing the link and starting another conversation.
 
 ## Add an entry
 
@@ -348,8 +296,6 @@ below after reviewing a synchronized fork. Deterministic tests run with
      `codex plugin add <entry>@ramtoshiya`. Start a fresh process and review hook
      trust in `/hooks`. [Agent plugins](agent-pack.md) covers the runtime
      lifecycle, including shared-server considerations.
-   - Pi: create new pinned checkouts and change the configured paths, then
-     run `/reload`.
 6. Check that the installed manifest version and `hooks/hooks.json` match the
    selected commit. A displayed version alone does not prove that the installed
    files or an active runtime are current. Reusing a manifest version can keep

@@ -71,8 +71,8 @@ This repository is meant to be public.
 
 ## Documentation {:#documentation}
 
-Human-facing docs are `README.md`, `docs/*.md`, and the READMEs under `pi/` and
-`cli/`. Agent-facing docs are this file and the `SKILL.md` files.
+Human-facing docs are `README.md`, `docs/*.md`, and the READMEs under `cli/`.
+Agent-facing docs are this file and the `SKILL.md` files.
 
 - Write human-facing docs for a stranger on a Mac who has no context.
 - Describe the current state only. Leave out history, migration notes, and
@@ -93,26 +93,20 @@ Human-facing docs are `README.md`, `docs/*.md`, and the READMEs under `pi/` and
 | Hook rules and limits | `docs/hooks.md` |
 | Marketplace entries for third-party skills, forks, pin updates | `docs/upstream-skills.md` |
 | `mise.toml` and `setup/` | `docs/setup.md` |
-| Each package under `pi/` | `pi/<package>/README.md` |
 | Each standalone CLI under `cli/` | `cli/<tool>/README.md` |
 
 ## Layout and boundaries {:#layout}
 
 - `plugins/ramtoshiya/` is shared across supported hosts, documented in
   `docs/agent-pack.md`. Hook rules live only in the shared guard scripts.
-  Host adapters only translate events and guard responses and must not add or
-  change rules.
 - Hook scripts use only the Python standard library and run through the uv
   command shown in `docs/hooks.md`. The plugins take no third-party runtime
   dependencies and have no `version` field.
-- `package.json` `files` limits what the Pi package ships, and
-  `test/pack.test.mjs` checks it. Change both together.
 - `plugins/ramtoshiya-cc/` is for Claude Code only.
 - Third-party skills are never copied into this repository. Add a marketplace
   entry pinned by commit, as `docs/upstream-skills.md` describes.
 - `mise.toml` and `setup/` are the machine setup. Files in `setup/` are copied
   or merged into place by mise. Identity, signing, and credentials stay out.
-- `pi/cliproxy-provider/` is a separate Pi package with its own tests.
 
 ## Standalone CLIs {:#cli-tools}
 

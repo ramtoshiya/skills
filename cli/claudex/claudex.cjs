@@ -5,10 +5,8 @@ const os = require('node:os');
 const { spawn } = require('node:child_process');
 
 function connection() {
-  const configPath = process.env.CLAUDEX_CONFIG || [
-    path.join(os.homedir(), '.config/claudex/config.json'),
-    path.join(os.homedir(), '.pi/agent/cliproxy-provider.json'),
-  ].find(file => fs.existsSync(file));
+  const defaultConfig = path.join(os.homedir(), '.config/claudex/config.json');
+  const configPath = process.env.CLAUDEX_CONFIG || (fs.existsSync(defaultConfig) ? defaultConfig : undefined);
   const config = configPath ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : {};
   let key = process.env.CLIPROXY_API_KEY || config.apiKey;
   if (typeof key === 'string') {

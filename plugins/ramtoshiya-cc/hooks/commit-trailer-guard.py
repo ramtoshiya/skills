@@ -30,7 +30,7 @@ ATTRIBUTION = [
 MESSAGE_FILE = re.compile(r"(?:^|\s)(?:-F|--file|--body-file)(?:=|\s+)(['\"]?)([^\s'\"]+)\1")
 # Message files past the soft limit are still checked and logged. Files past the
 # hard limit are logged and skipped. Claude Code hides hook stderr, so warnings go
-# to the same log as the Pi extension's.
+# to a log file instead.
 HARD_LIMIT = 1 << 30
 SOFT_FILE_BYTES = 1 << 20
 

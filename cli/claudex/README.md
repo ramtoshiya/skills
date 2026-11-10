@@ -34,9 +34,7 @@ Set `MY_LOCAL_PROXY_KEY` in the shell that launches `claudex`. `apiKey` also
 accepts a literal key. Keep a file containing a literal key readable only by
 you with `chmod 600`. Never put that file in this repository.
 
-Without that file, `claudex` reads `~/.pi/agent/cliproxy-provider.json` if it
-exists, so an existing Pi proxy connection can be reused. `CLAUDEX_CONFIG`
-selects another configuration file. `CLIPROXY_BASE_URL` and
+`CLAUDEX_CONFIG` selects another configuration file. `CLIPROXY_BASE_URL` and
 `CLIPROXY_API_KEY` override the file values. The URL defaults to
 `http://127.0.0.1:8317` and can end in `/v1`. Remote proxies require HTTPS.
 Catalog discovery times out after five seconds and refuses redirects.
@@ -102,8 +100,7 @@ The extra catalog request times out after five seconds and refuses redirects.
 
 The context setting applies to the whole Claude Code session. Restart claudex
 with `--model` to discover another model's limit after switching models.
-Use base model IDs such as `gpt-6.1-sol`. Hermes's `-900k` suffix is a local alias
-that claudex does not translate.
+Use base model IDs such as `gpt-6.1-sol`.
 
 The wrapper also enables effort controls, limits concurrent tool use to three,
 and turns on tool search, so MCP tools and less common built-in tools load

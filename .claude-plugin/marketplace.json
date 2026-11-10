@@ -45,7 +45,7 @@
     },
     {
       "name": "humanize",
-      "description": "English writing and advisory AI-wording warnings, with Korean text delegated to humanize-korean and a uv-managed hook plus Pi adapter.",
+      "description": "English writing and advisory AI-wording warnings, with Korean text delegated to humanize-korean and a uv-managed hook.",
       "source": {
         "source": "git-subdir",
         "url": "ramtoshiya/claude-codex-settings",
@@ -71,7 +71,7 @@
     },
     {
       "name": "humanize-korean",
-      "description": "Korean publication writing plus diagnosis, editing, and verification from epoko77-ai's im-not-ai, packaged for Claude Code, Codex, Pi, and Hermes.",
+      "description": "Korean publication writing plus diagnosis, editing, and verification from epoko77-ai's im-not-ai, packaged for Claude Code and Codex.",
       "source": {
         "source": "git-subdir",
         "url": "ramtoshiya/im-not-ai",

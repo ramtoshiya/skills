@@ -1,13 +1,13 @@
 {
-  "hosts": ["claude", "codex", "pi", "hermes"],
+  "hosts": ["claude", "codex"],
   "plugins": {
     "ramtoshiya-cc": ["claude"],
-    "humanize-korean": ["claude", "codex", "pi", "hermes"],
-    "omd-kr-writer": ["claude", "codex", "pi", "hermes"],
+    "humanize-korean": ["claude", "codex"],
+    "omd-kr-writer": ["claude", "codex"],
     "omd": [],
-    "open-pencil": ["claude", "codex", "pi"],
-    "mattpocock-productivity": ["claude", "codex", "pi"],
-    "fcakyon-test-audit": ["claude", "codex", "pi"],
-    "ouroboros-interview": ["claude", "codex", "pi"]
+    "open-pencil": ["claude", "codex"],
+    "mattpocock-productivity": ["claude", "codex"],
+    "fcakyon-test-audit": ["claude", "codex"],
+    "ouroboros-interview": ["claude", "codex"]
   }
 }
