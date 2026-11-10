@@ -9,18 +9,12 @@
   "awaySummaryEnabled": false,
   "idleCompaction": false,
   "autoCompactWindow": 300000,
-  "statusLine": {
-    "type": "command",
-    "command": "~/.claude/status-line.sh",
-    "refreshInterval": 1
-  },
   "attribution": {
     "commit": "",
     "pr": "",
     "sessionUrl": false
   },
   "permissions": {
-    "defaultMode": "bypassPermissions",
     "deny": [
       "AskUserQuestion",
       "EnterPlanMode",

@@ -47,10 +47,12 @@ codex plugin add ramtoshiya@ramtoshiya
 ## Keep installed agents synchronized
 
 From a local checkout, `mise run agents:status` compares installed packages with
-the repository's pins. `mise run agents:sync` reconciles Claude Code and Codex
-without replacing unrelated settings. It installs all applicable marketplace
-entries and stops on local modifications. [Agent plugins](docs/agent-pack.md)
-describes the managed scope, conflicts, and required restarts.
+the repository's pins and checks registered Claude profiles' common settings
+and instructions. `mise run agents:sync` reconciles them without replacing
+unrelated settings or instruction text outside its managed block. It installs
+all applicable marketplace entries and stops on local package modifications.
+[Agent plugins](docs/agent-pack.md) describes the managed scope, conflicts, and
+required restarts.
 
 ## Set up a Mac
 

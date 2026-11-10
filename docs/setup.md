@@ -16,8 +16,21 @@ installed separately, as described in [Agent plugins](agent-pack.md).
   asks you to add to `~/.zprofile`. That line puts `/opt/homebrew/bin` on
   `PATH` and sets `HOMEBREW_PREFIX`, which `interactive.zsh` uses.
 - [mise](https://mise.jdx.dev/installing-mise.html) and Git.
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) with a uv-managed
+  Python 3.11 or newer. Follow uv's [Python installation instructions](https://docs.astral.sh/uv/guides/install-python/)
+  before the first bootstrap. A system or Homebrew Python does not satisfy the
+  managed-runtime requirement.
 
-mise installs the Homebrew packages itself, into Homebrew's prefix.
+Check the runtime before applying setup:
+
+```sh
+uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -V
+```
+
+mise installs the declared Homebrew packages into Homebrew's prefix, including
+uv. It does not install the managed Python interpreter. The Claude policy task
+runs offline and fails before applying that policy if the runtime is missing.
+Other bootstrap resources may already have been applied at that point.
 
 Tested with mise 2026.10.10 on macOS 26.5.1.
 
@@ -30,12 +43,15 @@ mise trust
 mise bootstrap --dry-run
 mise bootstrap
 mise bootstrap status --missing
+mise run agents:settings:status
 ```
 
 `mise trust` is needed because `mise.toml` is a project file. The dry run lists
-each file mise would write or edit. `status --missing` exits with 1 if anything
-still differs from the configuration. Open a new terminal afterwards to load the
-shell changes. Running `mise bootstrap` again changes only what differs.
+declared resource changes and prints the bootstrap task without running it.
+`status --missing` checks bootstrap resources, not the policy applied by that
+task. Use `agents:settings:status` to check Claude settings and instructions.
+Open a new terminal afterwards to load the shell changes. Running
+`mise bootstrap` again changes only what differs.
 
 mise does not back up the files it overwrites. Copy the files listed below
 before the first run, or set up
@@ -134,8 +150,9 @@ Agents:
 
 | Target | Change |
 | --- | --- |
-| `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md` | Copies of `setup/agents/preferences.md`, the coding-agent instructions |
-| `~/.claude/settings.json` | The keys in `setup/agents/claude-settings.json` |
+| Registered Claude profiles' `CLAUDE.md` | A managed block from `setup/agents/preferences.md`, preserving text outside the block |
+| `~/.codex/AGENTS.md` | A copy of `setup/agents/preferences.md` |
+| Registered Claude profiles' `settings.json` | Common keys from `setup/agents/claude-settings.json`, with terminal defaults from `setup/agents/claude-terminal-settings.json` only for `~/.claude` |
 | `~/.codex/config.toml` | `AGENTMEMORY_SDK_CHILD = "1"` under `[shell_environment_policy.set]`, from `setup/agents/codex-config.toml`. Commands that Codex runs get the variable, so a `claude` or `codex` test run started from them stays out of agentmemory. Codex hooks do not get it, so your own Codex sessions keep their memory |
 | `~/.claude/status-line.sh` | Copy of `setup/agents/claude-statusline.sh` |
 | `~/.local/bin/claude-review` | Copy of `setup/agents/claude-review`, an executable shell script that starts the review launcher |
@@ -160,12 +177,6 @@ pushing, publishing, or destructive history changes.
   commit and pull request workflow instructions. The shared agent instructions
   define the local commit workflow instead. This setting does not override
   higher-priority instructions supplied by a host or harness.
-- `permissions.defaultMode` is `bypassPermissions`: Claude Code runs every tool
-  without asking. Change this if you want permission prompts.
-- `permissions.deny` blocks `AskUserQuestion`, so questions arrive as plain
-  chat, and `SendFeedback`.
-- `EnterPlanMode` is also denied, so Claude cannot enter plan mode on its own.
-  You can still enter plan mode manually.
 - `enableArtifact` is false, which disables the Artifact tool.
 - `disableBundledSkills` is true, which removes bundled skills and workflows
   and hides built-in slash commands from the model. Built-in commands remain
@@ -194,11 +205,148 @@ pushing, publishing, or destructive history changes.
 - `CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL=1` stops Claude Code
   from registering the official marketplace on its own. It does not remove a
   marketplace that is already registered.
-- The status line shows the model, the effort level, and context use against
-  the context window size, refreshed every second. If the Orca app's status
-  line hook exists at `~/.orca/agent-hooks/claude-statusline.sh`, the script
-  passes its input on to it, because this `statusLine` setting replaces Orca's.
-  Without Orca, that step does nothing.
+- `permissions.deny` includes `AskUserQuestion`, `EnterPlanMode`, and
+  `SendFeedback` in every registered Claude profile. Necessary questions stay
+  in ordinary chat, where the user's reply can serve as a fork or rewind
+  checkpoint in T3 Code. This is an interaction preference, not a terminal
+  permission-approval mode. Shared instructions also require leaving plan mode
+  if a session starts there. Preserving an existing profile permission field
+  does not override those instructions.
+
+`claude-terminal-settings.json` applies only to `~/.claude`:
+
+- `permissions.defaultMode` is `bypassPermissions`, which skips permission
+  prompts. Change this if you want prompts.
+- The status line shows the model, effort, and context use, refreshed every
+  second. If `~/.orca/agent-hooks/claude-statusline.sh` exists, it also receives
+  the input. Otherwise that step does nothing.
+
+## Keep Claude profiles consistent
+
+Use the ordinary `~/.claude` configuration for terminal and hosted Claude Code
+sessions when they should share preferences and plugins. For GPT routing through
+[claudex](../cli/claudex/README.md), select that executable in the host. It
+sets the provider and models for each launch without a separate Claude
+configuration directory.
+
+In T3 Code, set the Claude provider's `Binary path` to `claudex` or its full
+installed path. Set `CLAUDE_CONFIG_DIR path` to the absolute path of your
+`~/.claude` directory when you need to override an inherited value. Leaving
+that path blank inherits the host environment and does not prove the default
+directory is in use.
+
+An intentionally isolated instance can use a separate `CLAUDE_CONFIG_DIR`,
+which has its own user settings and does not inherit `~/.claude/settings.json`.
+Register such directories to reconcile their common settings:
+
+```sh
+mise run agents:settings:status
+mise run agents:settings:sync
+mise run agents:settings:status
+```
+
+These tasks check or apply settings and common instructions without running
+plugin commands or model requests. They always include `~/.claude`, regardless
+of the caller's `CLAUDE_CONFIG_DIR`. The ordinary `agents:status` and
+`agents:sync` tasks also include these checks when Claude is selected, unless
+`--plugin` limits the command to packages. Use `--json` for machine-readable
+results. Each profile has separate settings and instructions results.
+
+`mise bootstrap` runs `agents:settings:sync` through its bootstrap task, after
+dotfiles and tools. All Claude policy writes therefore use the same registry,
+overrides, and merge rules. There are no separate Claude settings merges or
+instruction copies in `[dotfiles]`. `mise dot apply`, `mise bootstrap status`,
+and `mise bootstrap --dry-run` do not execute the policy task.
+
+Keep the target list in
+`~/.config/ramtoshiya/claude-profiles.json`, or
+`$XDG_CONFIG_HOME/ramtoshiya/claude-profiles.json`:
+
+```json
+{
+  "version": 1,
+  "profiles": {
+    "isolated": {
+      "configDir": "~/.claude_isolated"
+    },
+    "worker": {
+      "configDir": "~/.claude_worker",
+      "overrides": {
+        "env": {
+          "AGENTMEMORY_SDK_CHILD": "1"
+        }
+      }
+    }
+  }
+}
+```
+
+Names are labels. Each entry needs an absolute path or a `~/` path. Two entries
+cannot name the same resolved directory. An entry naming `~/.claude` still gets
+its terminal defaults. `overrides` records intentional differences after the
+common settings and terminal defaults. The checker reports override key names
+so an exception does not look like common-policy coverage. Keep this registry
+outside the repository and keep credentials in the provider's own settings.
+The registry controls settings reconciliation only. It does not select a
+launcher or install plugins into registered directories.
+
+Only settings named by the common source, terminal defaults, or an explicit
+override are managed. Nested objects keep unrelated keys. Required array entries
+are added without removing existing entries, so an override can add deny rules
+but cannot remove common ones. Authentication, provider routing, plugins, hooks,
+and permission keys outside the managed policy are left alone unless explicitly
+included in an override. Terminal approval mode and status-line defaults are
+not copied to alternate profiles. Correct files are not rewritten. A setting
+removed from a source is no longer managed, but is not deleted from existing
+targets.
+
+The same profile inventory supplies `setup/agents/preferences.md` to each
+profile's `CLAUDE.md`, between `<!-- BEGIN ramtoshiya:preferences -->` and
+`<!-- END ramtoshiya:preferences -->`. Sync adds or updates only this block and
+preserves existing text outside it. Missing blocks are drift. Duplicate or
+unpaired markers are conflicts and the affected file is not overwritten.
+Instruction contents are not printed in diagnostics. Existing standalone
+instructions outside the block remain local content, even if they repeat the
+common source.
+
+Role-specific memory behavior stays separate from this shared policy. Built-in
+Claude memory is off, but agentmemory has its own controls. Keep the user's own
+session memory and worker, review, and test-run memory rules distinct, as
+[Agent plugins](agent-pack.md) and [Hooks](hooks.md) describe. A profile name is
+a label, not an instruction to change a provider's environment.
+
+Both commands report unregistered directories found at `~/.claude*/settings.json`
+and an unregistered active `CLAUDE_CONFIG_DIR`, including one outside the home
+directory. They exit nonzero and leave those directories untouched, even if no
+launcher uses them. Detection is not a complete inventory of every host. When
+creating an isolated instance, register its custom location rather than relying
+on discovery. Invalid JSON and configuration conflicts also return nonzero.
+Diagnostics show paths and key names, not settings values.
+
+Classify a setting by the behavior it controls before assigning its scope.
+Common interaction rules, terminal display and approval settings, role-specific
+memory behavior, and project rules need not share a scope even when their keys
+have the same JSON parent. Keep regression expectations tied to the intended
+behavior, not only to values computed from the current source.
+
+After changing common settings or instructions, run sync and status across the
+registry. After adding an instance, changing its launch configuration, or
+updating Claude Code or its host, start a fresh session through that instance's
+real launcher. Check the environment relevant to configuration and routing,
+including `CLAUDE_CONFIG_DIR`, without exposing credentials. Check that
+`AskUserQuestion`, `EnterPlanMode`, and `SendFeedback` are unavailable, Artifact
+and bundled skills are absent, expected plugins and their skills are visible,
+and common instructions load. Use `/model` and the proxy or provider's
+diagnostics to check the selected model and where a request is sent. In T3
+Code, confirm that necessary questions use ordinary chat and that the user's
+reply is a usable fork or rewind checkpoint. Check worker memory behavior
+against its role separately.
+
+Launch arguments, environment variables, project settings, and host-supplied
+instructions can change effective behavior. A successful file check does not
+prove what a running session has loaded. Report file checks, fresh-launch
+checks, and host-level checkpoint checks separately, including any that were
+not performed.
 
 ## Review launcher
 
@@ -257,21 +405,25 @@ the edit within that file. It is not part of the path.
 | Block (`block = ...`) | Writes the text between `# >>> mise:<id> >>>` and `# <<< mise:<id> <<<` markers, appended to the file if the markers are missing |
 | Line (`line = ...`) | Appends the line if that exact line is missing |
 
-The `agents:status` and `agents:sync` tasks manage agent package installations
-separately from these dotfile operations. They keep an ownership record, so
-they remove only the registrations they created. Run them from the checkout
-after changing marketplace pins. They do not run `mise bootstrap` or apply
-dotfiles. [Agent plugins](agent-pack.md) describes host support, conflicts,
-state storage, and reload requirements.
+The `agents:status` and `agents:sync` tasks manage agent packages and registered
+Claude settings and instructions. Package ownership records limit retirement
+to registrations they created. Run these tasks after changing marketplace pins
+or common policy. They do not run `mise bootstrap` or apply other dotfiles.
+The bootstrap task invokes only `agents:settings:sync`, not package
+installation. [Agent plugins](agent-pack.md) describes package support,
+conflicts, state storage, and reload requirements.
 
 Deleting an entry from `mise.toml` leaves the file as it is.
 [`mise dot unapply`](https://mise.jdx.dev/cli/dotfiles/unapply.html) removes a
 block with its markers.
 
-Target paths are fixed. If you set `CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
-`NPM_CONFIG_USERCONFIG`, or `XDG_CONFIG_HOME` (pnpm then reads
-`$XDG_CONFIG_HOME/pnpm/config.yaml`), change the matching targets in
-`mise.toml`.
+Mise's dotfile target paths are fixed. Register intentionally separate
+`CLAUDE_CONFIG_DIR` settings and instruction targets in the local profile
+registry. Status-line scripts and plugin installations are separate from
+profile reconciliation.
+For other target changes, including `CODEX_HOME`, `NPM_CONFIG_USERCONFIG`, or
+`XDG_CONFIG_HOME` (pnpm then reads `$XDG_CONFIG_HOME/pnpm/config.yaml`), change
+the matching entries in `mise.toml`.
 
 ## What it leaves alone
 
@@ -283,4 +435,8 @@ your shell startup files, such as Homebrew's `shellenv`.
 ## Change a setting later
 
 Edit the file in `setup/` or the entry in `mise.toml`, then run
-`mise bootstrap` again. `mise dot apply` applies only the file entries.
+`mise bootstrap` again. `mise dot apply` applies only the file entries. To
+apply just common Claude settings and instructions, run
+`mise run agents:settings:sync`. Check the result across registered profiles
+with `mise run agents:settings:status`, then use the fresh-session checks above
+for changed runtime behavior.

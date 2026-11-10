@@ -192,12 +192,28 @@ mise run agents:sync
 
 `status` makes no configuration changes or source downloads. Native inventory
 commands may refresh their own metadata caches. The task exits nonzero for
-missing packages, outdated contents, or conflicts. `sync` reconciles every
-supported agent executable on `PATH`. It skips agents that are not installed.
-Use `--host claude` or `--host codex` to restrict either task. Repeat
-`--plugin NAME` to limit both installation and retirement to named packages,
-leaving other managed registrations alone. Unknown names are errors. `--json`
-prints the results as JSON.
+missing packages, outdated contents, settings drift, or conflicts. `sync`
+reconciles packages for supported agent executables on `PATH`, skipping agents
+that are not installed. Use `--host claude` or `--host codex` to restrict either
+task. Repeat `--plugin NAME` to limit installation and retirement to named
+packages, leaving other managed registrations and user settings alone. Unknown
+names are errors. `--json` prints the results as JSON.
+
+When Claude is selected without `--plugin`, both tasks also check or apply
+common user settings and instructions across the local Claude profile
+registry. Each profile reports both results. Use the shared `~/.claude`
+configuration for hosted sessions that should use the same preferences and
+plugins. A host can select [claudex](../cli/claudex/README.md) as its
+executable to route models per launch without a separate profile. Register
+intentionally isolated profiles for policy reconciliation. The registry does
+not select a launcher or install plugins. The package installer uses the
+active `CLAUDE_CONFIG_DIR` and does not install plugins into every registered
+profile. Run `mise run agents:settings:status` or
+`mise run agents:settings:sync` for profile policy alone, without native plugin
+commands. `mise bootstrap` uses that same settings sync task, so it does not
+have different Claude merge rules. [Machine setup](setup.md) owns the profile
+format, managed instruction block, common interaction rules, terminal
+defaults, and runtime checks.
 
 The marketplace supplies the exact third-party pins. `setup/agents/hosts.json`
 limits `ramtoshiya-cc` to Claude Code. `omd-kr-writer` is installed at user
@@ -230,7 +246,7 @@ Codex use their uninstall commands, with Claude persistent data retained.
 Downloaded source checkouts are retained.
 
 Sync does not upgrade upstream pins, install agent executables or skill CLIs,
-apply shared dotfiles, grant hook trust, or restart running sessions. Review
+apply other dotfiles, grant hook trust, or restart running sessions. Review
 Codex hooks in `/hooks` and restart Claude Code after changes. Finish active
 Codex turns before installation and coordinate any shared-server restart as
 described below. The status table verifies installed files and configuration,
@@ -247,6 +263,14 @@ In each agent, ask it to run these commands:
 In Claude Code, `/plugin` lists the installed plugins. Each skill should appear
 once in the agent's skill list. A loose copy of the same skill, for example in
 `~/.claude/skills/` or `~/.agents/skills/`, makes it appear twice.
+
+For each hosted Claude launch, start a fresh session through the actual host.
+Check its environment for configuration and routing, including the
+`CLAUDE_CONFIG_DIR` value, without exposing credentials. Check loaded
+instructions and preferences and plugin and skill visibility. Use `/model`
+and the proxy or provider's diagnostics to check the intended model and where
+a request is sent. A settings check alone does not show what the session loaded
+or where it sends requests.
 
 ## Update
 

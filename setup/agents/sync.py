@@ -1,6 +1,7 @@
-"""Reconcile this checkout's agent packages without owning unrelated settings."""
+"""Reconcile agent packages and registered Claude profiles."""
 
 import argparse
+from copy import deepcopy
 from contextlib import contextmanager
 from dataclasses import dataclass
 import fcntl
@@ -11,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -18,6 +20,9 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 IGNORED = {".git", "__pycache__", ".DS_Store", ".in_use"}
+PREFERENCES_BEGIN = b"<!-- BEGIN ramtoshiya:preferences -->"
+PREFERENCES_END = b"<!-- END ramtoshiya:preferences -->"
+PREFERENCES_HINT = re.compile(rb"ramtoshiya:preferences|<!--\s*(?:BEGIN|END)\s+ramtoshiya\b", re.IGNORECASE)
 
 
 class Conflict(Exception):
@@ -49,10 +54,232 @@ def write_json(path, data):
             stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
-            temporary.chmod(path.stat().st_mode & 0o777 if path.exists() else 0o600)
+            temporary.chmod(stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o600)
             os.replace(temporary, path)
         finally:
             temporary.unlink(missing_ok=True)
+
+
+def write_bytes(path, data):
+    if path.is_symlink():
+        raise Conflict(f"Refusing to replace a symlinked configuration file: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode="wb", dir=path.parent, delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+            temporary.chmod(stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o600)
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+def reconcile_instructions(actual, source, path):
+    """Replace the managed block without changing any bytes outside it."""
+    begins = actual.count(PREFERENCES_BEGIN)
+    ends = actual.count(PREFERENCES_END)
+    hints = len(PREFERENCES_HINT.findall(actual))
+    if not begins and not ends and not hints:
+        separator = b"\n" if actual and not actual.endswith(b"\n") else b""
+        prefix = actual + separator + PREFERENCES_BEGIN
+        suffix = PREFERENCES_END + b"\n"
+    elif begins == 1 and ends == 1 and hints == 2 and actual.index(PREFERENCES_BEGIN) < actual.index(PREFERENCES_END):
+        start = actual.index(PREFERENCES_BEGIN) + len(PREFERENCES_BEGIN)
+        end = actual.index(PREFERENCES_END)
+        prefix, suffix = actual[:start], actual[end:]
+    else:
+        raise Conflict(f"Malformed or duplicate managed instruction markers in {path}")
+    body = b"\n" + source + (b"" if source.endswith(b"\n") else b"\n")
+    return prefix + body + suffix
+
+
+def settings_json(path, missing=None):
+    def unique_keys(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("Duplicate JSON key")
+            result[key] = value
+        return result
+
+    def invalid_constant(_value):
+        raise ValueError("Invalid JSON constant")
+
+    try:
+        if not path.exists() and not path.is_symlink():
+            if missing is not None:
+                return deepcopy(missing)
+            raise Conflict(f"Missing JSON file: {path}")
+        data = json.loads(path.read_text(), object_pairs_hook=unique_keys, parse_constant=invalid_constant)
+    except (ValueError, UnicodeError) as error:
+        raise Conflict(f"Invalid JSON in {path}") from error
+    except OSError as error:
+        raise Conflict(f"Cannot read JSON file: {path}") from error
+    if not isinstance(data, dict):
+        raise Conflict(f"Expected a JSON object in {path}")
+    return data
+
+
+def same_value(left, right):
+    return json.dumps(left, sort_keys=True) == json.dumps(right, sort_keys=True)
+
+
+def overlay_settings(base, layer, prefix=""):
+    """Combine defaults and overrides, retaining required entries in arrays."""
+    result = deepcopy(base)
+    for key, value in layer.items():
+        name = f"{prefix}.{key}" if prefix else key
+        old = result.get(key)
+        if isinstance(old, dict) and isinstance(value, dict):
+            result[key] = overlay_settings(old, value, name)
+        elif isinstance(old, list) and isinstance(value, list):
+            result[key] = old + [item for item in value if not any(same_value(item, entry) for entry in old)]
+        elif name == "permissions" and isinstance(old, dict):
+            raise Conflict(f"Expected an object in profile settings: {name}")
+        elif name == "permissions.deny" and isinstance(old, list):
+            raise Conflict(f"Expected an array in profile settings: {name}")
+        else:
+            result[key] = deepcopy(value)
+    return result
+
+
+def reconcile_settings(actual, expected, path, prefix=""):
+    """Return merged settings and changed key paths without exposing values."""
+    result = deepcopy(actual)
+    changed = []
+    for key, required in expected.items():
+        name = f"{prefix}.{key}" if prefix else key
+        present = key in result
+        current = result.get(key)
+        if isinstance(required, dict):
+            if present and not isinstance(current, dict):
+                raise Conflict(f"Expected an object at {path}: {name}")
+            merged, nested = reconcile_settings(current if present else {}, required, path, name)
+            if nested:
+                result[key] = merged
+                changed.extend(nested)
+        elif isinstance(required, list):
+            if present and not isinstance(current, list):
+                raise Conflict(f"Expected an array at {path}: {name}")
+            merged = deepcopy(current) if present else []
+            for item in required:
+                if not any(same_value(item, entry) for entry in merged):
+                    merged.append(deepcopy(item))
+            if not present or not same_value(current, merged):
+                result[key] = merged
+                changed.append(name)
+        else:
+            if present and isinstance(current, (dict, list)):
+                raise Conflict(f"Expected a scalar at {path}: {name}")
+            if not present or not same_value(current, required):
+                result[key] = deepcopy(required)
+                changed.append(name)
+    return result, changed
+
+
+class ClaudeSettings:
+    def __init__(self, root, record):
+        self.root = root
+        self.record = record
+        self.home = Path.home()
+        config_home = Path(os.environ.get("XDG_CONFIG_HOME") or self.home / ".config")
+        self.registry = config_home / "ramtoshiya/claude-profiles.json"
+        self.default = (self.home / ".claude").resolve()
+
+    def profiles(self):
+        profiles = {self.default: ("default", {})}
+        registry = settings_json(self.registry, {"version": 1, "profiles": {}})
+        if (set(registry) != {"version", "profiles"} or type(registry["version"]) is not int
+                or registry["version"] != 1 or not isinstance(registry["profiles"], dict)):
+            raise Conflict(f"Invalid registry structure in {self.registry}")
+        registered = set()
+        for name, entry in registry["profiles"].items():
+            if (not name.strip() or not isinstance(entry, dict) or "configDir" not in entry
+                    or set(entry) - {"configDir", "overrides"} or not isinstance(entry.get("overrides", {}), dict)):
+                raise Conflict(f"Invalid profile in {self.registry}")
+            directory = entry["configDir"]
+            if (not isinstance(directory, str) or not directory
+                    or not (directory.startswith("~/") or Path(directory).is_absolute())):
+                raise Conflict(f"Profile configDir must be absolute or start with ~/ in {self.registry}")
+            path = Path(directory).expanduser().resolve()
+            if path in registered:
+                raise Conflict(f"Duplicate profile directory in {self.registry}: {path}")
+            registered.add(path)
+            profiles[path] = (name, entry.get("overrides", {}))
+        return profiles
+
+    def unregistered(self, profiles):
+        candidates = {path.parent.resolve() / "settings.json" for path in self.home.glob(".claude*/settings.json")}
+        active = os.environ.get("CLAUDE_CONFIG_DIR")
+        if active:
+            candidates.add(Path(active).expanduser().resolve() / "settings.json")
+        managed = {path / "settings.json" for path in profiles}
+        return sorted(candidates - managed)
+
+    def process(self, apply=False):
+        try:
+            profiles = self.profiles()
+            common = settings_json(self.root / "setup/agents/claude-settings.json")
+            terminal = settings_json(self.root / "setup/agents/claude-terminal-settings.json")
+            unregistered = self.unregistered(profiles)
+        except (Conflict, OSError) as error:
+            self.record("claude", "settings", "conflict", str(error))
+            return
+        expected_profiles = {}
+        for directory, (label, overrides) in profiles.items():
+            try:
+                expected = overlay_settings(common, terminal) if directory == self.default else common
+                expected_profiles[directory] = overlay_settings(expected, overrides)
+            except Conflict as error:
+                self.record("claude", f"settings:{label}", "conflict", str(error))
+                return
+        source_path = self.root / "setup/agents/preferences.md"
+        try:
+            source = source_path.read_bytes()
+            if PREFERENCES_HINT.search(source):
+                raise Conflict(f"Managed instruction markers in source: {source_path}")
+            source_error = None
+        except (Conflict, OSError):
+            source = None
+            source_error = f"Cannot use instructions source: {source_path}"
+        for directory, (label, overrides) in profiles.items():
+            path = directory / "settings.json"
+            try:
+                actual = settings_json(path, {})
+                merged, changed = reconcile_settings(actual, expected_profiles[directory], path)
+                if apply and changed:
+                    write_json(path, merged)
+                status = ("updated" if apply else "drift") if changed else "ok"
+                detail = str(path)
+                if overrides:
+                    _, override_keys = reconcile_settings({}, overrides, path)
+                    detail += " (local overrides: " + ", ".join(override_keys) + ")"
+                if changed:
+                    detail += ": " + ", ".join(changed)
+                self.record("claude", f"settings:{label}", status, detail)
+            except (Conflict, OSError) as error:
+                self.record("claude", f"settings:{label}", "conflict", str(error))
+            path = directory / "CLAUDE.md"
+            try:
+                if source_error:
+                    raise Conflict(source_error)
+                try:
+                    actual = path.read_bytes() if path.exists() or path.is_symlink() else b""
+                except OSError as error:
+                    raise Conflict(f"Cannot read instructions file: {path}") from error
+                merged = reconcile_instructions(actual, source, path)
+                changed = merged != actual
+                if apply and changed:
+                    write_bytes(path, merged)
+                status = ("updated" if apply else "drift") if changed else "ok"
+                self.record("claude", f"instructions:{label}", status, str(path))
+            except (Conflict, OSError) as error:
+                self.record("claude", f"instructions:{label}", "conflict", str(error))
+        for path in unregistered:
+            self.record("claude", "settings:unregistered", "drift",
+                        f"{path}: register its configDir in {self.registry}")
 
 
 def relative_path(value):
@@ -191,7 +418,7 @@ class Sources:
 
 
 class Sync:
-    def __init__(self, root=ROOT):
+    def __init__(self, root=ROOT, settings_only=False):
         root = root.resolve()
         self.root = root
         home = Path.home()
@@ -201,12 +428,14 @@ class Sync:
         }
         self.state_dir = Path(os.environ.get("XDG_STATE_HOME", home / ".local/state")) / "ramtoshiya-agents"
         self.state_path = self.state_dir / "state.json"
-        self.state = read_json(self.state_path, {"version": 1, "packages": {}})
-        if self.state.get("version") != 1:
-            raise Conflict("Unsupported ownership state version")
-        self.marketplace = read_json(root / ".claude-plugin/marketplace.json")
-        self.policy = read_json(root / "setup/agents/hosts.json")
-        self.sources = Sources(root, self.state_dir)
+        self.settings_only = settings_only
+        if not settings_only:
+            self.state = read_json(self.state_path, {"version": 1, "packages": {}})
+            if self.state.get("version") != 1:
+                raise Conflict("Unsupported ownership state version")
+            self.marketplace = read_json(root / ".claude-plugin/marketplace.json")
+            self.policy = read_json(root / "setup/agents/hosts.json")
+            self.sources = Sources(root, self.state_dir)
         self.results = []
 
     def record(self, host, name, status, detail):
@@ -411,7 +640,8 @@ class Sync:
                 fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as error:
                 raise Conflict("Another agent sync is running") from error
-            self.state = read_json(self.state_path, {"version": 1, "packages": {}})
+            if not self.settings_only:
+                self.state = read_json(self.state_path, {"version": 1, "packages": {}})
             yield
 
 
@@ -420,16 +650,29 @@ def main():
     parser.add_argument("command", choices=["status", "sync"])
     parser.add_argument("--host", action="append", choices=["claude", "codex"])
     parser.add_argument("--plugin", action="append", help="check or sync only this plugin (repeatable)")
+    parser.add_argument("--settings-only", action="store_true", help="check or sync registered Claude settings and instructions only")
     parser.add_argument("--json", action="store_true", help="print machine-readable results")
     args = parser.parse_args()
+    if args.settings_only and args.plugin:
+        parser.error("--settings-only cannot be combined with --plugin")
+    if args.settings_only and args.host and "claude" not in args.host:
+        parser.error("--settings-only requires --host claude, or omit --host")
     try:
-        sync = Sync()
-        hosts = args.host or sync.policy["hosts"]
+        sync = Sync(settings_only=args.settings_only)
+        hosts = args.host or (["claude"] if args.settings_only else sync.policy["hosts"])
+
+        def process(apply=False):
+            if not args.settings_only:
+                sync.process(hosts, apply=apply, selected=args.plugin)
+            if "claude" in hosts and args.plugin is None:
+                ClaudeSettings(sync.root, sync.record).process(apply=apply)
+            return sync.results
+
         if args.command == "sync":
             with sync.lock():
-                results = sync.process(hosts, apply=True, selected=args.plugin)
+                results = process(apply=True)
         else:
-            results = sync.process(hosts, selected=args.plugin)
+            results = process()
         if args.json:
             print(json.dumps(results, indent=2))
         else:

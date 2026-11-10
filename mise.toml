@@ -48,14 +48,15 @@ zsh = true
 "~/.gitignore/claude-local-settings" = { line = "**/.claude/settings.local.json" }
 
 # Agents
-"~/.claude/CLAUDE.md" = { source = "setup/agents/preferences.md", mode = "copy" }
 "~/.codex/AGENTS.md" = { source = "setup/agents/preferences.md", mode = "copy" }
 "~/.codex/config.toml/agent-shell-env" = { source = "setup/agents/codex-config.toml", merge = true }
-"~/.claude/settings.json/preferences" = { source = "setup/agents/claude-settings.json", merge = true }
 "~/.claude/status-line.sh" = { source = "setup/agents/claude-statusline.sh", mode = "copy" }
 "~/.local/bin/claude-review" = { source = "setup/agents/claude-review", mode = "copy" }
 "~/.local/share/claude-review/claude-review.py" = { source = "setup/agents/claude-review.py", mode = "copy" }
 "~/.local/bin/quotio-cli" = { source = "setup/agents/quotio-cli", mode = "copy" }
+
+[tasks.bootstrap]
+depends = ["agents:settings:sync"]
 
 [tasks."agents:status"]
 description = "Compare installed agent packages with this checkout"
@@ -64,3 +65,11 @@ run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-con
 [tasks."agents:sync"]
 description = "Reconcile managed packages across installed agents"
 run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/sync.py sync"
+
+[tasks."agents:settings:status"]
+description = "Compare registered Claude settings and instructions with this checkout"
+run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/sync.py status --host claude --settings-only"
+
+[tasks."agents:settings:sync"]
+description = "Reconcile registered Claude settings and instructions"
+run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/sync.py sync --host claude --settings-only"

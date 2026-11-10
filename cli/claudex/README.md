@@ -119,7 +119,26 @@ launch before discovery without echoing its contents.
 A program that starts Claude Code from a configured executable path can use
 `~/.local/bin/claudex` there. claudex forwards its arguments and exit status,
 and `node` and `claude` must be on the `PATH` that program passes to its
-children.
+children. Use the ordinary `~/.claude` configuration for hosted launches when
+you want the same preferences and plugins. claudex selects the proxy and models
+for each launch, so routing does not require a separate configuration directory.
+
+In T3 Code, set the Claude provider's `Binary path` to `claudex` or the
+absolute path to the installed `~/.local/bin/claudex`. To override an inherited
+`CLAUDE_CONFIG_DIR`, set `CLAUDE_CONFIG_DIR path` to the absolute path of your
+`~/.claude` directory. A blank path inherits the host's environment and does
+not show which configuration Claude Code will use. The wrapper also inherits
+`CLAUDE_CONFIG_DIR`. When it names another directory, Claude Code reads that
+directory's user settings instead of `~/.claude/settings.json`. The wrapper
+does not copy preferences between directories. For intentionally isolated
+configurations, see the settings registry in [Machine setup](../../docs/setup.md).
+Common settings and instructions apply to those profiles without copying
+terminal permission-approval or status-line defaults.
+
+Start a fresh session through the host and check the environment relevant to
+configuration and routing, loaded preferences and plugin visibility, and the
+intended model and provider. A settings file or a launcher configuration alone
+does not verify the running session.
 
 Tested with Claude Code 2.1.308 for fast request capture and a live GPT-6.1 Sol
 fast request, 2.1.309 for deferred tool loading, and 2.1.304 for live discovery

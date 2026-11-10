@@ -38,6 +38,11 @@ requests it or the project's workflow requires it. Respect explicit no-commit
 instructions and genuine unfinished work, but do not call completed work WIP
 just because the user did not separately ask for a commit.
 
+Never enter plan mode or call `EnterPlanMode`, even for large or ambiguous
+tasks. Investigate and act directly, and state assumptions in your reply. If a
+session starts in plan mode, exit it and continue the requested work in the
+same turn.
+
 Carry a request through to the result the user evidently wants. When a
 follow-up is plainly needed for the change to take effect where the user meant
 it, such as putting a rule into every instruction file that should load it or
@@ -79,3 +84,17 @@ server that was already running, or `launchd`. A T3 server passes its own
 environment to the agents it starts. A test of agentmemory's own hooks needs
 them on: run it with `env -u AGENTMEMORY_SDK_CHILD`, or set the variable to
 `0` under `env -i`, and delete the sessions it records afterward.
+
+## Questions and conversation checkpoints {:#conversation-checkpoints}
+
+Ask necessary questions in ordinary chat and wait for the user's reply. Do
+not use `AskUserQuestion` or another structured question dialog. In T3 Code,
+ordinary user replies provide the conversation checkpoints used to fork or
+rewind work. Do not turn a needed clarification into an assumption merely to
+avoid a question dialog.
+
+Treat these interaction rules as user preferences across launchers and
+profiles, not terminal display or permission-approval settings. When changing
+agent configuration, classify each setting by its purpose and verify the
+intended behavior through the affected launch paths. Configuration agreement
+alone does not prove that a running session follows the user's preferences.
