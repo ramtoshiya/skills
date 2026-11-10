@@ -11,7 +11,6 @@ file `.claude-plugin/marketplace.json`, which also lists the
 
 | Skill | What it does | Needs |
 | --- | --- | --- |
-| `codex-session-reader` | Finds and reads Codex CLI session transcripts under `~/.codex/sessions/` | Nothing |
 | `figma-rest` | Reads Figma files, tokens, and rendered nodes through the REST API instead of the Figma MCP server | A Figma personal access token in the `FIGMA_TOKEN` environment variable, or as a `FIGMA_TOKEN=<token>` line in `~/.config/agent-secrets/figma.env` |
 | `excalidraw-board` | Reads and draws on shared excalidraw.com rooms, and exports selected saved objects as PNG | The separately installed `excalidraw-board` command on `PATH`, described in [its README](../cli/excalidraw-board/README.md). PNG export also needs [excalidraw-web-export](../cli/excalidraw-web-export/README.md) and headless Chrome/Chromium |
 | `github-actions-authoring` | Checks official releases, a 72-hour cooldown, compatibility, and full commit pins before editing GitHub Actions workflows or action metadata | Git, authenticated `gh` access, `actionlint`, `zizmor`, and the target repository's test runner on `PATH` |
@@ -21,6 +20,11 @@ file `.claude-plugin/marketplace.json`, which also lists the
 | `read-x` | Reads public X posts, threads, profiles, and searches through the mdfromx HTTP API | HTTP access to [mdfromx](https://mdfromx.com/) and curl |
 | `reorganize-commits` | Rewrites the current branch's commits into reviewable chunks. Runs only when you invoke it | Git |
 | `stable-refs` | Gives documents and plans permanent identifiers that survive edits | Nothing |
+
+The `codex-session-reader` skill is inactive. Its source remains in
+[`disabled-skills/codex-session-reader`](../disabled-skills/codex-session-reader/SKILL.md),
+outside the plugin's skill directory. To enable it, move the directory back to
+`plugins/ramtoshiya/skills/` and reinstall the plugin.
 
 The GitHub Actions skill applies to `.github/workflows/*.yml`,
 `.github/workflows/*.yaml`, `action.yml`, and `action.yaml`, including changes that
