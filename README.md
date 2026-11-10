@@ -11,7 +11,7 @@ preferences, so fork the repository and edit it before you run it.
 | Part | What it does | Docs |
 | --- | --- | --- |
 | `ramtoshiya` plugin | Skills for Claude Code and Codex, plus two hooks: a guard that blocks global package installs, unpinned one-shot package runs, and bare `python`/`pip`, and a stop check that asks the agent to deal with uncommitted Git changes | [Agent plugins](docs/agent-pack.md), [Hooks](docs/hooks.md) |
-| `ramtoshiya-cc` plugin | Claude Code only: a skill for claude.ai/design projects and a hook that blocks AI attribution lines in commits and pull requests | [Agent plugins](docs/agent-pack.md) |
+| `ramtoshiya-cc` plugin | Claude Code only: a skill for claude.ai/design projects, an opt-in lead mode that hands work to subagents on the cheapest model that can do it, and a hook that blocks AI attribution lines in commits and pull requests | [Agent plugins](docs/agent-pack.md) |
 | Third-party skills | Skills from other repositories, listed in this repository's marketplace and pinned to exact commits | [Third-party skills](docs/upstream-skills.md) |
 | Machine setup | A `mise.toml` that installs a few Homebrew packages and writes shell, Git, package manager, and agent settings | [Machine setup](docs/setup.md) |
 | `sidecar` | A macOS command that connects an iPad as a Sidecar display, and an iPad shortcut that runs it over SSH | [README](cli/sidecar/README.md) |
@@ -64,7 +64,7 @@ every file the setup changes and the settings it applies.
 .claude-plugin/marketplace.json   Claude Code and Codex marketplace: both plugins and the third-party entries
 package.json                      The npm test script
 plugins/ramtoshiya/                   Skills and hooks for Claude Code and Codex
-plugins/ramtoshiya-cc/                Claude Code-only skill and hook
+plugins/ramtoshiya-cc/                Claude Code-only skills and hook
 mise.toml, setup/                 Machine setup and the files it copies into place
 cli/sidecar/                      Standalone macOS command
 cli/claudex/                      Claude Code launcher for CLIProxyAPI GPT models

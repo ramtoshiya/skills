@@ -139,6 +139,7 @@ Agents:
 | `~/.claude/status-line.sh` | Copy of `setup/agents/claude-statusline.sh` |
 | `~/.local/bin/claude-review` | Copy of `setup/agents/claude-review`, an executable shell script that starts the review launcher |
 | `~/.local/share/claude-review/claude-review.py` | Copy of `setup/agents/claude-review.py`, the review launcher and its hook handler |
+| `~/.local/bin/quotio-cli` | Copy of `setup/agents/quotio-cli`, an executable shell script that runs the command-line helper inside the [Quotio](https://github.com/nguyenphutrong/quotio) app from `/Applications`. The `lead` skill reads weekly quota through it. Setup does not install Quotio, and without it the script exits with an error |
 
 The managed plugin synchronization workflow reads host selections from
 `setup/agents/hosts.json`. Both humanizers are selected together on Claude Code

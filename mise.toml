@@ -54,6 +54,7 @@ zsh = true
 "~/.claude/status-line.sh" = { source = "setup/agents/claude-statusline.sh", mode = "copy" }
 "~/.local/bin/claude-review" = { source = "setup/agents/claude-review", mode = "copy" }
 "~/.local/share/claude-review/claude-review.py" = { source = "setup/agents/claude-review.py", mode = "copy" }
+"~/.local/bin/quotio-cli" = { source = "setup/agents/quotio-cli", mode = "copy" }
 
 [tasks."agents:status"]
 description = "Compare installed agent packages with this checkout"

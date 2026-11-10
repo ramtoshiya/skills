@@ -38,9 +38,60 @@ instructions, not automatic hook enforcement.
 - A package and Python guard that checks each shell command before it runs.
 - A Git hygiene check that runs when the agent is about to stop.
 
-`ramtoshiya-cc` contains the `claude-design-direct` skill, which edits and previews
-claude.ai/design projects through Claude Code's `DesignSync` tool, and a hook
-that blocks AI attribution lines in commits and pull requests.
+`ramtoshiya-cc` contains:
+
+- The `claude-design-direct` skill, which edits and previews claude.ai/design
+  projects through Claude Code's `DesignSync` tool.
+- The `lead` skill, which runs only when you invoke it with `/lead` or
+  `/ramtoshiya-cc:lead`. The session then settles the goal and how to check it
+  before work starts, and hands work to subagents on the cheapest model and
+  effort that can do it. When you tell it to do a piece of work itself, it
+  does that piece and goes back to delegating at the next one, unless you say
+  the change should last. Guards and validators it builds target ordinary
+  mistakes, not deliberate bypass, and are checked against real commands. It
+  does not review by default. When a change needs review, such as instruction
+  text, a data format, or a design memo, the session commits and merges it
+  first, then starts one review as a separate T3 Code task in its own
+  worktree. That task has 30 minutes, fixes only reproduced breaks of the
+  original request, and stops with a decision for a person when a fix would go
+  beyond that. When a T3 Code provider runs through the `claude-review`
+  launcher in [Machine setup](setup.md), the task gets a reminder at 20
+  minutes and its tool calls are refused after 30, counted from its latest
+  prompt. Without the launcher, the 30 minutes are only an instruction.
+  Outside T3 Code, the session recommends a review in its final report
+  instead. In T3 Code, the file `~/.config/ramtoshiya/lead-route.json`
+  decides where Haiku- and Sonnet-level workers run. With
+  `{"workers": "codex"}` or `{"workers": "claudex"}` they run on GPT Luna and
+  Terra models through that T3 Code provider, and the review runs on GPT Sol
+  through the Codex provider. On both GPT routes, Luna workers use `low` for
+  the Haiku low row and `max` for the Haiku max row. Terra workers use only
+  `max`. When T3 Code lists a Codex provider instance named for workers, the
+  `codex` route's workers and the review use it. Point
+  that instance at a launcher that turns off what only your own sessions need,
+  such as a memory plugin that injects summaries of earlier sessions. Without
+  the file they run on Claude. Opus-level work stays on Claude, except that a
+  Terra worker whose task outgrew it reruns on GPT Sol through the same
+  provider. When the `quotio-cli` command from [Machine setup](setup.md) shows 90% or
+  more of the route's weekly quota used, the session moves workers to the other
+  side and says so. A worker that hits a usage limit moves workers the same
+  way, and the session does not return to that side. When a T3 Code provider
+  instance bans Claude Code's own subagent tools, for example with the launch
+  argument `--disallowedTools Agent,Task,Workflow,SendMessage,ListAgents`, the
+  session starts its Claude workers with T3 Code's `delegate_task` instead.
+  Claude workers and child leads started with `delegate_task`, for that or any
+  other reason, run on a Claude provider instance named for workers when T3
+  Code lists one, and on the session's own instance otherwise. The agentmemory
+  plugin's hooks do nothing when `AGENTMEMORY_SDK_CHILD` is `1`. Set that
+  environment variable in the T3 Code provider settings of the instances for
+  workers and review and of the `claudex` instance, and copy the other settings
+  of the worker instance from the Claude instance you use yourself. Those
+  sessions then neither receive summaries of earlier sessions nor record their
+  own. Leave the variable off your own instance. Subagents started with Claude
+  Code's Agent tool run inside the parent's process and keep the parent's
+  memory behavior. Opus or Fable subagents the session starts read the same
+  instructions and lead their part of the work. Claude
+  Code keeps the instructions in context after compaction.
+- A hook that blocks AI attribution lines in commits and pull requests.
 
 Excalidraw board requests update a shared room. A `.excalidraw` attachment is
 an export or an agreed fallback, not a replacement for that room. The agent
@@ -226,7 +277,7 @@ plugins/ramtoshiya/skills/                     Skills
 plugins/ramtoshiya/hooks/global-package-guard.py   Package and Python rules
 plugins/ramtoshiya/hooks/git-hygiene-guard.py      Stop check
 plugins/ramtoshiya/hooks/hooks.json            Hook registration for Claude Code and Codex
-plugins/ramtoshiya-cc/                         Claude Code-only skill and hook
+plugins/ramtoshiya-cc/                         Claude Code-only skills and hook
 ```
 
 The rules live only in the guard scripts. `hooks.json` registers them for

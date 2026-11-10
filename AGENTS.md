@@ -134,5 +134,8 @@ claude plugin validate ./.claude-plugin/marketplace.json
 
 After changing a hook, also check it in each agent that loads it: an allowed
 command, a denied command, and, for the Git hygiene check, a blocked first stop
-in a dirty repository. The [package and Python guard](docs/hooks.md) applies to
-your own shell commands here as well: use `uv run python`, not `python`.
+in a dirty repository. Take those commands from real transcripts where you can.
+Hooks catch ordinary mistakes by users and agents. Deliberate bypass is out of
+scope, so do not add rules for it. The [package and Python
+guard](docs/hooks.md) applies to your own shell commands here as well: use `uv
+run python`, not `python`.
