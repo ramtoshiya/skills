@@ -69,7 +69,7 @@ From the checkout, run:
 ```sh
 mise install --locked
 mise run actions:check
-mise exec -- node --test test/actions-checks.mjs
+mise exec -- node --test dev/tests/repository/actions-checks.mjs
 ```
 
 The checks use [actionlint](https://github.com/rhysd/actionlint) for workflow
@@ -225,7 +225,7 @@ pushing, publishing, or destructive history changes.
 
 Use the ordinary `~/.claude` configuration for terminal and hosted Claude Code
 sessions when they should share preferences and plugins. For GPT routing through
-[claudex](../cli/claudex/README.md), select that executable in the host. It
+[claudex](../tools/claudex/README.md), select that executable in the host. It
 sets the provider and models for each launch without a separate Claude
 configuration directory.
 

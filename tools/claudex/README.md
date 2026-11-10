@@ -1,0 +1,152 @@
+# claudex
+
+Run Claude Code with GPT models through a running
+[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) server.
+The command discovers models at startup and passes your arguments to `claude`.
+
+## Install
+
+Install [Node.js](https://nodejs.org/en/download) 22 or newer and
+[Claude Code](https://code.claude.com/docs/en/setup), with `node` and `claude`
+on `PATH`. Start CLIProxyAPI with a working GPT upstream, then run from this
+repository:
+
+```sh
+sh tools/claudex/install.sh
+```
+
+The installer copies the command into `~/.local/share/claudex` and links it
+at `~/.local/bin/claudex`. Add `~/.local/bin` to `PATH` if needed. Run the
+installer again after updating the checkout. It installs no dependencies.
+
+## Connection
+
+Create `~/.config/claudex/config.json` with your proxy's client key:
+
+```json
+{
+  "baseUrl": "http://127.0.0.1:8317",
+  "apiKey": "$MY_LOCAL_PROXY_KEY"
+}
+```
+
+Set `MY_LOCAL_PROXY_KEY` in the shell that launches `claudex`. `apiKey` also
+accepts a literal key. Keep a file containing a literal key readable only by
+you with `chmod 600`. Never put that file in this repository.
+
+`CLAUDEX_CONFIG` selects another configuration file. `CLIPROXY_BASE_URL` and
+`CLIPROXY_API_KEY` override the file values. The URL defaults to
+`http://127.0.0.1:8317` and can end in `/v1`. Remote proxies require HTTPS.
+Catalog discovery times out after five seconds and refuses redirects.
+
+The client key goes to Claude Code through its environment, without being
+included in command arguments or written to a generated settings file.
+
+For image generation tools, the launched Claude session and its child processes
+receive `IMAGEGEN_BASE_URL` set to the resolved proxy URL with `/v1` appended and
+`IMAGEGEN_API_KEY` set to the resolved client key. Set either variable in the
+shell that launches `claudex` to override its default independently. These values
+are passed through the environment, without being added to command arguments or
+generated settings files.
+
+## Use
+
+```sh
+claudex
+claudex --fast
+claudex --model gpt-6.1-sol
+claudex -p 'Explain this project'
+```
+
+Put `--fast` first to request GPT priority processing for the session. The wrapper
+sets `speed: "fast"` through `CLAUDE_CODE_EXTRA_BODY`, which CLIProxyAPI's Codex
+translator maps to `service_tier: "priority"`. Other extra-body fields are
+preserved. This does not lower reasoning effort or enable Claude Code's `/fast`
+toggle. Your upstream must support priority processing, which can have different
+billing or usage limits. Requesting it does not guarantee lower latency.
+Without `--fast`, the wrapper leaves the service tier unchanged.
+
+Only visible OpenAI models with IDs matching `gpt-<major>[.<minor>]` and an
+optional `astra`, `sol`, `terra`, `luna`, `codex`, `mini`, or `nano` suffix
+are considered. Selection prefers the highest major and minor version first,
+then the first available tier in each row:
+
+| Claude Code role | Preferred tiers |
+| --- | --- |
+| Fable | `astra` |
+| Main and Opus | `astra`, `sol`, `codex`, no suffix, `terra` |
+| Sonnet and subagents | `terra`, `sol`, `codex`, no suffix |
+| Haiku | `luna`, `mini`, `nano` |
+
+If a role has no matching tier, it uses the main model. If no main tier
+matches, the main model is the first recognized model in the catalog.
+Discovery still runs when you pass `--model`, which overrides the main model.
+The Fable slot in `/model` shows the selected Astra model ID, even when a newer
+Sol model is selected for main and Opus. If no Astra is available, it shows
+the main model instead.
+`--help`, `-h`, `--version`, and `-v` alone run Claude Code without discovery.
+
+The wrapper enables auto-compact for `claudex` sessions without changing the
+saved preference used by regular `claude` launches. At startup it fetches
+`/v1/models?client_version=0.155.0` for the Codex catalog and uses the starting
+model's advertised `max_context_window`, falling back to `context_window` when
+the maximum is unavailable. `--model` and `--model=...` overrides, including the
+role aliases in the table, select which model's limit to use. If the Codex
+catalog has no usable entry, it uses `max_context_window`, `context_window`, or
+`context_length` from the ordinary `/v1/models` response, in that order. If
+neither catalog provides a positive integer limit, it prints a warning and uses
+250,000 tokens.
+The extra catalog request times out after five seconds and refuses redirects.
+
+The context setting applies to the whole Claude Code session. Restart claudex
+with `--model` to discover another model's limit after switching models.
+Use base model IDs such as `gpt-6.1-sol`.
+
+The wrapper also enables effort controls, limits concurrent tool use to three,
+and turns on tool search, so MCP tools and less common built-in tools load
+only when the model asks for them. Other Claude Code settings and hooks still
+apply.
+
+Claude Code keeps only the last `--settings`, so claudex removes each
+`--settings` you pass, whether inline JSON, `--settings=...`, or the path of a
+JSON file, and sends one merged object. Your keys are kept, `env` variables are
+combined, and later flags win over earlier ones. If you set a key that claudex
+also generates, such as `model` or an `env` variable it sets, claudex's value
+wins, so choose the model with `--model`. Arguments after `--` are not read.
+A value that is not a JSON object, or a file that cannot be read, stops the
+launch before discovery without echoing its contents.
+
+A program that starts Claude Code from a configured executable path can use
+`~/.local/bin/claudex` there. claudex forwards its arguments and exit status,
+and `node` and `claude` must be on the `PATH` that program passes to its
+children. Use the ordinary `~/.claude` configuration for hosted launches when
+you want the same preferences and plugins. claudex selects the proxy and models
+for each launch, so routing does not require a separate configuration directory.
+
+In T3 Code, set the Claude provider's `Binary path` to `claudex` or the
+absolute path to the installed `~/.local/bin/claudex`. To override an inherited
+`CLAUDE_CONFIG_DIR`, set `CLAUDE_CONFIG_DIR path` to the absolute path of your
+`~/.claude` directory. A blank path inherits the host's environment and does
+not show which configuration Claude Code will use. The wrapper also inherits
+`CLAUDE_CONFIG_DIR`. When it names another directory, Claude Code reads that
+directory's user settings instead of `~/.claude/settings.json`. The wrapper
+does not copy preferences between directories. For intentionally isolated
+configurations, see the settings registry in [Machine setup](../../docs/setup.md).
+Common settings and instructions apply to those profiles without copying
+terminal permission-approval or status-line defaults.
+
+Start a fresh session through the host and check the environment relevant to
+configuration and routing, loaded preferences and plugin visibility, and the
+intended model and provider. A settings file or a launcher configuration alone
+does not verify the running session.
+
+Tested with Claude Code 2.1.308 for fast request capture and a live GPT-6.1 Sol
+fast request, 2.1.309 for deferred tool loading, and 2.1.304 for live discovery
+and 872k-input requests to GPT-6 Astra, GPT-6.1 Sol, GPT-6 Sol, and GPT-6 Luna.
+
+## Checks
+
+From the repository root, run `node --test tools/claudex/tests/claudex.test.mjs` or `npm test`.
+The command tests use a local HTTP server and a substitute `claude` executable.
+They check role selection, argument forwarding, credential handling, failures,
+and exit status without contacting an upstream provider.

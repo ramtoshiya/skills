@@ -14,11 +14,11 @@ preferences, so fork the repository and edit it before you run it.
 | `ramtoshiya-cc` plugin | Claude Code only: a skill for claude.ai/design projects, an opt-in lead mode that hands work to subagents on the cheapest model that can do it, and a hook that blocks AI attribution lines in commits and pull requests | [Agent plugins](docs/agent-pack.md) |
 | Third-party skills | Skills from other repositories, listed in this repository's marketplace and pinned to exact commits | [Third-party skills](docs/upstream-skills.md) |
 | Machine setup | A `mise.toml` that installs a few Homebrew packages and writes shell, Git, package manager, and agent settings | [Machine setup](docs/setup.md) |
-| `sidecar` | A macOS command that connects an iPad as a Sidecar display, and an iPad shortcut that runs it over SSH | [README](cli/sidecar/README.md) |
-| `claudex` | Runs Claude Code with GPT models discovered from a [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) server | [README](cli/claudex/README.md) |
-| `worktreeinclude` | Copies selected ignored files into new Git worktrees through an explicitly installed repository hook | [README](cli/worktreeinclude/README.md) |
-| `excalidraw-board` | Proof-of-concept command for reading and editing shared Excalidraw rooms | [README](cli/excalidraw-board/README.md) |
-| `excalidraw-web-export` | Headless PNG export through a deployed Excalidraw app, from a local file or saved room snapshot | [README](cli/excalidraw-web-export/README.md) |
+| `sidecar` | A macOS command that connects an iPad as a Sidecar display, and an iPad shortcut that runs it over SSH | [README](tools/sidecar/README.md) |
+| `claudex` | Runs Claude Code with GPT models discovered from a [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) server | [README](tools/claudex/README.md) |
+| `worktreeinclude` | Copies selected ignored files into new Git worktrees through an explicitly installed repository hook | [README](tools/worktreeinclude/README.md) |
+| `excalidraw-board` | Proof-of-concept command for reading and editing shared Excalidraw rooms | [README](tools/excalidraw-board/README.md) |
+| `excalidraw-web-export` | Headless PNG export through a deployed Excalidraw app, from a local file or saved room snapshot | [README](tools/excalidraw-web-export/README.md) |
 
 ## Install the agent plugins
 
@@ -63,18 +63,14 @@ every file the setup changes and the settings it applies.
 ## Repository layout
 
 ```text
-.claude-plugin/marketplace.json   Claude Code and Codex marketplace: both plugins and the third-party entries
-package.json                      The npm test script
-plugins/ramtoshiya/                   Skills and hooks for Claude Code and Codex
-plugins/ramtoshiya-cc/                Claude Code-only skills and hook
-mise.toml, setup/                 Machine setup and the files it copies into place
-cli/sidecar/                      Standalone macOS command
-cli/claudex/                      Claude Code launcher for CLIProxyAPI GPT models
-cli/worktreeinclude/              Ignored-file copier with explicit Git hook management
-cli/excalidraw-board/              Standalone shared-board command
-cli/excalidraw-web-export/         Headless deployed-app PNG exporter
-test/                             Tests for the hooks and the standalone CLIs
-docs/                             Documentation
+.claude-plugin/marketplace.json   Claude Code and Codex marketplace
+plugins/                          Skills and hooks for supported hosts
+tools/                            Independently installed commands and their tests
+setup/                            Machine configuration copied or merged by mise
+dev/                              Repository tests, automation, evals, and disabled skills
+docs/                             Human-facing documentation
+mise.toml, mise.lock              Machine setup and pinned Actions analyzers
+package.json                      Aggregate repository test command
 ```
 
 ## Development
@@ -85,6 +81,8 @@ claude plugin validate ./plugins/ramtoshiya
 claude plugin validate ./.claude-plugin/marketplace.json
 ```
 
-`npm test` needs Node.js 22.19 or newer and uv. It runs the standalone CLI
-tests and the Python tests for the hooks. `AGENTS.md` holds the rules for
+`npm test` needs Node.js 24.21 or newer and uv. It runs the dependency-free
+CLI, repository, plugin, and setup tests. The [exporter tests](tools/excalidraw-web-export/README.md)
+use that tool's separately installed test dependencies. Live service checks and
+model evals run only when explicitly invoked. `AGENTS.md` holds the rules for
 changing this repository.

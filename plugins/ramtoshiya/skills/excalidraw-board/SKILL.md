@@ -28,9 +28,9 @@ live delivery or imply the user has seen the result.
 ## Prerequisites {:#prerequisites}
 
 Look up `excalidraw-board` on `PATH`. If missing, stop and tell the user to run
-`sh cli/excalidraw-board/install.sh` from their clone of this repository. The
+`sh tools/excalidraw-board/install.sh` from their clone of this repository. The
 skill must not install, update, or build the command. Its
-`cli/excalidraw-board/README.md` owns the install instructions and limitations.
+`tools/excalidraw-board/README.md` owns the install instructions and limitations.
 
 The command needs Node.js 24.21 or newer. Room keys live in its private
 per-user SQLite room list, not in projects or installed plugin folders.
@@ -133,7 +133,7 @@ the complete size limits and receipt semantics.
 ## PNG export {:#png-export}
 
 When the user requests a PNG, look up `excalidraw-web-export` on `PATH`. If it
-is missing, name the command and `sh cli/excalidraw-web-export/install.sh`, then
+is missing, name the command and `sh tools/excalidraw-web-export/install.sh`, then
 stop. Do not install, build, or update it from the skill. Its README owns browser
 setup. Room exports also need an `excalidraw-board` version whose help lists
 `snapshot`. If absent, report the required CLI update rather than working around

@@ -280,6 +280,6 @@ Limits:
 
 ## Tests
 
-`test/test_global_package_guard.py`, `test/test_git_hygiene_guard.py`,
-`test/test_commit_trailer_guard.py`, `test/test_context_budget.py`, and
-`test/test_agent_shell_env.py` cover the rules. Run them with `npm test`.
+`dev/tests/plugins/test_global_package_guard.py`, `dev/tests/plugins/test_git_hygiene_guard.py`,
+`dev/tests/plugins/test_commit_trailer_guard.py`, `dev/tests/plugins/test_context_budget.py`, and
+`dev/tests/plugins/test_agent_shell_env.py` cover the rules. Run them with `npm test`.

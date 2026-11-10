@@ -37,7 +37,7 @@ class LaunchError(Exception):
 
 
 def reject_constant(name):
-    # Node's JSON.parse refuses NaN and Infinity, and cli/claudex/claudex.cjs relies on that.
+    # Node's JSON.parse refuses NaN and Infinity, and tools/claudex/claudex.cjs relies on that.
     raise ValueError(name)
 
 
@@ -61,7 +61,7 @@ def take_settings(args):
     """Remove the --settings options in front of `--` and merge them in order.
 
     Returns the other arguments and the merged settings. Later keys win and `env`
-    merges key by key, as in cli/claudex/claudex.cjs. A trailing --settings without
+    merges key by key, as in tools/claudex/claudex.cjs. A trailing --settings without
     a value stays in place for claude to reject.
     """
     rest, merged, env = [], {}, None

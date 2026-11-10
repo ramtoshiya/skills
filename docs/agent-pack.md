@@ -12,7 +12,7 @@ file `.claude-plugin/marketplace.json`, which also lists the
 | Skill | What it does | Needs |
 | --- | --- | --- |
 | `figma-rest` | Reads Figma files, tokens, and rendered nodes through the REST API instead of the Figma MCP server | A Figma personal access token in the `FIGMA_TOKEN` environment variable, or as a `FIGMA_TOKEN=<token>` line in `~/.config/agent-secrets/figma.env` |
-| `excalidraw-board` | Reads and draws on shared excalidraw.com rooms, and exports selected saved objects as PNG | The separately installed `excalidraw-board` command on `PATH`, described in [its README](../cli/excalidraw-board/README.md). PNG export also needs [excalidraw-web-export](../cli/excalidraw-web-export/README.md) and headless Chrome/Chromium |
+| `excalidraw-board` | Reads and draws on shared excalidraw.com rooms, and exports selected saved objects as PNG | The separately installed `excalidraw-board` command on `PATH`, described in [its README](../tools/excalidraw-board/README.md). PNG export also needs [excalidraw-web-export](../tools/excalidraw-web-export/README.md) and headless Chrome/Chromium |
 | `github-actions-authoring` | Checks official releases, a 72-hour cooldown, compatibility, and full commit pins before editing GitHub Actions workflows or action metadata | Git, authenticated `gh` access, `actionlint`, `zizmor`, and the target repository's test runner on `PATH` |
 | `imagegen` | Generates and edits images with OpenAI GPT Image or xAI Grok Imagine through an OpenAI-compatible Images API | uv, and an API key or proxy in the environment (see the skill's `SKILL.md`) |
 | `impeccable-interview` | Clarifies or resumes a product task and saves approved interview context in an Impeccable surface brief | An already-installed native Impeccable CLI supporting surface-brief v1 and Python 3.11+ (standard library only) |
@@ -22,7 +22,7 @@ file `.claude-plugin/marketplace.json`, which also lists the
 | `stable-refs` | Gives documents and plans permanent identifiers that survive edits | Nothing |
 
 The `codex-session-reader` skill is inactive. Its source remains in
-[`disabled-skills/codex-session-reader`](../disabled-skills/codex-session-reader/SKILL.md),
+[`dev/disabled-skills/codex-session-reader`](../dev/disabled-skills/codex-session-reader/SKILL.md),
 outside the plugin's skill directory. To enable it, move the directory back to
 `plugins/ramtoshiya/skills/` and reinstall the plugin.
 
@@ -119,7 +119,7 @@ The board skill's offline policy evaluations use simulated room state and do
 not publish drawings. Run them explicitly with an authenticated Claude Code:
 
 ```sh
-node test/excalidraw-skill-eval.mjs plugins/ramtoshiya/skills/excalidraw-board/SKILL.md /path/to/eval-results
+node dev/evals/excalidraw-skill/run.mjs plugins/ramtoshiya/skills/excalidraw-board/SKILL.md /path/to/eval-results
 ```
 
 These evaluations check the model's delivery decisions, not the CLI protocol
@@ -207,7 +207,7 @@ When Claude is selected without `--plugin`, both tasks also check or apply
 common user settings and instructions across the local Claude profile
 registry. Each profile reports both results. Use the shared `~/.claude`
 configuration for hosted sessions that should use the same preferences and
-plugins. A host can select [claudex](../cli/claudex/README.md) as its
+plugins. A host can select [claudex](../tools/claudex/README.md) as its
 executable to route models per launch without a separate profile. Register
 intentionally isolated profiles for policy reconciliation. The registry does
 not select a launcher or install plugins. The package installer uses the

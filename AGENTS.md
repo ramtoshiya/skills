@@ -71,7 +71,7 @@ This repository is meant to be public.
 
 ## Documentation {:#documentation}
 
-Human-facing docs are `README.md`, `docs/*.md`, and the READMEs under `cli/`.
+Human-facing docs are `README.md`, `docs/*.md`, and the READMEs under `tools/`.
 Agent-facing docs are this file and the `SKILL.md` files.
 
 - Write human-facing docs for a stranger on a Mac who has no context.
@@ -93,7 +93,7 @@ Agent-facing docs are this file and the `SKILL.md` files.
 | Hook rules and limits | `docs/hooks.md` |
 | Marketplace entries for third-party skills, forks, pin updates | `docs/upstream-skills.md` |
 | `mise.toml` and `setup/` | `docs/setup.md` |
-| Each standalone CLI under `cli/` | `cli/<tool>/README.md` |
+| Each standalone CLI under `tools/` | `tools/<tool>/README.md` |
 
 ## Layout and boundaries {:#layout}
 
@@ -107,15 +107,18 @@ Agent-facing docs are this file and the `SKILL.md` files.
   entry pinned by commit, as `docs/upstream-skills.md` describes.
 - `mise.toml` and `setup/` are the machine setup. Files in `setup/` are copied
   or merged into place by mise. Identity, signing, and credentials stay out.
+- `tools/` contains independently installed commands and their tests. `dev/`
+  contains repository tests, automation, evals, and disabled skills. `docs/`
+  contains human-facing repository documentation.
 
 ## Standalone CLIs {:#cli-tools}
 
-A CLI under `cli/` is a program a person runs from a shell.
+A CLI under `tools/` is an independently installed program a person runs from a shell.
 
 - It has its own source, dependencies, and install step, and no plugin
   manifest, skill, or hook inside its folder.
-- It knows nothing about agents. Its output and docs serve a person at a
-  terminal.
+- It may operate on agent or plugin environments. Its output and docs serve a
+  person at a terminal.
 - It follows the same supply-chain rules: exact version pins, a three-day
   minimum release age, and no global package installs.
 - A skill that needs a CLI looks it up on `PATH` when it runs. If the command

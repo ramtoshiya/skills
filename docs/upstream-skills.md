@@ -109,8 +109,8 @@ Run the routing evaluator with local `SKILL.md` files from the exact marketplace
 pins. It needs Node.js, Claude Code, and a configured model provider:
 
 ```sh
-node scripts/humanizer-trigger-eval.mjs \
-  test/fixtures/humanizer-trigger-cases.json \
+node dev/evals/humanizer-routing/run.mjs \
+  dev/evals/humanizer-routing/fixtures/humanizer-trigger-cases.json \
   /path/to/english/SKILL.md /path/to/korean/SKILL.md \
   /path/outside/repository/results.json gpt-6.1-sol 3
 ```
@@ -123,7 +123,7 @@ skills can remain visible and are recorded with each observation. Timeouts,
 missing skills, and failed runs are invalid observations, not non-triggers.
 
 To check implicit writing, use
-`test/fixtures/humanizer-implicit-thread-cases.json` as the first argument. It
+`dev/evals/humanizer-routing/fixtures/humanizer-implicit-thread-cases.json` as the first argument. It
 pairs the same user message in a published Multica thread and a private chat,
 in Korean and English, without asking for humanization. Publication context is
 stated in the prompt, not discovered through a live Multica tool. Both corpora
@@ -132,7 +132,7 @@ changes remain with `humanize`. Combine the corpora and freeze those labels
 before evaluating either configuration. Compare baseline and candidate against
 the same contract rather than scoring each against its own scope.
 
-`test/fixtures/humanizer-publication-holdout-cases.json` adds cross-language
+`dev/evals/humanizer-routing/fixtures/humanizer-publication-holdout-cases.json` adds cross-language
 publication and private discussion that mentions posting without requesting it.
 Keep this separate from the optimization corpus when reporting results.
 
