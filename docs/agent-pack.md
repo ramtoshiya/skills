@@ -20,6 +20,7 @@ file `.claude-plugin/marketplace.json`, which also lists the
 | `read-x` | Reads public X posts, threads, profiles, and searches through the mdfromx HTTP API | HTTP access to [mdfromx](https://mdfromx.com/) and curl |
 | `reorganize-commits` | Rewrites the current branch's commits into reviewable chunks. Runs only when you invoke it | Git |
 | `stable-refs` | Gives documents and plans permanent identifiers that survive edits | Nothing |
+| `worker-routing` | Supplies the shared model, effort, provider, quota, retry, and escalation policy when another skill or session mode names it. It does not activate lead mode | T3 Code for cross-provider workers. Outside T3, the host's agent tool |
 
 The `codex-session-reader` skill is inactive. Its source remains in
 [`dev/disabled-skills/codex-session-reader`](../dev/disabled-skills/codex-session-reader/SKILL.md),
@@ -52,7 +53,9 @@ instructions, not automatic hook enforcement.
 - The `lead` skill, which runs only when you invoke it with `/lead` or
   `/ramtoshiya-cc:lead`. The session then settles the goal and how to check it
   before work starts, and hands work to subagents on the cheapest model and
-  effort that can do it. When you tell it to do a piece of work itself, it
+  effort that can do it. It reads `worker-routing` from the shared `ramtoshiya`
+  plugin for that policy. Other modes can read the same policy without activating
+  lead's shipping and review workflow. When you tell it to do a piece of work itself, it
   does that piece and goes back to delegating at the next one, unless you say
   the change should last. Guards and validators it builds target ordinary
   mistakes, not deliberate bypass, and are checked against real commands. It
