@@ -1,13 +1,14 @@
 # Hooks
 
-The plugins add three hooks. Two come with `ramtoshiya` and run in Claude Code
-and Codex. One comes with `ramtoshiya-cc` and runs only in Claude Code.
+The plugins add four hooks. Two come with `ramtoshiya` and run in Claude Code
+and Codex. Two come with `ramtoshiya-cc` and run only in Claude Code.
 
 | Hook | Runs | Plugin |
 | --- | --- | --- |
 | Package and Python guard | Before each shell command | `ramtoshiya` |
 | Git hygiene check | When the agent is about to stop | `ramtoshiya` |
 | Commit attribution guard | Before each shell command | `ramtoshiya-cc` |
+| Context budget | After each tool call, on each prompt, and after a compaction | `ramtoshiya-cc` |
 
 Each hook is a Python script that uses only the standard library. Claude Code
 and Codex run it through `hooks/hooks.json`. Every hook runs as:
@@ -161,7 +162,45 @@ request off, and the [machine setup](setup.md) does this. The hook catches the
 lines when the model adds them anyway. On an internal error it allows the
 command, so a bug in the hook cannot block every shell call.
 
+## Context budget
+
+`plugins/ramtoshiya-cc/hooks/context-budget.py` lets the agent compact at a
+point it chooses instead of in the middle of a step. Hook input does not
+include the context size, so after each tool call and each prompt the hook
+reads the token usage of the last main-conversation reply from the transcript.
+It compares that with the numeric `autoCompactWindow` setting, taken from the
+project's `.claude/settings.local.json`, then `.claude/settings.json`, then the
+user's `settings.json`. From 75% it adds a note to the agent's context that
+asks it to compact at the next natural boundary with the `self-compact` skill.
+The note names a handoff note path and, in T3 Code, the thread id from
+`T3CODE_THREAD_ID`. The path is `handoff.md` in the session's scratchpad
+directory when Claude Code provides one. Otherwise it is
+`$XDG_STATE_HOME/ramtoshiya/handoff/<session id>.md`, or the same path under
+`~/.local/state`. It repeats once at each
+further five points, at 80%, 85%, and so on, and starts over after a
+compaction. When Claude Code starts again after a compaction and the handoff
+note exists, the hook tells the agent to read it.
+
+The hook cannot start a compaction. In T3 Code the skill has the agent queue
+`/compact` and a resume message to its own thread, and T3 Code runs them after
+the turn ends. In a terminal session the agent can only keep the handoff note
+current, and Claude Code still compacts on its own near the window.
+
+Limits:
+
+- The hook is silent when `autoCompactWindow` is missing or `auto`, and it
+  does not see the `--autocompact` flag.
+- The usage comes from the last reply, so it lags by one tool result. A large
+  result can take the context past the window before the warning shows.
+- Subagent tool calls do not trigger it, because a subagent cannot compact the
+  main conversation.
+- The last warned band per session is kept in
+  `$XDG_STATE_HOME/ramtoshiya/context-budget.json`, or
+  `~/.local/state/ramtoshiya/context-budget.json`, for the newest 100 sessions.
+- On any error the hook adds nothing.
+
 ## Tests
 
-`test/test_global_package_guard.py`, `test/test_git_hygiene_guard.py`, and
-`test/test_commit_trailer_guard.py` cover the rules. Run them with `npm test`.
+`test/test_global_package_guard.py`, `test/test_git_hygiene_guard.py`,
+`test/test_commit_trailer_guard.py`, and `test/test_context_budget.py` cover the
+rules. Run them with `npm test`.

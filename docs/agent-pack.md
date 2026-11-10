@@ -91,6 +91,12 @@ instructions, not automatic hook enforcement.
   memory behavior. Opus or Fable subagents the session starts read the same
   instructions and lead their part of the work. Claude
   Code keeps the instructions in context after compaction.
+- The `self-compact` skill and a context budget hook. From 75% of the
+  auto-compact window, the hook asks the agent to compact at the next natural
+  boundary. The agent writes a handoff note first. In T3 Code it then queues
+  `/compact` and a resume message to its own thread, so the work continues
+  without you. Elsewhere Claude Code's automatic compaction still decides when,
+  and the hook points the agent to the note afterward.
 - A hook that blocks AI attribution lines in commits and pull requests.
 
 Excalidraw board requests update a shared room. A `.excalidraw` attachment is
@@ -277,7 +283,7 @@ plugins/ramtoshiya/skills/                     Skills
 plugins/ramtoshiya/hooks/global-package-guard.py   Package and Python rules
 plugins/ramtoshiya/hooks/git-hygiene-guard.py      Stop check
 plugins/ramtoshiya/hooks/hooks.json            Hook registration for Claude Code and Codex
-plugins/ramtoshiya-cc/                         Claude Code-only skills and hook
+plugins/ramtoshiya-cc/                         Claude Code-only skills and hooks
 ```
 
 The rules live only in the guard scripts. `hooks.json` registers them for

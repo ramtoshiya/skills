@@ -11,6 +11,40 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python \"${CLAUDE_PLUGIN_ROOT}/hooks/context-budget.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python \"${CLAUDE_PLUGIN_ROOT}/hooks/context-budget.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python \"${CLAUDE_PLUGIN_ROOT}/hooks/context-budget.py\"",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }

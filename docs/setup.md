@@ -186,6 +186,10 @@ pushing, publishing, or destructive history changes.
   `attribution.sessionUrl` is false, so Claude Code stops asking the model to
   add a co-author trailer, a "Generated with Claude Code" footer, or a session
   link.
+- `autoCompactWindow` is 300000, so Claude Code compacts the conversation on
+  its own as it nears 300,000 tokens. The context budget hook in
+  `ramtoshiya-cc` reads this number and asks the agent to compact earlier, from
+  75% of it. See [Hooks](hooks.md).
 - `CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL=1` stops Claude Code
   from registering the official marketplace on its own. It does not remove a
   marketplace that is already registered.
