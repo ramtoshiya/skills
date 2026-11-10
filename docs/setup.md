@@ -96,7 +96,7 @@ automatic package-manager cache is disabled there.
 Packages, installed with mise's `brew` manager:
 
 - `jq`, used by the Claude Code status line.
-- `uv`, which runs the agent hooks.
+- `uv`, which runs the agent hooks and the review launcher.
 - `zsh-autosuggestions`, loaded by `interactive.zsh`.
 
 Shell:
@@ -137,6 +137,8 @@ Agents:
 | `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md` | Copies of `setup/agents/preferences.md`, the coding-agent instructions |
 | `~/.claude/settings.json` | The keys in `setup/agents/claude-settings.json` |
 | `~/.claude/status-line.sh` | Copy of `setup/agents/claude-statusline.sh` |
+| `~/.local/bin/claude-review` | Copy of `setup/agents/claude-review`, an executable shell script that starts the review launcher |
+| `~/.local/share/claude-review/claude-review.py` | Copy of `setup/agents/claude-review.py`, the review launcher and its hook handler |
 
 The managed plugin synchronization workflow reads host selections from
 `setup/agents/hosts.json`. Both humanizers are selected together on Claude Code
@@ -191,6 +193,50 @@ pushing, publishing, or destructive history changes.
   line hook exists at `~/.orca/agent-hooks/claude-statusline.sh`, the script
   passes its input on to it, because this `statusLine` setting replaces Orca's.
   Without Orca, that step does nothing.
+
+## Review launcher
+
+`claude-review` starts `claude` with a time budget for each turn. A program
+that starts Claude Code from a configured executable path, such as the Claude
+"Binary path" setting in T3 Code, can use `~/.local/bin/claude-review` as that
+path. The `PATH` the program passes must contain `uv` and `claude`. A lone
+`--version`, `--help`, or their short forms runs `claude` unchanged.
+
+Claude Code keeps only the last `--settings` flag, so the launcher removes every
+`--settings` option in front of a `--` argument and merges the values in order
+into one object. A value is inline JSON or the path of a JSON file. Later keys
+win, and `env` merges key by key. The launcher appends three command hooks to
+the `hooks` the caller set, then runs `claude` with the merged object as the
+only `--settings` flag, followed by the other arguments in their original
+order. A value that is not a JSON object, a file that cannot be read, or an
+`env` that is not an object makes the launcher print one line that starts with
+`claude-review: ` and exit with 1 before it starts `claude`. The line does not
+repeat the value.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `CLAUDE_REVIEW_WARN_MINUTES` | 20 | Minutes into a turn after which the model gets one reminder |
+| `CLAUDE_REVIEW_MINUTES` | 30 | Minutes into a turn after which tool calls are refused |
+
+Both accept decimals. A value that is not a number, a value of 0 or less, or a
+warning time that is not below the budget stops the launch with exit code 1.
+The launcher sets the resolved values in the environment it gives `claude`, so
+the hooks read the same numbers.
+
+The hooks keep one clock for each session:
+
+| When | Effect |
+| --- | --- |
+| A prompt arrives, including the one Claude Code sends when a background subagent finishes | The clock restarts, and the reminder and the refusal start over |
+| A tool call finishes after the warning time | The model gets one note with the minutes used. It says to finish the current check and write the report |
+| The first tool call after the budget | The call is refused. The reason tells the model to write its report from what it has |
+| Each later tool call | The call is refused, the turn ends, and the session waits for the next prompt |
+
+The hooks fire only when the model calls a tool. They cannot interrupt a call
+that is running or a reply that has no tool call. Calls from subagents count
+against the clock of the session that started them. A hook that fails prints one
+line to stderr and lets the call go ahead. Each clock is a file under
+`claude-review/` in the system temporary directory.
 
 ## How mise applies each entry
 

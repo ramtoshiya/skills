@@ -1,0 +1,2 @@
+#!/bin/sh
+exec uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I "$HOME/.local/share/claude-review/claude-review.py" "$@"
