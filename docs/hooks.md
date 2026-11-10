@@ -1,12 +1,13 @@
 # Hooks
 
-The plugins add four hooks. Two come with `ramtoshiya` and run in Claude Code
-and Codex. Two come with `ramtoshiya-cc` and run only in Claude Code.
+The plugins add three hooks. One comes with `ramtoshiya` and runs in Claude
+Code and Codex. Two come with `ramtoshiya-cc` and run only in Claude Code. The
+`ramtoshiya` plugin also ships a Git hygiene check that is not registered, so
+no agent runs it.
 
 | Hook | Runs | Plugin |
 | --- | --- | --- |
 | Package and Python guard | Before each shell command | `ramtoshiya` |
-| Git hygiene check | When the agent is about to stop | `ramtoshiya` |
 | Commit attribution guard | Before each shell command | `ramtoshiya-cc` |
 | Context budget | After each tool call, on each prompt, and after a compaction | `ramtoshiya-cc` |
 
@@ -113,12 +114,34 @@ failing hook process.
 
 ## Git hygiene check
 
+`plugins/ramtoshiya/hooks/git-hygiene-guard.py` is not registered in
+`plugins/ramtoshiya/hooks/hooks.json`, so Claude Code and Codex do not run it.
+It is off to see whether agents leave uncommitted work behind without it. To
+turn it on, add this entry under `"hooks"` in that file, then follow the update
+steps in [Agent plugins](agent-pack.md). Codex asks you to trust the new `Stop`
+hook in `/hooks`.
+
+```json
+"Stop": [
+  {
+    "hooks": [
+      {
+        "type": "command",
+        "command": "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python \"${CLAUDE_PLUGIN_ROOT}/hooks/git-hygiene-guard.py\"",
+        "timeout": 10
+      }
+    ]
+  }
+]
+```
+
+The rest of this section describes the check when it is registered.
+
 Multica tasks skip this check when `MULTICA_TASK_ID` is non-empty. Multica owns
 its generated runtime files and task completion flow. Other hooks remain active,
 and sessions outside Multica still run the Git hygiene check.
 
-`plugins/ramtoshiya/hooks/git-hygiene-guard.py` runs when the agent is about to
-stop. It runs `git status --porcelain` in the repository that contains the
+The script runs when the agent is about to stop. It runs `git status --porcelain` in the repository that contains the
 session's working directory. If anything is uncommitted, it blocks the stop
 once, lists up to 80 changed paths, and tells the agent to:
 

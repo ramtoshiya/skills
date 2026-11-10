@@ -36,7 +36,8 @@ instructions, not automatic hook enforcement.
 `ramtoshiya` hooks, described in [Hooks](hooks.md):
 
 - A package and Python guard that checks each shell command before it runs.
-- A Git hygiene check that runs when the agent is about to stop.
+- A Git hygiene check for the moment the agent is about to stop. It ships
+  unregistered, so no agent runs it until you add it to `hooks/hooks.json`.
 
 `ramtoshiya-cc` contains:
 
@@ -163,7 +164,7 @@ codex plugin add ramtoshiya@ramtoshiya
 ```
 
 Codex runs a plugin hook only after you trust it. Open `/hooks` in Codex and
-trust the `ramtoshiya` `PreToolUse` and `Stop` hooks. Installing or enabling the
+trust the `ramtoshiya` `PreToolUse` hook. Installing or enabling the
 plugin does not trust them. Codex can see `ramtoshiya-cc` in the marketplace, but
 it does not work there, so do not install it.
 
@@ -235,8 +236,6 @@ In each agent, ask it to run these commands:
 
 1. `git status` runs normally.
 2. `pip --version` is blocked with a message about bare Python and pip commands.
-3. In a repository with an uncommitted change, the agent's first attempt to
-   stop is blocked with a list of the changes. A second attempt is allowed.
 
 In Claude Code, `/plugin` lists the installed plugins. Each skill should appear
 once in the agent's skill list. A loose copy of the same skill, for example in
@@ -281,7 +280,7 @@ plugins such as `humanize`, also follow [Third-party skills](upstream-skills.md)
 plugins/ramtoshiya/.claude-plugin/plugin.json  Plugin manifest, read by Claude Code and Codex
 plugins/ramtoshiya/skills/                     Skills
 plugins/ramtoshiya/hooks/global-package-guard.py   Package and Python rules
-plugins/ramtoshiya/hooks/git-hygiene-guard.py      Stop check
+plugins/ramtoshiya/hooks/git-hygiene-guard.py      Stop check, not registered
 plugins/ramtoshiya/hooks/hooks.json            Hook registration for Claude Code and Codex
 plugins/ramtoshiya-cc/                         Claude Code-only skills and hooks
 ```

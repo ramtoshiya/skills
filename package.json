@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Personal skills, a package and Python guard, and a Git hygiene stop check for Claude Code and Codex",
+  "description": "Personal skills and a package and Python guard for Claude Code and Codex",
   "scripts": {
     "test": "node --test test/*.test.mjs && uv run --no-project --managed-python --python '>=3.11' python -m unittest discover -s test -p 'test_*.py'"
   },

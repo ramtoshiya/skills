@@ -5,7 +5,7 @@
   "plugins": [
     {
       "name": "ramtoshiya",
-      "description": "Personal skills, a package and Python guard, and a Git hygiene stop check for Claude Code and Codex.",
+      "description": "Personal skills and a package and Python guard for Claude Code and Codex.",
       "source": "./plugins/ramtoshiya",
       "author": { "name": "ramtoshiya" }
     },
