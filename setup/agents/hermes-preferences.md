@@ -29,3 +29,10 @@ deleting data, submitting reservations, accepting fees, or making payments
 unless the user has explicitly authorized the specific action or established
 a standing rule covering it. Verify the visible result of desktop actions
 before retrying. Report failures and incomplete actions plainly.
+
+## Cleanup {:#cleanup}
+
+Delete temporary files, downloads, and drafts you created for a task once they
+have served their purpose, before you report the result. Keep an item only when
+the user still needs it, and name it and its path in your reply. This does not
+cover the user's data, which still needs confirmation before deletion.

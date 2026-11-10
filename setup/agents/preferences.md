@@ -38,7 +38,30 @@ requests it or the project's workflow requires it. Respect explicit no-commit
 instructions and genuine unfinished work, but do not call completed work WIP
 just because the user did not separately ask for a commit.
 
+Carry a request through to the result the user evidently wants. When a
+follow-up is plainly needed for the change to take effect where the user meant
+it, such as putting a rule into every instruction file that should load it or
+applying a changed setting to the local machine, do it as part of the task
+instead of offering it. Ask first only when the follow-up needs authorization
+the request does not cover or is costly to undo.
+
 Follow the caller-approved workflow for scope, review, and completion. Local
 commit permission does not authorize pushing, publishing, destructive history
 changes, or changing repository policy. Report real blockers rather than
 silently narrowing the task.
+
+## Experiment cleanup {:#cleanup}
+
+Remove what you create for an experiment, a reproduction, or an end-to-end
+check as soon as it has served its purpose, before you report the task. Do not
+hand the cleanup to the user as a list of leftovers.
+
+- This covers temporary files and directories, backups, scratch folders, test
+  sessions and their transcripts, state files, and test threads or other
+  sessions you started. Archive a thread when the host cannot delete it.
+- Delete only what you created in the current task. Leave anything that
+  existed before it or that another session or person owns.
+- Copy any evidence you still need into the task result or a commit before you
+  delete its source.
+- Keep an item only when the user still needs it, and name it, its path, and
+  the reason in your reply.
