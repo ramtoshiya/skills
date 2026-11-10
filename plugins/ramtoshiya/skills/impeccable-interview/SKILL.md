@@ -20,7 +20,13 @@ This POC automatically writes only its marked block in a surface brief. PRODUCT.
 
 Use a concrete project-relative source file or normalized `route:/...` target. When the target is unclear or several surfaces fit, ask rather than choosing a convenient brief. URL targets are outside the POC writer's supported contract.
 
-Locate the installed Impeccable base through the host's skill registry or a location the user supplied. Read its relevant context and storage instructions as compatibility documentation, not permission to begin its build workflow. Select its already-installed native executable. A bundled executable may live under `scripts/bin/<platform>/impeccable`. Inspect the launcher if necessary to identify the local engine it selects. Do not run a launcher that would download an engine, use npx, or install/update anything. With no trusted installed engine, provide a conversation-only brief and name the missing prerequisite.
+Use an explicitly supplied trusted native engine path if available. Otherwise locate the installed Impeccable base through the host registry or a user-supplied location:
+
+- Inspect its launcher and `scripts/VERSION` without running a launcher that may download an engine. Follow its documented paths and selection order, including `IMPECCABLE_BIN`, bundled `scripts/bin/<platform>/impeccable`, the unversioned home binary, versioned cache, and PATH where supported.
+- Read the engine version from `scripts/VERSION`, not the plugin version. A versioned cache candidate is `${IMPECCABLE_HOME:-$HOME/.impeccable}/bin/<engine-version>/impeccable`. Do not choose an arbitrary newest cache directory.
+- Select an existing native executable directly. Check `--version` and compatible surface-brief commands before using it. Do not run npx, install, or update.
+
+An unset `IMPECCABLE_TEST_ENGINE` is missing test configuration, not evidence of a missing engine. Respect user boundaries. Report which locations were checked and which could not be inspected. If no compatible engine is available, provide a conversation-only brief and distinguish verified absence from an unresolved search. Read the base's relevant context and storage instructions as compatibility documentation, not permission to begin its build workflow.
 
 Run the native engine's `context --target <target>` once for this project's session if it has not already run. Reuse that result, including its resolved project root and PRODUCT.md/DESIGN.md paths. If it already ran without this target, use the surface helper to resolve the target rather than rerunning context. Read explicitly selected inherited context when applicable. Do not assume the current directory is the correct project root or rewrite a parent product record for one child app.
 

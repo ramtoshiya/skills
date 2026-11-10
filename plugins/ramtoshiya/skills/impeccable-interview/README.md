@@ -55,6 +55,22 @@ operations may replace the custom section.
 
 ## Validate
 
+Find a trusted native engine using an explicit path or the host registry or a
+user-supplied Impeccable base. Inspect its `scripts/impeccable` launcher and
+`scripts/VERSION` without running the launcher. The launcher may select
+`IMPECCABLE_BIN`, a bundled `scripts/bin/<platform>/impeccable`, an unversioned
+home binary, a versioned cache, or PATH. Check the installed launcher for its
+actual paths and order. Its `VERSION` contains the engine version, which is
+separate from the plugin version. Do not select an arbitrary newest cache.
+For example, with `ENGINE_VERSION` read from that file, a versioned candidate is
+`${IMPECCABLE_HOME:-$HOME/.impeccable}/bin/$ENGINE_VERSION/impeccable`.
+
+Set `ENGINE` to the selected existing executable and invoke `"$ENGINE" --version`
+directly. Check that it supports the surface-brief commands. Do not run a
+launcher that can download an engine, or automatically install one. An unset
+`IMPECCABLE_TEST_ENGINE` means test configuration is absent, not that the engine
+is absent. A failed setup preflight executes zero tests.
+
 From the repository root, set `ENGINE` to an existing trusted native executable,
 not an installer or downloading wrapper:
 

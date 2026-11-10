@@ -24,10 +24,15 @@ class BriefBridgeIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         engine = os.environ.get("IMPECCABLE_TEST_ENGINE")
-        if not engine or not Path(engine).is_file() or not os.access(engine, os.X_OK):
+        if not engine:
             raise RuntimeError(
-                "Set IMPECCABLE_TEST_ENGINE to the absolute path of a trusted installed "
-                "native Impeccable CLI. This suite does not install an engine."
+                "IMPECCABLE_TEST_ENGINE configuration is absent. No engine discovery "
+                "was performed. See the skill README to resolve an existing native engine."
+            )
+        if not Path(engine).is_file() or not os.access(engine, os.X_OK):
+            raise RuntimeError(
+                "The supplied IMPECCABLE_TEST_ENGINE path is not an executable file. "
+                "See the skill README to select a native engine."
             )
         cls.engine = str(Path(engine).resolve())
 

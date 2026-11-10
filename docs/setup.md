@@ -164,12 +164,18 @@ The managed plugin synchronization workflow reads host selections from
 and Codex so Korean delegation has an installed target. This policy file does
 not install plugins during `mise bootstrap`.
 
+The shared instructions distinguish missing configuration and invalid or incompatible
+tools from an absent installation. They direct agents to inspect documented trusted
+locations and report unresolved searches before concluding a prerequisite is missing.
+
 The coding-agent instructions authorize local commits of completed, validated
 task-owned changes on the current branch, including the default branch. They
 protect unrelated changes and respect explicit no-commit requests. Tasks that
 need isolation use a separate worktree before implementation, not a branch
 switch in the shared checkout. Local commit permission does not authorize
-pushing, publishing, or destructive history changes.
+pushing, publishing, or destructive history changes. The instructions also require
+completing necessary authorized follow-up steps and removing task-owned experiments,
+including temporary files and test sessions, before reporting completion.
 
 `claude-settings.json` sets these Claude Code preferences:
 

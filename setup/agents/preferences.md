@@ -23,6 +23,14 @@ session URLs to commits or pull requests.
 
 ## Task completion {:#task-completion}
 
+Distinguish missing configuration, an invalid selected path, an incompatible tool,
+and an absent installation. An unset variable or PATH miss does not prove absence.
+Before concluding a prerequisite is missing, inspect documented trusted registry,
+launcher, bundle, and versioned-cache locations without executing installers or
+downloading launchers. Use a compatible existing tool and rerun the check if found.
+Report evidence and any locations that could not be inspected as unresolved. Do not
+scan the home directory blindly or install, build, or update without authorization.
+
 Requests to change repository files include permission to commit completed,
 validated work locally. Commit only changes you own, without asking for a
 separate commit instruction. Leave unrelated or pre-existing changes alone.
