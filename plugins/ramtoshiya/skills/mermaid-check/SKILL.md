@@ -14,7 +14,7 @@ metadata:
 # Mermaid check
 
 Confirmed with `@mermaid-js/mermaid-cli@12.0.0` (npm 11.19.0) on 2026-10-15. When bumping the pin, update the
-script, the version named in step 5, and this line together, and re-run a passing and a failing diagram.
+script and this line together, and re-run a passing and a failing diagram.
 
 An agent reading its own Mermaid sees what it meant, not what the parser will read, and a diagram that
 "looks fine" then renders as a red error box. The parser's verdict is the only one that counts, in both
@@ -42,8 +42,6 @@ directions: don't ship what it rejects, and don't "fix" what it accepts.
    `^` caret. Mermaid's own `line N` is where the parser stopped: the real line for a bad token, but a line
    past the end for an unfinished construct such as an edge with no target, because the parser reads to the
    end of input before it can tell.
-5. Say in the delivery that the diagram parsed (`mmdc 12.0.0`), so the reader knows it was validated,
-   not eyeballed.
 
 ## Notes
 
