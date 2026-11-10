@@ -38,6 +38,7 @@ process.exitCode = 7;
     baseUrl: `http://127.0.0.1:${server.address().port}/v1/`, apiKey: '$TEST_PROXY_KEY',
   }));
   return {
+    dir,
     baseUrl: `http://127.0.0.1:${server.address().port}`,
     requests,
     capture: () => readFile(capture, 'utf8').then(JSON.parse),
@@ -110,17 +111,17 @@ test('passes imagegen connection defaults and independent overrides through the 
 test('resolves startup context from route metadata and falls back when unavailable', async t => {
   const models = [
     { slug: 'gpt-6.1-sol', context_window: 500000, max_context_window: 872000 },
-    { slug: 'gpt-6-astra', context_window: 272000, max_context_window: 872000 },
-    { slug: 'gpt-6-sol', context_window: 272000, max_context_window: 872000 },
-    { slug: 'gpt-6-luna', context_window: 272000, max_context_window: 872000 },
+    { slug: 'gpt-6-astra', context_window: 272000, max_context_window: 700000 },
+    { slug: 'gpt-6-sol', context_window: 272000, max_context_window: 600000 },
+    { slug: 'gpt-6-luna', context_window: 272000, max_context_window: 400000 },
   ];
   const catalog = ['gpt-6.1-sol', 'gpt-6-astra'].map(id => ({ id, owned_by: 'openai' }));
   for (const scenario of [
-    { name: 'explicit base model', args: ['--model', 'gpt-6-astra'], models, expected: 872000 },
-    { name: 'role alias', args: ['--model=fable'], models, expected: 872000 },
-    { name: 'last override wins', args: ['--model=fable', '--model', 'gpt-6.1-sol'], models, expected: 872000 },
-    ...['gpt-6-sol', 'gpt-6-luna'].map(model => ({
-      name: model + ' maximum', args: ['--model', model], models, expected: 872000,
+    { name: 'explicit base model', args: ['--model', 'gpt-6-astra'], models, expected: 700000 },
+    { name: 'role alias', args: ['--model=fable'], models, expected: 700000 },
+    { name: 'last override wins', args: ['--model=gpt-6.1-sol', '--model', 'gpt-6-astra'], models, expected: 700000 },
+    ...[['gpt-6-sol', 600000], ['gpt-6-luna', 400000]].map(([model, expected]) => ({
+      name: model + ' maximum', args: ['--model', model], models, expected,
     })),
     { name: 'smaller maximum wins', models: [{ slug: 'gpt-6.1-sol', context_window: 500000, max_context_window: 400000 }], expected: 400000 },
     { name: 'maximum without default window', models: [{ slug: 'gpt-6.1-sol', max_context_window: 872000 }], expected: 872000 },
@@ -196,6 +197,64 @@ test('--fast rejects invalid extra bodies before discovery without exposing thei
     assert.equal(result.code, 1);
     assert.match(result.stderr, /requires CLAUDE_CODE_EXTRA_BODY to be a JSON object/);
     assert.ok(!result.stderr.includes(body));
+    assert.deepEqual(f.requests, []);
+    await assert.rejects(f.capture(), { code: 'ENOENT' });
+  }
+});
+
+test('folds caller --settings into the one forwarded --settings, keeping generated values on conflict', async t => {
+  const catalog = ['gpt-6.1-sol', 'gpt-6-luna'].map(id => ({ id, owned_by: 'openai' }));
+  const codex = { status: 200, models: ['gpt-6.1-sol', 'gpt-6-luna']
+    .map(slug => ({ slug, context_window: 272000, max_context_window: 872000 })) };
+  const sdk = ['--output-format', 'stream-json', '--effort', 'low', '--model', 'gpt-6-luna'];
+  for (const scenario of [
+    { name: 'inline JSON between SDK flags',
+      args: () => [...sdk, '--settings', JSON.stringify({
+        fastMode: false, showThinkingSummaries: true, model: 'caller-model',
+        env: { CALLER_ENV: '1', ENABLE_TOOL_SEARCH: 'false' },
+      }), '--include-partial-messages'],
+      rest: [...sdk, '--include-partial-messages'],
+      expected: { fastMode: false, showThinkingSummaries: true, model: 'gpt-6.1-sol' },
+      env: { CALLER_ENV: '1', ENABLE_TOOL_SEARCH: 'true', CLAUDE_CODE_MAX_CONTEXT_TOKENS: '872000' } },
+    { name: 'repeated flags, = form, and a file',
+      args: dir => ['--settings={"a":1,"env":{"X":"1","Y":"1"}}', '-p', '--settings', join(dir, 'caller.json')],
+      file: { b: 2, a: 3, env: { Y: '2' } },
+      rest: ['-p'],
+      expected: { a: 3, b: 2 },
+      env: { X: '1', Y: '2', ENABLE_TOOL_SEARCH: 'true' } },
+    { name: 'flags after -- are left alone',
+      args: () => ['-p', '--', '--settings', '{"late":true}'],
+      rest: ['-p', '--', '--settings', '{"late":true}'],
+      expected: { late: undefined }, env: {} },
+  ]) {
+    await t.test(scenario.name, async t => {
+      const f = await fixture(t, catalog, 200, codex);
+      if (scenario.file) await writeFile(join(f.dir, 'caller.json'), JSON.stringify(scenario.file));
+      assert.equal((await f.run(scenario.args(f.dir))).code, 7);
+      const child = await f.capture();
+      const settings = JSON.parse(child.args[1]);
+      assert.equal(child.args[0], '--settings');
+      assert.deepEqual(child.args.slice(2), scenario.rest);
+      assert.deepEqual(Object.fromEntries(Object.keys(scenario.expected).map(key => [key, settings[key]])), scenario.expected);
+      for (const [name, value] of Object.entries(scenario.env)) assert.equal(settings.env[name], value);
+    });
+  }
+});
+
+test('invalid --settings fails before discovery without exposing its contents', async t => {
+  for (const { args, file } of [
+    { args: () => ['--settings', '{"private":"value'] },
+    { args: () => ['--settings={"env":"private-value"}'] },
+    { args: () => ['--settings', '{"env":["private-value"]}'] },
+    { args: dir => ['--settings', join(dir, 'array.json')], file: '["private-value"]' },
+    { args: dir => ['--settings', join(dir, 'missing-private-value.json')] },
+  ]) {
+    const f = await fixture(t, []);
+    if (file) await writeFile(join(f.dir, 'array.json'), file);
+    const result = await f.run(args(f.dir));
+    assert.equal(result.code, 1);
+    assert.match(result.stderr, /--settings must be a JSON object/);
+    assert.ok(!result.stderr.includes('private'));
     assert.deepEqual(f.requests, []);
     await assert.rejects(f.capture(), { code: 'ENOENT' });
   }

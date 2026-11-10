@@ -110,6 +110,20 @@ and turns on tool search, so MCP tools and less common built-in tools load
 only when the model asks for them. Other Claude Code settings and hooks still
 apply.
 
+Claude Code keeps only the last `--settings`, so claudex removes each
+`--settings` you pass, whether inline JSON, `--settings=...`, or the path of a
+JSON file, and sends one merged object. Your keys are kept, `env` variables are
+combined, and later flags win over earlier ones. If you set a key that claudex
+also generates, such as `model` or an `env` variable it sets, claudex's value
+wins, so choose the model with `--model`. Arguments after `--` are not read.
+A value that is not a JSON object, or a file that cannot be read, stops the
+launch before discovery without echoing its contents.
+
+A program that starts Claude Code from a configured executable path can use
+`~/.local/bin/claudex` there. claudex forwards its arguments and exit status,
+and `node` and `claude` must be on the `PATH` that program passes to its
+children.
+
 Tested with Claude Code 2.1.308 for fast request capture and a live GPT-6.1 Sol
 fast request, 2.1.309 for deferred tool loading, and 2.1.304 for live discovery
 and 872k-input requests to GPT-6 Astra, GPT-6.1 Sol, GPT-6 Sol, and GPT-6 Luna.

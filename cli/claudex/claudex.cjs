@@ -57,6 +57,30 @@ function launch(args, env = process.env) {
   });
 }
 
+// Remove every --settings <json-or-file> from args and return them merged, later flags winning.
+function takeSettings(args) {
+  const merged = {};
+  for (let i = 0; i < args.length && args[i] !== '--'; i++) {
+    let value;
+    if (args[i] === '--settings' && i + 1 < args.length) value = args.splice(i, 2)[1];
+    else if (args[i].startsWith('--settings=')) value = args.splice(i, 1)[0].slice(11);
+    else continue;
+    i--;
+    let parsed;
+    try {
+      parsed = JSON.parse(value.trimStart().startsWith('{') ? value : fs.readFileSync(path.resolve(value), 'utf8'));
+    } catch {
+      throw new Error('--settings must be a JSON object or the path of a JSON file.');
+    }
+    const object = item => item && typeof item === 'object' && !Array.isArray(item);
+    if (!object(parsed) || (parsed.env !== undefined && !object(parsed.env))) {
+      throw new Error('--settings must be a JSON object with an object env.');
+    }
+    Object.assign(merged, parsed, { env: { ...merged.env, ...parsed.env } });
+  }
+  return merged;
+}
+
 function startupModel(args, selected) {
   let model = selected.main;
   for (let i = 0; i < args.length && args[i] !== '--'; i++) {
@@ -110,6 +134,15 @@ async function main() {
     launch(args);
     return;
   }
+  // Claude Code keeps only the last --settings, so fold the caller's into ours.
+  let caller;
+  try {
+    caller = takeSettings(args);
+  } catch (error) {
+    console.error('claudex: ' + error.message);
+    process.exitCode = 1;
+    return;
+  }
   const { key, baseUrl } = connection();
   const response = await fetch(baseUrl + '/v1/models', {
     headers: { Authorization: 'Bearer ' + key },
@@ -136,7 +169,8 @@ async function main() {
       ...(fast ? { CLAUDE_CODE_EXTRA_BODY: JSON.stringify({ ...extraBody, speed: 'fast' }) } : {}),
     },
   };
-  launch(['--settings', JSON.stringify(settings), ...args], {
+  const merged = { ...caller, ...settings, env: { ...caller.env, ...settings.env } };
+  launch(['--settings', JSON.stringify(merged), ...args], {
     ...process.env, ANTHROPIC_API_KEY: key, ANTHROPIC_AUTH_TOKEN: '',
     IMAGEGEN_BASE_URL: process.env.IMAGEGEN_BASE_URL ?? baseUrl + '/v1',
     IMAGEGEN_API_KEY: process.env.IMAGEGEN_API_KEY ?? key,
