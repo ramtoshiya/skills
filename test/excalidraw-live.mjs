@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { crc32, deflateSync } from "node:zlib";
@@ -14,7 +14,7 @@ if (process.argv.length !== 3 || process.argv[2] !== "--live") {
 }
 const root = fileURLToPath(new URL("../", import.meta.url));
 const home = mkdtempSync(join(tmpdir(), "excalidraw-live-"));
-const env = { ...process.env, HOME: home };
+const env = { ...process.env, HOME: home, PATH: `${dirname(process.execPath)}${delimiter}${process.env.PATH ?? ""}` };
 execFileSync("sh", [join(root, "cli/excalidraw-board/install.sh")], { env, stdio: "pipe" });
 const bin = join(home, ".local/bin/excalidraw-board");
 const outputs = [];

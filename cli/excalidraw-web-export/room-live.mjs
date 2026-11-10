@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs, promisify } from "node:util";
 import { PNG } from "pngjs";
@@ -16,7 +16,7 @@ const run = promisify(execFile);
 const home = await mkdtemp(join(tmpdir(), "excalidraw-image-room-"));
 const output = values["output-dir"] ? resolve(values["output-dir"]) : join(home, "artifacts");
 await mkdir(output, { recursive: true, mode: 0o700 });
-const env = { ...process.env, HOME: home };
+const env = { ...process.env, HOME: home, PATH: `${dirname(process.execPath)}${delimiter}${process.env.PATH ?? ""}` };
 const board = async args => {
   const { stdout, stderr } = await run("excalidraw-board", args, { env, timeout: 60_000, maxBuffer: hardLimit });
   if (stderr) process.stderr.write(stderr);
