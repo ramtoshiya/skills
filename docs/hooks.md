@@ -51,11 +51,21 @@ rules:
   settings it cannot parse. A stronger flag does not excuse a weaker value in a
   config file. The package managers enforce the age themselves. The guard only
   checks that the setting is in place.
-- No bare `python`, `python3`, `python3.12`, `pip`, or `pip3`, including
-  absolute paths to system or Homebrew Python and read-only calls such as
-  `python -V`. Use `uv run python`, `uv pip`, or a virtual environment's
-  interpreter by path, such as `.venv/bin/python`. An activated virtual
-  environment does not make a bare `python` allowed.
+- Python itself runs normally. `pip`, `pip3`, `python -m pip`,
+  `python -m ensurepip`, and `python setup.py install` or `develop` are
+  blocked unless they use a virtual environment's executable by path, such as
+  `.venv/bin/pip`, because they would install into a system or Homebrew
+  Python. `uv pip` with `--break-system-packages` is blocked too. For
+  packages, use `uv add`, `uv pip` inside a project, or
+  `uv run --with package==1.2.3 python`.
+
+After a `cd` to a variable path such as `cd "$DIR"`, the guard cannot find
+project settings or resolve relative paths. Commands that need them, such as
+`npm install` or `uv sync`, are denied until a `cd` to a literal absolute path
+or the home directory. An absolute directory option such as
+`uv --directory /path/to/project sync` also supplies the missing path.
+Commands that use only user settings, such as `uvx tool==1.2.3`, and commands
+such as `git status` still run.
 
 The same shared guard checks common model commands:
 

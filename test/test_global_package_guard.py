@@ -247,25 +247,44 @@ class GlobalPackageGuardTests(unittest.TestCase):
                 except ValueError:
                     pass  # The wire adapter turns parse failures into a denial.
 
-    def test_every_bare_python_and_pip_command_is_blocked(self):
-        for command in [
-            "python -V", "python3 -V", "python3.15 script.py", "python2.7 script.py",
-            "pip list", "pip3 install example", "pip3.15 --version",
-            "/usr/bin/python3 -V", "/opt/homebrew/bin/pip3 list",
-            "command python3 -V", "env python3 -V", "sudo -u someone pip3 list",
-            "/usr/bin/env -S 'python3 -V'", "env --split-string='pip3 list'",
-            "python3 - <<'PY'\nprint('hello')\nPY\n", "bash -lc 'python3 -V'",
-            "source .venv/bin/activate && python3 -V",
-        ]:
-            with self.subTest(command=command):
-                self.assertTrue(self.check(command))
-        for command in ["uv run python -V", "uv pip list", ".venv/bin/python -V",
-                        "./venv/bin/pip list", "/tmp/project/.venv/bin/python3.15 -V",
-                        "echo 'python3 -V'", "cat <<'EOF'\npython3 -V\nEOF\n"]:
+    def test_python_execution_and_package_commands(self):
+        for command in ["python -V", "python3 -V", "python3.12 script.py", "python2.7 script.py",
+                        "/usr/bin/python3 -V", "/opt/homebrew/bin/python3 -V", "env python3 -V",
+                        "command python3 -V", "sudo python3 -V", "env -S 'python3 -V'",
+                        "bash -lc 'python3 -V'", "python3 -c 'print(1)'",
+                        "python3 - <<'PY'\nprint(1)\nPY\n", ".venv/bin/pip list",
+                        "./venv/bin/python -m pip install x", "uv pip list"]:
             with self.subTest(command=command):
                 self.assertFalse(self.check(command))
+        for command in ["pip --version", "pip3 list", "pip3.12 install x", "/usr/bin/pip3 list",
+                        "sudo pip list", "env -S 'pip list'", "bash -lc 'pip list'",
+                        "python -m pip list", "python -mpip list", "python -Im pip list",
+                        "python -m ensurepip", "python setup.py install", "python setup.py develop", "python -u setup.py install",
+                        "python -I setup.py install", "python setup.py --quiet install",
+                        "uv pip list --break-system-packages",
+                        "python3 -m mlx_lm.server --model publisher/model"]:
+            with self.subTest(command=command):
+                self.assertTrue(self.check(command))
         custom = self.write("custom-env/pyvenv.cfg", "home = /example\n")
-        self.assertFalse(self.check(f"{custom.parent}/bin/python -V"))
+        self.assertFalse(self.check(f"{custom.parent}/bin/python -m pip list"))
+
+    def test_variable_cd_tracks_unknown_directory(self):
+        for command in ['cd "$W" && git status', 'cd $W; ls', 'cd $W && python3 x.py',
+                        'cd "$W" && .venv/bin/pip list',
+                        f'cd $W && cd {self.cwd} && uv sync',
+                        'cd $W && cd ~ && uv sync',
+                        f'cd $W && uv --directory {self.cwd} sync',
+                        'cd "$W" && uvx example==1.2.3']:
+            with self.subTest(command=command):
+                self.assertFalse(self.check(command))
+        for command in ['cd "$W" && npm install', "cd $W && bash -lc 'uv sync'",
+                        'cd $W && cd relative && uv sync',
+                        'cd $W && uv --directory relative sync',
+                        'cd $W && python -m mlx_lm.generate --model ./model']:
+            with self.subTest(command=command):
+                self.assertEqual(guard.reason(command, self.cwd, self.environment), guard.UNKNOWN_CWD)
+        with self.assertRaises(ValueError):
+            guard.resolve_path('$W', self.cwd, {})
 
     def test_command_text_is_never_executed(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -297,7 +316,7 @@ class GlobalPackageGuardTests(unittest.TestCase):
 
     def test_policy_denials_and_cwd_in_native_payload(self):
         (self.cwd / "uv.toml").write_text('exclude-newer = "1 day"\n')
-        for command in ["python3 -V", "npx example", "uv sync"]:
+        for command in ["pip list", "npx example", "uv sync"]:
             payload = {"tool_name": "Bash", "cwd": str(self.cwd), "tool_input": {"command": command}}
             result = subprocess.run([sys.executable, str(SCRIPT)], input=json.dumps(payload), text=True,
                                     capture_output=True, env=self.environment)

@@ -137,5 +137,6 @@ command, a denied command, and, for the Git hygiene check, a blocked first stop
 in a dirty repository. Take those commands from real transcripts where you can.
 Hooks catch ordinary mistakes by users and agents. Deliberate bypass is out of
 scope, so do not add rules for it. The [package and Python
-guard](docs/hooks.md) applies to your own shell commands here as well: use `uv
-run python`, not `python`.
+guard](docs/hooks.md) applies to your own shell commands here as well. Run this
+repository's Python with `uv run python`, as `npm test` does, because the hooks
+need Python 3.11 or newer and the system `python3` can be older.

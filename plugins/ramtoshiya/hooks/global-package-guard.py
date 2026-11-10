@@ -62,6 +62,14 @@ def one_option(args, names, fallback=None):
     return values[-1] if values else fallback
 
 
+UNKNOWN_CWD = "The working directory comes from a variable here, so the guard cannot find this command's package settings or relative paths. cd to a literal path first, or run the command from that directory."
+PYTHON_DENIAL = "pip and package installs into a system or Homebrew Python are blocked. Use uv add, uv pip inside a project, uv run --with package==1.2.3 python, or a virtual environment's own bin/pip or bin/python -m pip. Plain Python commands are allowed, so continue the task."
+
+
+class UnknownCwd(ValueError):
+    pass
+
+
 def resolve_path(value, cwd, environment):
     home = environment.get("home", str(Path.home()))
     value = value.replace("${HOME}", home).replace("$HOME", home)
@@ -70,6 +78,8 @@ def resolve_path(value, cwd, environment):
     if "$" in value or "`" in value:
         raise ValueError("dynamic configuration path")
     path = Path(value)
+    if not path.is_absolute() and cwd is None:
+        raise UnknownCwd()
     return path if path.is_absolute() else cwd / path
 
 
@@ -153,11 +163,18 @@ def freshness_reason(family, args, environment, cwd, user_tool=False, pip=False)
     a stronger CLI value does not excuse a weak project/user override. This
     avoids guessing manager-version-specific precedence without running it.
     """
+    if cwd is None:
+        directory = one_option(args, {"--directory", "-C"}) or (one_option(args, {"--project"}) if family == "uv" else None) or (one_option(args, {"--prefix"}) if family == "npm" else None)
+        if directory is not None:
+            cwd = resolve_path(directory, None, environment).resolve()
+        elif not (family == "uv" and user_tool):
+            raise UnknownCwd()
     home = Path(environment.get("home", str(Path.home()))).resolve()
     config = resolve_path(environment.get("xdg_config_home", str(home / ".config")), cwd, environment)
-    cwd = resolve_path(one_option(args, {"--directory", "-C"}, str(cwd)), cwd, environment).resolve()
-    if family == "uv":
-        cwd = resolve_path(one_option(args, {"--project"}, str(cwd)), cwd, environment).resolve()
+    if cwd is not None:
+        cwd = resolve_path(one_option(args, {"--directory", "-C"}, str(cwd)), cwd, environment).resolve()
+        if family == "uv":
+            cwd = resolve_path(one_option(args, {"--project"}, str(cwd)), cwd, environment).resolve()
     values = []
     exemptions = []
     if family == "uv":
@@ -418,14 +435,37 @@ def package_operation(name, args):
     return family, manager_args, packages, user_tool, pip
 
 
-def python_reason(executable, cwd, environment):
-    if not PYTHON_COMMAND.fullmatch(PurePath(executable).name):
+def python_reason(executable, args, cwd, environment):
+    name = PurePath(executable).name
+    if not PYTHON_COMMAND.fullmatch(name):
+        return None
+    module, _ = model_command([executable, *args])
+    script_args = args
+    index = 0
+    while index < len(script_args) and script_args[index].startswith("-"):
+        token = script_args[index]
+        if token == "--":
+            index += 1
+            break
+        if token == "-" or re.match(r"-[bBdEiIOPqRsSuvVx]*[cm]", token):
+            break
+        index += 2 if token in {"-W", "-X", "--check-hash-based-pycs"} else 1
+    script_args = script_args[index:]
+    blocked = name.startswith("pip") or module in {"pip", "ensurepip"} or (
+        name.startswith("python") and script_args
+        and PurePath(script_args[0]).name == "setup.py"
+        and any(arg in {"install", "develop"} for arg in script_args[1:])
+    )
+    if not blocked:
         return None
     if "/" in executable:
-        path = resolve_path(executable, cwd, environment)
-        if path.parent.name == "bin" and (path.parent.parent.name in {".venv", "venv"} or (path.parent.parent / "pyvenv.cfg").is_file()):
-            return None
-    return "Bare Python/pip commands are disabled. Use uv run, uv pip, or an explicit virtual-environment interpreter path."
+        path = Path(executable)
+        if path.parent.name == "bin":
+            if path.parent.parent.name in {".venv", "venv"}:
+                return None
+            if (path.is_absolute() or cwd is not None) and (resolve_path(executable, cwd, environment).parent.parent / "pyvenv.cfg").is_file():
+                return None
+    return PYTHON_DENIAL
 
 
 def model_option(args, names):
@@ -534,7 +574,7 @@ def model_command(tokens):
 def reason(command, cwd=None, environment=None, depth=0):
     if depth > 4:
         return "Shell wrappers are too deeply nested to review. Use a simple command."
-    cwd = Path(cwd or Path.cwd()).resolve()
+    cwd = Path(cwd or Path.cwd()).resolve() if depth == 0 else cwd
     environment = {key.lower(): value for key, value in (os.environ if environment is None else environment).items()}
     for segment in segments(command):
         if all(re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", token) for token in segment):
@@ -554,10 +594,16 @@ def reason(command, cwd=None, environment=None, depth=0):
                     key, value = token.split("=", 1)
                     environment[key.lower()] = value
             continue
-        if name == "cd" and args:
-            cwd = resolve_path(args[-1], cwd, effective).resolve()
+        if name == "cd":
+            target = args[-1] if args else "~"
+            try:
+                cwd = resolve_path(target, cwd, effective).resolve()
+            except UnknownCwd:
+                cwd = None
+            except ValueError:
+                cwd = None
             continue
-        denial_reason = python_reason(tokens[0], cwd, effective)
+        denial_reason = python_reason(tokens[0], args, cwd, effective)
         if denial_reason:
             return denial_reason
         if name in SHELLS:
@@ -570,6 +616,8 @@ def reason(command, cwd=None, environment=None, depth=0):
         model_name, model_args = model_command(tokens)
         try:
             denial_reason = model_reason(model_name, model_args, cwd, effective)
+        except UnknownCwd:
+            return UNKNOWN_CWD
         except ValueError:
             return "Model options require explicit literal values and existing local paths."
         if denial_reason:
@@ -585,13 +633,18 @@ def reason(command, cwd=None, environment=None, depth=0):
             return "Global package installs and mutations are disabled."
         if name == "uv" and len(words) > 1 and words[0] == "tool" and words[1] in MUTATIONS:
             return "Global package installs and mutations are disabled."
+        if name == "uv" and words[:1] == ["pip"] and any(arg.split("=", 1)[0] == "--break-system-packages" for arg in args):
+            return PYTHON_DENIAL
         operation = package_operation(name, args)
         if operation:
             family, manager_args, packages, user_tool, pip = operation
             pin = PYTHON_PIN if family == "uv" else NPM_PIN
             if any(not pin.fullmatch(package) for package in packages):
                 return "One-shot execution requires exact package versions: package@1.2.3 for Node or package==1.2.3 for Python. Tags, ranges, and unversioned packages are blocked."
-            denial_reason = freshness_reason(family, manager_args, effective, cwd, user_tool, pip)
+            try:
+                denial_reason = freshness_reason(family, manager_args, effective, cwd, user_tool, pip)
+            except UnknownCwd:
+                return UNKNOWN_CWD
             if denial_reason:
                 return denial_reason
     return None

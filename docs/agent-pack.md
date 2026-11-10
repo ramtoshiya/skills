@@ -235,7 +235,8 @@ not what an existing session has loaded.
 In each agent, ask it to run these commands:
 
 1. `git status` runs normally.
-2. `pip --version` is blocked with a message about bare Python and pip commands.
+2. `pip --version` is blocked with a message that points to uv or a virtual
+   environment's pip.
 
 In Claude Code, `/plugin` lists the installed plugins. Each skill should appear
 once in the agent's skill list. A loose copy of the same skill, for example in

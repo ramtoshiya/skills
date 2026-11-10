@@ -174,8 +174,7 @@ preview_pid=$!
 # now at http://localhost:8899/Artboard.dc.html — stop it with: kill "$preview_pid"
 ```
 
-That is the whole harness. Any static server does; `uv run python` is here because the user's
-global Python guard hook refuses a bare `python3`.
+That is the whole harness. Any static server does.
 
 Do not supply React: `support.js` loads its own, and its loader returns early if `window.React`
 and `window.ReactDOM` are already set, so a React you inject renders the page under your version
