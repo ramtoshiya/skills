@@ -184,6 +184,11 @@ edits apply after a reload.
 
 Restart the agent after installing, or run `/reload-plugins` in Claude Code.
 
+For a local review of third-party updates before changing pins, see
+[Plugin update review](../tools/plugin-update-review/README.md). Its
+installation targets can invoke the sync task after a person applies a
+candidate. Review trust and runtime behavior separately as described below.
+
 ## Synchronize a local checkout
 
 For a managed installation of this repository and its selected third-party

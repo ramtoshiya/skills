@@ -180,6 +180,13 @@ Codex runs the `humanize` hook only after you trust it in `/hooks`.
 A loose copy of the same skill makes it load twice, as described in
 [Agent plugins](agent-pack.md).
 
+## Review updates locally
+
+[Plugin update review](../tools/plugin-update-review/README.md) can prepare local
+candidates from configured forks and upstreams. A person reviews the diffs,
+starts any tests, and explicitly applies a candidate. The existing remote drift
+checks continue to run independently.
+
 ## Add an entry
 
 Use a `git-subdir` entry to take some skills from an upstream repository

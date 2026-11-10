@@ -16,6 +16,7 @@ preferences, so fork the repository and edit it before you run it.
 | Machine setup | A `mise.toml` that installs a few Homebrew packages and writes shell, Git, package manager, and agent settings | [Machine setup](docs/setup.md) |
 | `sidecar` | A macOS command that connects an iPad as a Sidecar display, and an iPad shortcut that runs it over SSH | [README](tools/sidecar/README.md) |
 | `claudex` | Runs Claude Code with GPT models discovered from a [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) server | [README](tools/claudex/README.md) |
+| `plugin-update-review` | Prepares local plugin update candidates for human review, tests, and application | [README](tools/plugin-update-review/README.md) |
 | `worktreeinclude` | Copies selected ignored files into new Git worktrees through an explicitly installed repository hook | [README](tools/worktreeinclude/README.md) |
 | `excalidraw-board` | Proof-of-concept command for reading and editing shared Excalidraw rooms | [README](tools/excalidraw-board/README.md) |
 | `excalidraw-web-export` | Headless PNG export through a deployed Excalidraw app, from a local file or saved room snapshot | [README](tools/excalidraw-web-export/README.md) |
