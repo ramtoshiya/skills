@@ -218,6 +218,11 @@ including temporary files and test sessions, before reporting completion.
   permission-approval mode. Shared instructions also require leaving plan mode
   if a session starts there. Preserving an existing profile permission field
   does not override those instructions.
+- `permissions.deny` also includes `EnterWorktree` in every registered Claude
+  profile. This blocks entry through Claude Code's tool, which activates its
+  worktree isolation guard and restricts commands against other checkouts.
+  Use `git worktree` or the host's worktree features when isolation is needed.
+  Those paths are not blocked by this rule.
 
 `claude-terminal-settings.json` applies only to `~/.claude`:
 

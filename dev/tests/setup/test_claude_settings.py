@@ -85,12 +85,12 @@ class ClaudeSettingsTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         for path in (self.default, self.alternate):
             data = json.loads(path.read_text())
-            self.assertTrue({"AskUserQuestion", "EnterPlanMode", "SendFeedback"} <= set(data["permissions"]["deny"]))
+            self.assertTrue({"AskUserQuestion", "EnterPlanMode", "EnterWorktree", "SendFeedback"} <= set(data["permissions"]["deny"]))
         worker = json.loads(self.alternate.read_text())
         self.assertTrue({"CustomRule", "WorkerRule"} <= set(worker["permissions"]["deny"]))
         self.assertNotIn("defaultMode", worker["permissions"])
         self.assertNotIn("statusLine", worker)
-        worker["permissions"]["deny"].remove("AskUserQuestion")
+        worker["permissions"]["deny"].remove("EnterWorktree")
         self.write(self.alternate, worker)
         status = self.settings("status", "--json")
         self.assertEqual(status.returncode, 1, status.stdout + status.stderr)
@@ -98,7 +98,7 @@ class ClaudeSettingsTests(unittest.TestCase):
         self.assertEqual(row["status"], "drift")
         self.assertIn("permissions.deny", row["detail"])
         self.assertEqual(self.settings("sync").returncode, 0)
-        self.assertIn("AskUserQuestion", json.loads(self.alternate.read_text())["permissions"]["deny"])
+        self.assertIn("EnterWorktree", json.loads(self.alternate.read_text())["permissions"]["deny"])
         self.assertEqual(self.settings("status").returncode, 0)
 
     def test_registered_profiles_repair_drift_without_copying_private_settings(self):
@@ -127,7 +127,7 @@ class ClaudeSettingsTests(unittest.TestCase):
         self.assertEqual(alternate["env"]["PRIVATE_TOKEN"], SECRET)
         self.assertEqual(alternate["env"]["WORKER_MODE"], "1")
         self.assertEqual(alternate["permissions"]["allow"], ["PersonalRule"])
-        self.assertEqual(set(alternate["permissions"]["deny"]), {"AskUserQuestion", "EnterPlanMode", "SendFeedback"})
+        self.assertEqual(set(alternate["permissions"]["deny"]), {"AskUserQuestion", "EnterPlanMode", "EnterWorktree", "SendFeedback"})
         self.assertNotIn("defaultMode", alternate["permissions"])
         self.assertEqual(alternate["hooks"]["Stop"][0]["command"], SECRET)
         self.assertEqual(alternate["enabledPlugins"], {"private": True})
@@ -135,7 +135,7 @@ class ClaudeSettingsTests(unittest.TestCase):
         self.assertNotIn("statusLine", alternate)
         self.assertEqual(default["env"]["PRIVATE_TOKEN"], SECRET)
         self.assertEqual(default["statusLine"]["type"], "command")
-        self.assertEqual(set(default["permissions"]["deny"]), {"CustomRule", "AskUserQuestion", "EnterPlanMode", "SendFeedback"})
+        self.assertEqual(set(default["permissions"]["deny"]), {"CustomRule", "AskUserQuestion", "EnterPlanMode", "EnterWorktree", "SendFeedback"})
         self.assertEqual(self.settings("status").returncode, 0)
 
     def test_overrides_baseline_updates_and_repeated_sync(self):
@@ -161,7 +161,7 @@ class ClaudeSettingsTests(unittest.TestCase):
         self.assertTrue(terminal["autoMemoryEnabled"])
         self.assertIn("statusLine", terminal)
         self.assertEqual(set(terminal["permissions"]["deny"]), {
-            "ExtraRule", "AskUserQuestion", "EnterPlanMode", "SendFeedback",
+            "ExtraRule", "AskUserQuestion", "EnterPlanMode", "EnterWorktree", "SendFeedback",
         })
         self.assertFalse(worker["disableBundledSkills"])
         self.assertEqual(worker["env"]["WORKER_TOKEN"], SECRET)
@@ -372,7 +372,7 @@ class ClaudeSettingsTests(unittest.TestCase):
         worker = json.loads(self.alternate.read_text())
         self.assertFalse(worker["disableBundledSkills"])
         self.assertEqual(set(worker["permissions"]["deny"]), {
-            "CustomRule", "OverrideRule", "AskUserQuestion", "EnterPlanMode", "SendFeedback",
+            "CustomRule", "OverrideRule", "AskUserQuestion", "EnterPlanMode", "EnterWorktree", "SendFeedback",
         })
         self.assertNotIn("defaultMode", worker["permissions"])
         self.assertNotIn("statusLine", worker)
