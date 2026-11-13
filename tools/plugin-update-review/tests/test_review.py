@@ -85,7 +85,7 @@ class Fixture(unittest.TestCase):
                                             'env': {'FIXTURE_VALUE': 'private-value'},
                                             'argv': [sys.executable, '-c', 'import os,pathlib; pathlib.Path(' + repr(str(self.install_marker)) + ').write_text(os.environ["AGENTMEMORY_SDK_CHILD"])']}]}
         self.config['sources'][0]['tests'] = [{'id': 'check', 'label': 'Check fixture', 'kind': 'static',
-                                              'argv': [sys.executable, '-c', 'import os,pathlib; pathlib.Path(' + repr(str(self.marker)) + ').write_text(os.environ["AGENTMEMORY_SDK_CHILD"]); print("visible output"); print(os.environ["FIXTURE_SECRET"])']}]
+                                              'argv': [sys.executable, '-c', 'import os,pathlib; pathlib.Path(' + repr(str(self.marker)) + ').write_text(os.environ["AGENTMEMORY_SDK_CHILD"]); print("visible output"); import sys,time; s=os.environ["FIXTURE_SECRET"]; sys.stdout.write(s[:6]); sys.stdout.flush(); time.sleep(0.2); print(s[6:])']}]
         os.environ['FIXTURE_SECRET'] = 'secret-test-value'
         self.addCleanup(os.environ.pop, 'FIXTURE_SECRET', None)
         self.config_path = self.root / 'config.json'
@@ -302,8 +302,8 @@ if 'to do script ' in script:
         self.token = self.url.split('token=')[1]
         wait_for(lambda: (self.state / 'state.json').exists() and self.store().state()['candidates'].get('good'))
 
-    def request(self, path, data=None, origin=True, token=True):
-        headers = {}
+    def request(self, path, data=None, origin=True, token=True, host=None):
+        headers = {'Host': host} if host else {}
         if token:
             headers['X-Review-Token'] = self.token
         if data is not None:
@@ -335,6 +335,7 @@ if 'to do script ' in script:
         self.assertEqual(status, 200)
         self.assertIn('Plugin update review', page)
         self.assertEqual(self.request('/api/state', token=False)[0], 403)
+        self.assertEqual(self.request('/api/state', host='localhost:' + self.origin.rsplit(':', 1)[1])[0], 403)
         status, data = self.request('/api/state')
         self.assertEqual(status, 200)
         self.assertNotIn('private-value', data)
