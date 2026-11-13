@@ -41,8 +41,6 @@ instructions, not automatic hook enforcement.
 `ramtoshiya` hooks, described in [Hooks](hooks.md):
 
 - A package and Python guard that checks each shell command before it runs.
-  It also denies a `claude`, `codex`, or T3 Code server run started under
-  `env -i` unless the command sets `AGENTMEMORY_SDK_CHILD`.
 - A Git hygiene check for the moment the agent is about to stop. It ships
   unregistered, so no agent runs it until you add it to `hooks/hooks.json`.
 
@@ -90,15 +88,8 @@ instructions, not automatic hook enforcement.
   session starts its Claude workers with T3 Code's `delegate_task` instead.
   Claude workers and child leads started with `delegate_task`, for that or any
   other reason, run on a Claude provider instance named for workers when T3
-  Code lists one, and on the session's own instance otherwise. The agentmemory
-  plugin's hooks do nothing when `AGENTMEMORY_SDK_CHILD` is `1`. Set that
-  environment variable in the T3 Code provider settings of the instances for
-  workers and review and of the `claudex` instance, and copy the other settings
-  of the worker instance from the Claude instance you use yourself. Those
-  sessions then neither receive summaries of earlier sessions nor record their
-  own. Leave the variable off your own instance. Subagents started with Claude
-  Code's Agent tool run inside the parent's process and keep the parent's
-  memory behavior. Opus or Fable subagents the session starts read the same
+  Code lists one, and on the session's own instance otherwise. Opus or Fable
+  subagents the session starts read the same
   instructions and lead their part of the work. Claude
   Code keeps the instructions in context after compaction.
 - The `self-compact` skill and a context budget hook. From 75% of the
@@ -108,10 +99,6 @@ instructions, not automatic hook enforcement.
   without you. Elsewhere Claude Code's automatic compaction still decides when,
   and the hook points the agent to the note afterward.
 - A hook that blocks AI attribution lines in commits and pull requests.
-- A hook that exports `AGENTMEMORY_SDK_CHILD=1` to the session's Bash
-  commands. A `claude` or `codex` test run that the agent starts from Bash,
-  such as an eval or a probe, then neither receives nor records agentmemory
-  sessions. The session itself keeps its memory.
 
 Excalidraw board requests update a shared room. A `.excalidraw` attachment is
 an export or an agreed fallback, not a replacement for that room. The agent

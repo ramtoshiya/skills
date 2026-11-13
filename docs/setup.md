@@ -157,7 +157,6 @@ Agents:
 | Registered Claude profiles' `CLAUDE.md` | A managed block from `setup/agents/preferences.md`, preserving text outside the block |
 | `~/.codex/AGENTS.md` | A copy of `setup/agents/preferences.md` |
 | Registered Claude profiles' `settings.json` | Common keys from `setup/agents/claude-settings.json`, with terminal defaults from `setup/agents/claude-terminal-settings.json` only for `~/.claude` |
-| `~/.codex/config.toml` | `AGENTMEMORY_SDK_CHILD = "1"` under `[shell_environment_policy.set]`, from `setup/agents/codex-config.toml`. Commands that Codex runs get the variable, so a `claude` or `codex` test run started from them stays out of agentmemory. Codex hooks do not get it, so your own Codex sessions keep their memory |
 | `~/.claude/status-line.sh` | Copy of `setup/agents/claude-statusline.sh` |
 | `~/.local/bin/claude-review` | Copy of `setup/agents/claude-review`, an executable shell script that starts the review launcher |
 | `~/.local/share/claude-review/claude-review.py` | Copy of `setup/agents/claude-review.py`, the review launcher and its hook handler |
@@ -289,7 +288,7 @@ Keep the target list in
       "configDir": "~/.claude_worker",
       "overrides": {
         "env": {
-          "AGENTMEMORY_SDK_CHILD": "1"
+          "CLAUDE_CODE_ENABLE_AWAY_SUMMARY": "1"
         }
       }
     }
@@ -325,11 +324,8 @@ Instruction contents are not printed in diagnostics. Existing standalone
 instructions outside the block remain local content, even if they repeat the
 common source.
 
-Role-specific memory behavior stays separate from this shared policy. Built-in
-Claude memory is off, but agentmemory has its own controls. Keep the user's own
-session memory and worker, review, and test-run memory rules distinct, as
-[Agent plugins](agent-pack.md) and [Hooks](hooks.md) describe. A profile name is
-a label, not an instruction to change a provider's environment.
+A profile name is a label, not an instruction to change a provider's
+environment.
 
 Both commands report unregistered directories found at `~/.claude*/settings.json`
 and an unregistered active `CLAUDE_CONFIG_DIR`, including one outside the home

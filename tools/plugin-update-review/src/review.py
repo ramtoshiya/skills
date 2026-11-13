@@ -68,8 +68,6 @@ def check_argv(record):
     argv = record.get('argv')
     if not isinstance(argv, list) or not argv or any(not isinstance(x, str) or '\x00' in x for x in argv):
         raise ValueError('Each command needs a nonempty string argv')
-    if Path(argv[0]).name == 'env' and any(x in ('-i', '--ignore-environment') for x in argv[1:]) and 'AGENTMEMORY_SDK_CHILD=1' not in argv[1:]:
-        raise ValueError('An env command that clears its environment must set AGENTMEMORY_SDK_CHILD=1')
 
 
 def validate(config):
@@ -586,7 +584,6 @@ class Store:
                     self.save(state)
                     env = os.environ.copy()
                     env.update(target.get('env', {}))
-                    env['AGENTMEMORY_SDK_CHILD'] = '1'
                     # Output may contain secrets, so keep it in a private local file, not events or HTTP.
                     with log.open('ab') as output:
                         os.chmod(log, 0o600)
@@ -625,7 +622,6 @@ def run_job(path):
         if head(job['cwd']) != job['head'] or not clean(job['cwd']):
             raise RuntimeError('Candidate changed after this test was requested')
         env = os.environ.copy()
-        env['AGENTMEMORY_SDK_CHILD'] = '1'
         with log.open('ab') as output:
             os.chmod(log, 0o600)
             redactor = Redactor(output, secret_values(env))

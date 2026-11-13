@@ -33,11 +33,6 @@ PYTHON_PIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(?:\[[A-Za-z0-9_,.-]+\])?=="
                         r"[0-9]+(?:\.[0-9]+)*(?:(?:a|b|rc)[0-9]+)?"
                         r"(?:\.post[0-9]+)?(?:\.dev[0-9]+)?(?:\+[A-Za-z0-9.-]+)?")
 PYTHON_COMMAND = re.compile(r"(?:python|pip)(?:[0-9]+(?:\.[0-9]+)*)?")
-# Marks an environment that `env -i` cleared. A space cannot appear in a
-# variable name, so no assignment in the command can set this key.
-CLEARED = " env-cleared"
-T3_PART = re.compile(r"t3(?:[-_.].*)?", re.IGNORECASE)
-INTERPRETERS = {"node", "bun", "deno"}
 
 
 def options(args, names):
@@ -68,9 +63,6 @@ def one_option(args, names, fallback=None):
 
 
 UNKNOWN_CWD = "The working directory comes from a variable here, so the guard cannot find this command's package settings or relative paths. cd to a literal path first, or run the command from that directory."
-AGENT_DENIAL = ("env -i drops AGENTMEMORY_SDK_CHILD, so this claude, codex, or T3 server run would receive "
-                "earlier sessions from agentmemory and be recorded there. Add AGENTMEMORY_SDK_CHILD=1 to the env "
-                "assignments. To test agentmemory itself, set AGENTMEMORY_SDK_CHILD=0 there instead.")
 PYTHON_DENIAL = "pip and package installs into a system or Homebrew Python are blocked. Use uv add, uv pip inside a project, uv run --with package==1.2.3 python, or a virtual environment's own bin/pip or bin/python -m pip. Plain Python commands are allowed, so continue the task."
 
 
@@ -332,7 +324,6 @@ def unwrap(tokens, inherited=None):
                     return unwrap(shlex.split(flag.split("=", 1)[1]) + tokens[i:], environment)
                 if wrapper == "env" and flag in ("-i", "-", "--ignore-environment"):
                     environment.clear()
-                    environment[CLEARED] = "1"
                 if wrapper == "env" and flag in ("-u", "--unset") and i < len(tokens):
                     environment.pop(tokens[i].lower(), None)
                 if (wrapper == "env" and flag in ("-u", "--unset")) or (wrapper == "sudo" and flag in ("-u", "--user", "-g", "--group")):
@@ -550,25 +541,6 @@ def model_reason(name, args, cwd, environment):
     return None
 
 
-def agent_launch(tokens, cwd):
-    """Recognize claude, codex, `t3 serve`, or a T3 server's bin.mjs run with `serve`."""
-    name = PurePath(tokens[0]).name
-    args = tokens[1:]
-    if name in {"claude", "codex"}:
-        return True
-    if name == "t3":
-        return args[:1] == ["serve"]
-    if name not in INTERPRETERS:
-        return False
-    script = next((index for index, token in enumerate(args) if not token.startswith("-")), None)
-    if script is None or args[script + 1:script + 2] != ["serve"]:
-        return False
-    path = PurePath(args[script])
-    if not path.is_absolute() and cwd is not None:
-        path = PurePath(cwd) / path
-    return path.name == "bin.mjs" and any(T3_PART.fullmatch(part) for part in path.parts[:-1])
-
-
 def model_command(tokens):
     """Expose uv run and Python -m targets without evaluating script bodies."""
     if not tokens:
@@ -631,8 +603,6 @@ def reason(command, cwd=None, environment=None, depth=0):
             except ValueError:
                 cwd = None
             continue
-        if CLEARED in effective and "agentmemory_sdk_child" not in effective and agent_launch(tokens, cwd):
-            return AGENT_DENIAL
         denial_reason = python_reason(tokens[0], args, cwd, effective)
         if denial_reason:
             return denial_reason

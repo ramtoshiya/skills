@@ -36,15 +36,6 @@
     ],
     "SessionStart": [
       {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-shell-env.py\"",
-            "timeout": 5
-          }
-        ]
-      },
-      {
         "matcher": "compact",
         "hooks": [
           {

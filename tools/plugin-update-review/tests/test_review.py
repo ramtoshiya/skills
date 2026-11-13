@@ -83,9 +83,9 @@ class Fixture(unittest.TestCase):
                        'interval_seconds': 86400,
                        'install_targets': [{'id': 'install', 'label': 'Fixture install', 'cwd': str(self.root),
                                             'env': {'FIXTURE_VALUE': 'private-value'},
-                                            'argv': [sys.executable, '-c', 'import os,pathlib; pathlib.Path(' + repr(str(self.install_marker)) + ').write_text(os.environ["AGENTMEMORY_SDK_CHILD"])']}]}
+                                            'argv': [sys.executable, '-c', 'import os,pathlib; pathlib.Path(' + repr(str(self.install_marker)) + ').write_text("1")']}]}
         self.config['sources'][0]['tests'] = [{'id': 'check', 'label': 'Check fixture', 'kind': 'static',
-                                              'argv': [sys.executable, '-c', 'import os,pathlib; pathlib.Path(' + repr(str(self.marker)) + ').write_text(os.environ["AGENTMEMORY_SDK_CHILD"]); print("visible output"); import sys,time; s=os.environ["FIXTURE_SECRET"]; sys.stdout.write(s[:6]); sys.stdout.flush(); time.sleep(0.2); print(s[6:])']}]
+                                              'argv': [sys.executable, '-c', 'import os,pathlib; pathlib.Path(' + repr(str(self.marker)) + ').write_text("1"); print("visible output"); import sys,time; s=os.environ["FIXTURE_SECRET"]; sys.stdout.write(s[:6]); sys.stdout.flush(); time.sleep(0.2); print(s[6:])']}]
         os.environ['FIXTURE_SECRET'] = 'secret-test-value'
         self.addCleanup(os.environ.pop, 'FIXTURE_SECRET', None)
         self.config_path = self.root / 'config.json'
@@ -223,7 +223,7 @@ class Fixture(unittest.TestCase):
         self.assertEqual(doc['plugins'][2]['source']['sha'], self.base2)
         self.assertEqual(market_file.read_bytes(), original_market_bytes.replace(self.base.encode(), current.encode()))
         self.assertFalse(self.marker.exists())
-        self.config['install_targets'][0]['argv'] = [sys.executable, '-c', 'import os,pathlib; pathlib.Path(' + repr(str(self.install_marker)) + ').write_text(os.environ["AGENTMEMORY_SDK_CHILD"])']
+        self.config['install_targets'][0]['argv'] = [sys.executable, '-c', 'import os,pathlib; pathlib.Path(' + repr(str(self.install_marker)) + ').write_text("1")']
         self.save_config()
         store = self.store()
         self.assertEqual(store.apply('good', current), 'Application complete')
@@ -254,15 +254,6 @@ class Fixture(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'pins changed'):
             store.apply('good', candidate['prepared_head'])
         self.assertEqual(git(self.fork, 'rev-parse', 'refs/heads/main'), self.base)
-
-    def test_environment_clearing_command_requires_memory_opt_out(self):
-        self.config['sources'][0]['tests'][0]['argv'] = ['env', '-i', 'echo', 'test']
-        self.save_config()
-        with self.assertRaisesRegex(ValueError, 'AGENTMEMORY_SDK_CHILD'):
-            self.store()
-        self.config['sources'][0]['tests'][0]['argv'].insert(2, 'AGENTMEMORY_SDK_CHILD=1')
-        self.save_config()
-        self.store()
 
     def start_server(self):
         fake = self.root / 'bin'
@@ -326,8 +317,8 @@ if 'to do script ' in script:
         self.config['sources'].append(self.source('bad', self.fork, self.root / 'missing.git', ['untouched']))
         eval_marker = self.root / 'eval-marker'
         self.config['sources'][0]['tests'].append({'id': 'manual-eval', 'label': 'Manual eval fixture', 'kind': 'eval',
-            'argv': ['env', '-i', 'AGENTMEMORY_SDK_CHILD=1', sys.executable, '-c',
-                     'import os,pathlib; pathlib.Path(' + repr(str(eval_marker)) + ').write_text(os.environ["AGENTMEMORY_SDK_CHILD"])']})
+            'argv': [sys.executable, '-c',
+                     'import os,pathlib; pathlib.Path(' + repr(str(eval_marker)) + ').write_text("1")']})
         self.config['interval_seconds'] = 1
         self.save_config()
         self.start_server()

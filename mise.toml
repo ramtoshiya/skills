@@ -51,7 +51,6 @@ zsh = true
 
 # Agents
 "~/.codex/AGENTS.md" = { source = "setup/agents/preferences.md", mode = "copy" }
-"~/.codex/config.toml/agent-shell-env" = { source = "setup/agents/codex-config.toml", merge = true }
 "~/.claude/status-line.sh" = { source = "setup/agents/claude-statusline.sh", mode = "copy" }
 "~/.local/bin/claude-review" = { source = "setup/agents/claude-review", mode = "copy" }
 "~/.local/share/claude-review/claude-review.py" = { source = "setup/agents/claude-review.py", mode = "copy" }

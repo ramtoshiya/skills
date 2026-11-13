@@ -76,11 +76,6 @@ commands you have inspected. The tool never discovers test suites. In
 particular, do not register a whole test directory that contains live model
 tests. A test with `kind` set to `eval` is still a manual button. Use that kind
 for a command that can contact a model. Tests run from the candidate worktree.
-They receive `AGENTMEMORY_SDK_CHILD=1`, including when a command rebuilds its
-own child environment only if that command preserves or explicitly sets it.
-A registered `env -i` command must explicitly include `AGENTMEMORY_SDK_CHILD=1`.
-Choose a command whose scripts also set it in any environment they rebuild. The
-tool cannot inspect arbitrary scripts for environment replacement.
 
 Each installation target has a unique `id`, label, absolute `cwd`, argument
 array, and explicit environment additions. Targets run in configuration order
