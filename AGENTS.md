@@ -135,9 +135,10 @@ claude plugin validate ./plugins/ramtoshiya
 claude plugin validate ./.claude-plugin/marketplace.json
 ```
 
-After changing a hook, also check it in each agent that loads it: an allowed
-command, a denied command, and, for the Git hygiene check, a blocked first stop
-in a dirty repository. Take those commands from real transcripts where you can.
+After changing a registered command hook, check an allowed command and a denied
+command in each agent that loads it. Take those commands from real transcripts
+where you can. After changing the opt-in Git hygiene check, also verify a blocked
+first stop in a dirty repository in each agent where it is enabled.
 Hooks catch ordinary mistakes by users and agents. Deliberate bypass is out of
 scope, so do not add rules for it. The [package and Python
 guard](docs/hooks.md) applies to your own shell commands here as well. Run this
