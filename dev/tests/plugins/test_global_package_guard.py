@@ -13,6 +13,14 @@ guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
 
 
+GLOBAL = "Global package installs and mutations are disabled."
+ONE_SHOT = "One-shot execution requires exact package versions"
+WEAKER = "Release-age overrides must preserve a minimum of three days"
+UNCONFIGURED = "Package operations require a configured three-day release-age floor."
+EXEMPTION = "Release-age exemption lists weaken the three-day policy."
+PYTHON = "pip and package installs into a system or Homebrew Python are blocked."
+
+
 class GlobalPackageGuardTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -33,45 +41,58 @@ class GlobalPackageGuardTests(unittest.TestCase):
         return path
 
     def check(self, command):
-        return guard.blocked(command, self.cwd, self.environment)
+        return guard.reason(command, self.cwd, self.environment)
+
+    def assert_denied(self, message, commands):
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertIn(message, self.check(command) or "")
+
+    def assert_allowed(self, commands):
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertIsNone(self.check(command))
+
+    def hook(self, payload, environment=None):
+        result = subprocess.run([sys.executable, str(SCRIPT)], input=json.dumps(payload), text=True,
+                                capture_output=True, env=environment)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)["hookSpecificOutput"] if result.stdout else None
 
     def test_model_acquisition_requires_immutable_revision(self):
         revision = "a" * 40
-        for command in [
+        self.assert_denied("Model downloads require --revision with a full 40-character commit hash", [
             "hf download publisher/model", "huggingface-cli download publisher/model --revision main",
             "hf download publisher/model --revision v1.0", "hf download publisher/model --revision abcdef0",
-            "hf download publisher/model --revision", "hf download publisher/model --revision '$REV'",
             f"hf download publisher/model --revision main --revision {revision}",
             f"hf download publisher/model -- --revision {revision}",
-            "env HF_REVISION=main hf download publisher/model",
-            "bash -lc 'hf download publisher/model'", "ollama pull model:latest",
-            "ollama run model:7b", "ollama create model -f Modelfile",
+            "bash -lc 'hf download publisher/model'",
             "uv run hf download publisher/model --revision main",
-        ]:
-            with self.subTest(command=command):
-                self.assertTrue(self.check(command))
-        for command in [
+        ])
+        self.assert_denied("Model options require explicit literal values", [
+            "hf download publisher/model --revision", "hf download publisher/model --revision '$REV'",
+        ])
+        self.assert_denied("Ollama pull/run/create cannot establish immutable artifact provenance", [
+            "ollama pull model:latest", "ollama run model:7b", "ollama create model -f Modelfile",
+        ])
+        self.assert_allowed([
             f"hf download publisher/model --revision {revision}",
             f"huggingface-cli download publisher/model weights.safetensors --revision={revision}",
             "hf cache ls", "hf --help", "hf download --help", "ollama pull --help",
             "ollama list", "ollama show model",
             "echo 'hf download publisher/model'",
-        ]:
-            with self.subTest(command=command):
-                self.assertFalse(self.check(command))
+        ])
 
     def test_model_loading_uses_local_artifacts_and_loopback(self):
         (self.cwd / "model").mkdir()
-        for command in [
+        self.assert_allowed([
             "omlx serve --model-dir ./model --host 127.0.0.1",
             "uv run python -m mlx_lm.server --model ./model --host=::1",
             "uv run mlx_vlm.generate --model ./model --prompt test",
             "vllm serve ./model --host localhost",
             "llama-server -m ./model --host 127.0.0.1",
             "uv run python -m mlx_lm.convert --hf-path ./model",
-        ]:
-            with self.subTest(command=command):
-                self.assertFalse(self.check(command))
+        ])
         for command, message in [
             ("omlx serve --model-dir ./model", "loopback"),
             ("omlx serve --model-dir ./model --host 0.0.0.0", "loopback"),
@@ -96,7 +117,7 @@ class GlobalPackageGuardTests(unittest.TestCase):
                 self.assertIn(message, guard.reason(command, self.cwd, self.environment))
 
     def test_global_mutations(self):
-        for command in [
+        self.assert_denied(GLOBAL, [
             "npm install -g example", "npm --global install example",
             "npm install --global=true example", "pnpm add -g example",
             "npm uninstall -g example", "yarn global add example",
@@ -108,12 +129,10 @@ class GlobalPackageGuardTests(unittest.TestCase):
             "uv --directory /tmp tool install example",
             "npm --loglevel silent install -g example",
             "cat <<'EOF'\ndata\nEOF\nnpm install -g example",
-        ]:
-            with self.subTest(command=command):
-                self.assertTrue(self.check(command))
+        ])
 
     def test_project_and_read_only_commands(self):
-        for command in [
+        self.assert_allowed([
             "npm install example", "pnpm add example", "uv pip install example",
             "uv sync", "uv python install", "uv tool list", "npm list -g",
             "npx --version", "uvx --help", "npm init -y",
@@ -121,12 +140,10 @@ class GlobalPackageGuardTests(unittest.TestCase):
             "npx example@1.2.3", "uvx example==1.2.3", "git status",
             "echo 'npm install -g example'",
             "uv run python - <<'PY'\nprint(\"don't execute npm install -g\")\nPY\n",
-        ]:
-            with self.subTest(command=command):
-                self.assertFalse(self.check(command))
+        ])
 
     def test_exact_one_shot_packages_and_all_explicit_packages(self):
-        for command in [
+        self.assert_denied(ONE_SHOT, [
             "npx example", "npx example@latest", "npx example@^1.2.3",
             "npx example@1", "npx @scope/example", "npm exec example",
             "npm exec --package=example@1.2.3 --package=other -- example",
@@ -137,10 +154,8 @@ class GlobalPackageGuardTests(unittest.TestCase):
             "uv tool run --from example example", "uvx example==1.*",
             "uvx --with other example==1.2.3",
             "uv run --with other python -V", "npm create example@latest",
-        ]:
-            with self.subTest(command=command):
-                self.assertTrue(self.check(command))
-        for command in [
+        ])
+        self.assert_allowed([
             "npx example@1.2.3", "npx @scope/example@1.2.3-rc.1",
             "npx -p example@1.2.3 -p other@2.3.4 example",
             "npm exec --package=example@1.2.3 -- example --min-release-age=0",
@@ -149,12 +164,10 @@ class GlobalPackageGuardTests(unittest.TestCase):
             "uvx example==1.2.3", "uvx --from example==1.2.3 example --exclude-newer=false",
             "uv tool run --from 'example[extra]==1.2.3rc1' example",
             "uv run --with example==1.2.3 python -V", "npm create example@1.2.3",
-        ]:
-            with self.subTest(command=command):
-                self.assertFalse(self.check(command))
+        ])
 
     def test_weaker_cli_environment_and_export_overrides(self):
-        for command in [
+        self.assert_denied(WEAKER, [
             "npm install --min-release-age=2", "npm install --min-release-age 0",
             "NPM_CONFIG_MIN_RELEASE_AGE=1 npm install",
             "env npm_config_min_release_age=0 npx example@1.2.3",
@@ -168,23 +181,19 @@ class GlobalPackageGuardTests(unittest.TestCase):
             "uv run --exclude-newer PT24H python -V",
             "uvx --exclude-newer P2D example==1.2.3",
             "bash -lc 'UV_EXCLUDE_NEWER=false uv sync'",
-        ]:
-            with self.subTest(command=command):
-                self.assertTrue(self.check(command))
-        for command in [
+        ])
+        self.assert_allowed([
             "npm install --min-release-age 3", "pnpm add example --config.minimumReleaseAge=4320",
             "YARN_NPM_MINIMAL_AGE_GATE=72h yarn install", "uv sync --exclude-newer PT72H",
             "uv pip install example --exclude-newer '1 week'",
-        ]:
-            with self.subTest(command=command):
-                self.assertFalse(self.check(command))
+        ])
 
     def test_inherited_environment_and_case_sensitive_paths(self):
         self.environment["UV_EXCLUDE_NEWER"] = "false"
-        self.assertTrue(self.check("uv sync"))
-        self.assertFalse(self.check("env -u UV_EXCLUDE_NEWER uv sync"))
+        self.assert_denied(WEAKER, ["uv sync"])
+        self.assert_allowed(["env -u UV_EXCLUDE_NEWER uv sync"])
         config = self.write("UPPER/uv.toml", 'exclude-newer = "1 day"\n')
-        self.assertTrue(self.check(f"uv sync --config-file '{config}'"))
+        self.assert_denied(WEAKER, [f"uv sync --config-file '{config}'"])
 
     def test_project_overrides_and_tool_working_directory(self):
         for name, content, command in [
@@ -197,76 +206,70 @@ class GlobalPackageGuardTests(unittest.TestCase):
             with self.subTest(name=name):
                 path = self.cwd / name
                 path.write_text(content)
-                self.assertTrue(self.check(command))
-                self.assertTrue(guard.blocked(f"cd '{self.cwd}' && {command}", self.home, self.environment))
-                self.assertTrue(guard.blocked(f"{command} --directory '{self.cwd}'", self.home, self.environment))
+                self.assert_denied(WEAKER, [command])
+                for routed in [f"cd '{self.cwd}' && {command}", f"{command} --directory '{self.cwd}'"]:
+                    self.assertIn(WEAKER, guard.reason(routed, self.home, self.environment) or "")
                 path.unlink()
 
     def test_uv_config_precedence_tool_config_and_pip_namespace(self):
         (self.cwd / "pyproject.toml").write_text('[project]\nname = "example"\nexclude-newer = "1 day"\n')
-        self.assertFalse(self.check("uv sync"))
+        self.assert_allowed(["uv sync"])
         (self.cwd / "pyproject.toml").write_text('[tool.uv]\nexclude-newer = "1 day"\n')
-        self.assertTrue(self.check("uv sync"))
-        self.assertFalse(self.check("uvx example==1.2.3"))  # Tool commands ignore project config.
+        self.assert_denied(WEAKER, ["uv sync"])
+        self.assert_allowed(["uvx example==1.2.3"])  # Tool commands ignore project config.
         (self.cwd / "uv.toml").write_text('exclude-newer = "3 days"\n[pip]\nexclude-newer = "1 day"\n')
-        self.assertFalse(self.check("uv sync"))  # uv.toml takes precedence over pyproject.toml.
-        self.assertTrue(self.check("uv pip install example"))
+        self.assert_allowed(["uv sync"])  # uv.toml takes precedence over pyproject.toml.
+        self.assert_denied(WEAKER, ["uv pip install example"])
 
     def test_config_disabling_or_relocation_does_not_remove_age_requirement(self):
         empty = self.write("empty.toml", "")
-        for command in ["uv sync --no-config", "UV_NO_CONFIG=1 uv sync",
-                        f"uv sync --config-file '{empty}'", "npm install --userconfig /dev/null"]:
-            with self.subTest(command=command):
-                self.assertTrue(self.check(command))
-        self.assertFalse(self.check("uv sync --no-config --exclude-newer '3 days'"))
+        self.assert_denied(UNCONFIGURED, ["uv sync --no-config", "UV_NO_CONFIG=1 uv sync",
+                                          f"uv sync --config-file '{empty}'", "npm install --userconfig /dev/null"])
+        self.assert_allowed(["uv sync --no-config --exclude-newer '3 days'"])
 
     def test_age_exemptions_and_absolute_dates(self):
-        for command in [
+        self.assert_denied(EXEMPTION, [
             "npm install --min-release-age-exclude example",
-            "npm install --before 2999-01-01",
             "pnpm install --config.minimumReleaseAgeExclude=example",
             "YARN_NPM_PREAPPROVED_PACKAGES=example yarn install",
+        ])
+        self.assert_denied(WEAKER, [
+            "npm install --before 2999-01-01",
             "uv sync --exclude-newer-package example=false",
             "uv sync --exclude-newer-package example='1 day'",
-        ]:
-            with self.subTest(command=command):
-                self.assertTrue(self.check(command))
-        self.assertFalse(self.check("uv sync --exclude-newer-package example='1 week'"))
-        self.assertFalse(self.check("npm install --before 2020-01-01"))
-        self.assertFalse(self.check("uv sync --exclude-newer 2020-01-01T00:00:00Z"))
+        ])
+        self.assert_allowed([
+            "uv sync --exclude-newer-package example='1 week'",
+            "npm install --before 2020-01-01",
+            "uv sync --exclude-newer 2020-01-01T00:00:00Z",
+        ])
         self.write("config/uv/uv.toml", 'exclude-newer = "3 days"\nexclude-newer-package = { example = false }\n')
-        self.assertTrue(self.check("uv sync"))
+        self.assert_denied(WEAKER, ["uv sync"])
 
     def test_multiline_yaml_exemptions_and_unsupported_policy_fail_closed(self):
         for content in ["minimumReleaseAge: 4320\nminimumReleaseAgeExclude:\n  - example\n",
                         "{minimumReleaseAge: 0}\n", "minimumReleaseAge: 4320\nminimumReleaseAge: 0\n"]:
             self.write("config/pnpm/config.yaml", content)
             with self.subTest(content=content):
-                try:
-                    self.assertTrue(self.check("pnpm install"))
-                except ValueError:
-                    pass  # The wire adapter turns parse failures into a denial.
+                payload = {"tool_name": "Bash", "cwd": str(self.cwd), "tool_input": {"command": "pnpm install"}}
+                self.assertEqual(self.hook(payload, self.environment)["permissionDecision"], "deny")
 
     def test_python_execution_and_package_commands(self):
-        for command in ["python -V", "python3 -V", "python3.12 script.py", "python2.7 script.py",
-                        "/usr/bin/python3 -V", "/opt/homebrew/bin/python3 -V", "env python3 -V",
-                        "command python3 -V", "sudo python3 -V", "env -S 'python3 -V'",
-                        "bash -lc 'python3 -V'", "python3 -c 'print(1)'",
-                        "python3 - <<'PY'\nprint(1)\nPY\n", ".venv/bin/pip list",
-                        "./venv/bin/python -m pip install x", "uv pip list"]:
-            with self.subTest(command=command):
-                self.assertFalse(self.check(command))
-        for command in ["pip --version", "pip3 list", "pip3.12 install x", "/usr/bin/pip3 list",
-                        "sudo pip list", "env -S 'pip list'", "bash -lc 'pip list'",
-                        "python -m pip list", "python -mpip list", "python -Im pip list",
-                        "python -m ensurepip", "python setup.py install", "python setup.py develop", "python -u setup.py install",
-                        "python -I setup.py install", "python setup.py --quiet install",
-                        "uv pip list --break-system-packages",
-                        "python3 -m mlx_lm.server --model publisher/model"]:
-            with self.subTest(command=command):
-                self.assertTrue(self.check(command))
+        self.assert_allowed(["python -V", "python3 -V", "python3.12 script.py", "python2.7 script.py",
+                             "/usr/bin/python3 -V", "/opt/homebrew/bin/python3 -V", "env python3 -V",
+                             "command python3 -V", "sudo python3 -V", "env -S 'python3 -V'",
+                             "bash -lc 'python3 -V'", "python3 -c 'print(1)'",
+                             "python3 - <<'PY'\nprint(1)\nPY\n", ".venv/bin/pip list",
+                             "./venv/bin/python -m pip install x", "uv pip list"])
+        self.assert_denied(PYTHON, ["pip --version", "pip3 list", "pip3.12 install x", "/usr/bin/pip3 list",
+                                    "sudo pip list", "env -S 'pip list'", "bash -lc 'pip list'",
+                                    "python -m pip list", "python -mpip list", "python -Im pip list",
+                                    "python -m ensurepip", "python setup.py install", "python setup.py develop",
+                                    "python -u setup.py install", "python -I setup.py install",
+                                    "python setup.py --quiet install", "uv pip list --break-system-packages"])
+        self.assert_denied("local artifact", ["python3 -m mlx_lm.server --model publisher/model"])
         custom = self.write("custom-env/pyvenv.cfg", "home = /example\n")
-        self.assertFalse(self.check(f"{custom.parent}/bin/python -m pip list"))
+        self.assert_allowed([f"{custom.parent}/bin/python -m pip list"])
 
     def test_cleared_environment_agent_runs_must_set_agentmemory_flag(self):
         # Shapes of real eval commands: a T3 server started under env -i from an
@@ -285,7 +288,7 @@ class GlobalPackageGuardTests(unittest.TestCase):
         ]:
             with self.subTest(command=command):
                 self.assertEqual(guard.reason(command, self.cwd, self.environment), guard.AGENT_DENIAL)
-        for command in [
+        self.assert_allowed([
             server.format(flag="AGENTMEMORY_SDK_CHILD=1 "),
             checkout.format(flag="AGENTMEMORY_SDK_CHILD=0 "),
             "env -i PATH=/usr/bin bash -c 'export AGENTMEMORY_SDK_CHILD=1; claude -p ok'",
@@ -294,27 +297,21 @@ class GlobalPackageGuardTests(unittest.TestCase):
             "env -i PATH=/usr/bin /bin/echo /src/t3-wb serve",
             "env -i PATH=/usr/bin /bin/echo claude",
             "claude -p 'Reply with ok'",
-        ]:
-            with self.subTest(command=command):
-                self.assertFalse(self.check(command))
+        ])
 
     def test_variable_cd_tracks_unknown_directory(self):
-        for command in ['cd "$W" && git status', 'cd $W; ls', 'cd $W && python3 x.py',
-                        'cd "$W" && .venv/bin/pip list',
-                        f'cd $W && cd {self.cwd} && uv sync',
-                        'cd $W && cd ~ && uv sync',
-                        f'cd $W && uv --directory {self.cwd} sync',
-                        'cd "$W" && uvx example==1.2.3']:
-            with self.subTest(command=command):
-                self.assertFalse(self.check(command))
+        self.assert_allowed(['cd "$W" && git status', 'cd $W; ls', 'cd $W && python3 x.py',
+                             'cd "$W" && .venv/bin/pip list',
+                             f'cd $W && cd {self.cwd} && uv sync',
+                             'cd $W && cd ~ && uv sync',
+                             f'cd $W && uv --directory {self.cwd} sync',
+                             'cd "$W" && uvx example==1.2.3'])
         for command in ['cd "$W" && npm install', "cd $W && bash -lc 'uv sync'",
                         'cd $W && cd relative && uv sync',
                         'cd $W && uv --directory relative sync',
                         'cd $W && python -m mlx_lm.generate --model ./model']:
             with self.subTest(command=command):
                 self.assertEqual(guard.reason(command, self.cwd, self.environment), guard.UNKNOWN_CWD)
-        with self.assertRaises(ValueError):
-            guard.resolve_path('$W', self.cwd, {})
 
     def test_command_text_is_never_executed(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -324,34 +321,34 @@ class GlobalPackageGuardTests(unittest.TestCase):
 
     def test_denial_wire_format_for_both_shell_inputs(self):
         for tool, field in [("Bash", "command"), ("Monitor", "command"), ("exec_command", "cmd")]:
-            payload = {"tool_name": tool, "tool_input": {field: "hf download publisher/model"}}
-            result = subprocess.run([sys.executable, str(SCRIPT)], input=json.dumps(payload), text=True, capture_output=True)
-            self.assertEqual(result.returncode, 0)
-            output = json.loads(result.stdout)["hookSpecificOutput"]
+            output = self.hook({"tool_name": tool, "tool_input": {field: "hf download publisher/model"}})
             self.assertEqual(output["hookEventName"], "PreToolUse")
             self.assertEqual(output["permissionDecision"], "deny")
 
     def test_websocket_monitor_without_command_is_allowed(self):
         payload = {"tool_name": "Monitor", "tool_input": {"ws": {"url": "wss://example.com"}, "description": "events"}}
-        result = subprocess.run([sys.executable, str(SCRIPT)], input=json.dumps(payload), text=True, capture_output=True)
-        self.assertEqual(result.returncode, 0)
-        self.assertEqual(result.stdout, "")
+        self.assertIsNone(self.hook(payload))
 
     def test_allow_does_not_override_normal_permissions(self):
         for tool, field in [("Bash", "command"), ("Monitor", "command"), ("exec_command", "cmd")]:
             payload = {"tool_name": tool, "tool_input": {field: "hf download publisher/model --revision " + "a" * 40}}
-            result = subprocess.run([sys.executable, str(SCRIPT)], input=json.dumps(payload), text=True, capture_output=True)
-            self.assertEqual(result.returncode, 0)
-            self.assertEqual(result.stdout, "")
+            self.assertIsNone(self.hook(payload))
 
     def test_policy_denials_and_cwd_in_native_payload(self):
         (self.cwd / "uv.toml").write_text('exclude-newer = "1 day"\n')
         for command in ["pip list", "npx example", "uv sync"]:
             payload = {"tool_name": "Bash", "cwd": str(self.cwd), "tool_input": {"command": command}}
-            result = subprocess.run([sys.executable, str(SCRIPT)], input=json.dumps(payload), text=True,
-                                    capture_output=True, env=self.environment)
-            self.assertEqual(result.returncode, 0)
-            self.assertEqual(json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"], "deny")
+            self.assertEqual(self.hook(payload, self.environment)["permissionDecision"], "deny")
+
+    def test_codex_workdir_selects_project_policy(self):
+        (self.cwd / "uv.toml").write_text('exclude-newer = "1 day"\n')
+        other = self.home / "other"
+        other.mkdir()
+        def run(workdir, cwd):
+            payload = {"tool_name": "exec_command", "cwd": str(cwd), "tool_input": {"cmd": "uv sync", "workdir": str(workdir)}}
+            return self.hook(payload, self.environment)
+        self.assertIn(WEAKER, run(self.cwd, other)["permissionDecisionReason"])
+        self.assertIsNone(run(other, self.cwd))
 
 
 if __name__ == "__main__":

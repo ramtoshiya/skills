@@ -680,10 +680,6 @@ def reason(command, cwd=None, environment=None, depth=0):
     return None
 
 
-def blocked(command, cwd=None, environment=None):
-    return reason(command, cwd, environment) is not None
-
-
 def denial(reason):
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
