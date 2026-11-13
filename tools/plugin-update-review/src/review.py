@@ -733,7 +733,7 @@ def serve(store, port):
     def timer():
         while not stop.is_set():
             try:
-                if store.scan():
+                if store.scan() and not stop.is_set():
                     notify('Updates or preparation problems need review.')
                     if not browser(url):
                         store.event('browser-error', None, 'Could not open the review page')
@@ -752,10 +752,10 @@ def serve(store, port):
         server.serve_forever(poll_interval=0.5)
     finally:
         stop.set()
-        scanner.join()
         server.server_close()
         signal.signal(signal.SIGTERM, previous_signal)
         session_path.unlink(missing_ok=True)
+        scanner.join(timeout=15)
 
 
 def github_url(value):

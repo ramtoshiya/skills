@@ -158,8 +158,8 @@ launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/local.plugin-update-re
 
 The template starts the local server at login and keeps it alive. Its timer is
 in the server, so it does not run while the server is stopped or the Mac is
-asleep. On stop, the server lets a scan already in progress finish before it
-exits. To stop it, run:
+asleep. On stop, the server waits up to 15 seconds for a scan already in
+progress to finish, inside launchd's 20-second exit timeout. To stop it, run:
 
 ```sh
 launchctl bootout "gui/$(id -u)" ~/Library/LaunchAgents/local.plugin-update-review.plist
