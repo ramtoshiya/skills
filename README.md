@@ -85,7 +85,7 @@ claude plugin validate ./.claude-plugin/marketplace.json
 `npm test` needs Node.js 24.21 or newer and uv. `mise install --locked` installs
 the pinned versions, and `mise exec -- npm test` uses them, as the Tests
 workflow does on every push and pull request. It runs the dependency-free
-CLI, repository, plugin, and setup tests. The [exporter tests](tools/excalidraw-web-export/README.md)
-use that tool's separately installed test dependencies. Live service checks and
-model evals run only when explicitly invoked. `AGENTS.md` holds the rules for
-changing this repository.
+CLI, repository, plugin, and setup tests. The workflow also installs the
+[exporter test dependencies](tools/excalidraw-web-export/README.md) and runs
+its offline tests. Live service checks and model evals run only when
+explicitly invoked. `AGENTS.md` holds the rules for changing this repository.

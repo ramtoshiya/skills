@@ -140,9 +140,11 @@ npm test
 CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' npm run test:live
 ```
 
-The default tests check rejected inputs, output preservation, standalone
-installation and updates, and command collision protection without network
-access. Installation tests reuse the npm cache populated by `npm ci`. Live tests explicitly opt into the deployed app. They decode actual
+The default tests check rejected inputs, room snapshot handoff, output
+preservation, standalone installation and updates, and command collision
+protection without network access or a browser. The Tests workflow runs them
+after installing dependencies. Installation tests reuse the npm cache populated
+by `npm ci`. Live tests explicitly opt into the deployed app. They decode actual
 PNG downloads, verify single and multiple IDs, visible text, and embedded
 raster images, and compare a 96MP full export against an export omitting only
 the green middle object.

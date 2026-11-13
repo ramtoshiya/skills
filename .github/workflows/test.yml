@@ -19,3 +19,7 @@ jobs:
           cache: false
           install_args: '--locked'
       - run: mise exec -- npm test
+      - run: mise exec -- npm ci --ignore-scripts
+        working-directory: tools/excalidraw-web-export
+      - run: mise exec -- npm test
+        working-directory: tools/excalidraw-web-export
