@@ -18,8 +18,7 @@ class AgentShellEnvTests(unittest.TestCase):
 
     def run_hook(self, env_file):
         env = {k: v for k, v in os.environ.items() if k not in ("CLAUDE_ENV_FILE", "AGENTMEMORY_SDK_CHILD")}
-        if env_file is not None:
-            env["CLAUDE_ENV_FILE"] = str(env_file)
+        env["CLAUDE_ENV_FILE"] = str(env_file)
         payload = {"session_id": "s1", "hook_event_name": "SessionStart", "source": "startup"}
         return subprocess.run([sys.executable, str(SCRIPT)], input=json.dumps(payload),
                               capture_output=True, text=True, env=env, check=True)
@@ -38,10 +37,9 @@ class AgentShellEnvTests(unittest.TestCase):
         self.assertEqual(self.sourced("AGENTMEMORY_SDK_CHILD", "OTHER_HOOK"), ["1", "kept"])
         self.assertEqual(self.env_file.read_text().count("AGENTMEMORY_SDK_CHILD"), 1)
 
-    def test_without_env_file_does_nothing(self):
-        result = self.run_hook(None)
-        self.assertEqual(result.stdout, "")
-        self.assertFalse(self.env_file.exists())
+    def test_unwritable_env_file_does_not_fail_session_start(self):
+        result = self.run_hook(self.tmp / "missing" / "sessionstart-hook-1.sh")
+        self.assertEqual((result.stdout, result.stderr), ("", ""))
 
 
 if __name__ == "__main__":
