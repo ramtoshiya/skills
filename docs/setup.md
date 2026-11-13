@@ -2,7 +2,7 @@
 
 `mise.toml` at the repository root sets up a Mac with
 [mise bootstrap](https://mise.jdx.dev/bootstrap.html). It installs three
-Homebrew packages, copies shell, Git, and agent files from `setup/` into your
+Homebrew packages and the repository's pinned development tools, copies shell, Git, and agent files from `setup/` into your
 home directory, edits a few existing files, and adds mise's shell activation.
 
 The values are the author's preferences. Fork the repository and change them
