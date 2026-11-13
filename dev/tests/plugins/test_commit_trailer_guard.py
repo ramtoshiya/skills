@@ -29,10 +29,12 @@ class CommitTrailerGuardTests(unittest.TestCase):
             f"git -c user.name=x commit -m 'Subject\n\n{TRAILER}'",
             f"git merge --no-ff topic -m 'Merge topic\n\n{TRAILER}'",
             f"git tag -a v1 -m 'Release\n\n{TRAILER}'",
+            f"git notes add -m 'Note\n\n{TRAILER}'",
             f"gs commit create -m 'Subject\n\n{TRAILER}'",
             f"gs cc -m 'Subject\n\n{TRAILER}'",
             "gh pr create --title T --body 'Summary\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)'",
             "gh pr edit 3 --body \"$(cat <<'EOF'\nSummary\n\nhttps://claude.ai/code/session_abc\nEOF\n)\"",
+            f"gh issue create --title T --body 'Issue\n\n{TRAILER}'",
             "cd repo && git commit -m 'x\n\nco-authored-by: Codex <noreply@openai.com>'",
         ]:
             with self.subTest(command=command):
@@ -53,26 +55,29 @@ class CommitTrailerGuardTests(unittest.TestCase):
             message = Path(directory, "large.txt")
             message.write_text("x" * guard.SOFT_FILE_BYTES + f"\n\n{TRAILER}\n")
             self.assertIsNotNone(self.check("git commit -F large.txt", directory))
-            self.assertTrue(guard.check_size("message file", guard.HARD_LIMIT, guard.SOFT_FILE_BYTES))
-            self.assertFalse(guard.check_size("message file", guard.HARD_LIMIT + 1, guard.SOFT_FILE_BYTES))
-            self.assertTrue(guard.check_size("message file", guard.SOFT_FILE_BYTES, guard.SOFT_FILE_BYTES))
+            oversized = Path(directory, "oversized.txt")
+            oversized.write_text(TRAILER)
+            os.truncate(oversized, (1 << 30) + 1)
+            self.assertIsNone(self.check("git commit -F oversized.txt", directory))
             lines = Path(directory, "ramtoshiya/size-warnings.log").read_text().splitlines()
-            self.assertEqual(len(lines), 3)
+            self.assertEqual(len(lines), 2)
             size = message.stat().st_size
             self.assertRegex(lines[0], rf"Z warning: commit-trailer-guard message file '.*large\.txt' is {size} bytes, "
                              rf"over the soft limit of {guard.SOFT_FILE_BYTES} bytes$")
-            self.assertTrue(lines[1].endswith(f"is {guard.HARD_LIMIT} bytes, over the soft limit of {guard.SOFT_FILE_BYTES} bytes"))
-            self.assertTrue(lines[2].endswith(f"is {guard.HARD_LIMIT + 1} bytes, "
+            self.assertTrue(lines[1].endswith(f"is {guard.HARD_LIMIT + 1} bytes, "
                                               f"over the hard limit of {guard.HARD_LIMIT} bytes, so it was not checked"))
 
     def test_allows_clean_commits_and_reading_history(self):
         for command in [
             "git add -A && git commit -q -F - <<'EOF'\nRemove a component\n\nWhy it went.\nEOF",
             "git commit -m 'Co-authored-by: Ada Lovelace <ada@example.com>'",
+            "git notes add -m 'Clean note'",
+            "gh issue create --title T --body 'Clean issue'",
             f"git log --all --grep='{TRAILER}'",
             f"git log --format=%B -1 | grep -c '{TRAILER}'",
             f"rg -n '{TRAILER}' .",
             "gh pr view 3 --json body",
+            f"gh issue view 3 --json body | grep '{TRAILER}'",
             f"echo '{TRAILER}' > notes.txt",
         ]:
             with self.subTest(command=command):
