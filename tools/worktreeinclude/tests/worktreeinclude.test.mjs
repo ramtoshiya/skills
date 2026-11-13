@@ -46,6 +46,18 @@ function fixture(t, manifest = '.env\nlocal files/\n', format = 'sha1') {
 }
 function ok(result) { assert.equal(result.status, 0, result.stderr + result.stdout); return result; }
 
+test('large Git output warns and continues to report hook status', t => {
+  const f = fixture(t);
+  const bin = path.join(f.root, 'bin');
+  fs.mkdirSync(bin);
+  const gitPath = spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim();
+  fs.writeFileSync(path.join(bin, 'git'), `#!${process.execPath}\nconst { spawnSync } = require('node:child_process');\nif (process.argv.includes('extensions.worktreeConfig')) process.stdout.write(' '.repeat(64 * 1024 * 1024 + 1));\nelse { const result = spawnSync(${JSON.stringify(gitPath)}, process.argv.slice(2), { stdio: 'inherit' }); process.exitCode = result.status; }\n`, { mode: 0o755 });
+  const result = f.run(process.execPath, [cli, 'hook', 'status'], f.main, { PATH: bin + path.delimiter + process.env.PATH });
+  ok(result);
+  assert.match(result.stderr, /warning: worktreeinclude git config output is 67108865 bytes, over the soft limit of 67108864 bytes/);
+  assert.match(result.stdout, /hook not-installed/);
+});
+
 test('installed hook copies ignored files into a plain worktree add, preserving spaces and Unicode', t => {
   const f = fixture(t);
   ok(f.run('sh', [installer]));

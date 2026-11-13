@@ -56,3 +56,14 @@ test("installer refuses to overwrite an unrelated command", t => {
   assert.match(result.stderr, /Refusing to replace/);
   assert.equal(readFileSync(command, "utf8"), "unrelated command\n");
 });
+
+test("large stdin warns and continues to validate the room link", t => {
+  const home = mkdtempSync(join(tmpdir(), "excalidraw-stdin-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const result = spawnSync(process.execPath, [join(root, "tools/excalidraw-board/excalidraw-board.mjs"), "room", "import", "--name", "example", "--stdin"], {
+    env: testEnv(home), input: " ".repeat(5_000_001), encoding: "utf8",
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /warning: excalidraw-board stdin input is 5000001 bytes, over the soft limit of 5000000 bytes/);
+  assert.match(result.stderr, /Invalid Excalidraw room link/);
+});
