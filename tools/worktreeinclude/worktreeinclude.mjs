@@ -283,7 +283,7 @@ try {
   else throw new Error('Unknown command. Use --help');
 } catch (error) {
   // Never print subprocess output, file data, stacks, or arbitrary system error messages.
-  const known = /^(Git operation failed|Unsafe |Symlink rejected:|Non-directory parent:|Path outside|Manifest must|Unsupported manifest|Tracked path rejected:|Target tracked path rejected:|A non-bare|Cannot resolve|Per-worktree|Unrecognized integration|Invalid integration|Integration files changed|Hook configuration changed|Multiple hook paths|Unsupported hook path|Unknown command|worktreeinclude git \S+ output is \d+ bytes)/;
+  const known = /^(Git operation failed|Unsafe |Symlink rejected:|Non-directory parent:|Non-regular manifest path rejected|Path outside|Manifest must|Unsupported manifest|Tracked path rejected:|Target tracked path rejected:|A non-bare|Cannot resolve|Per-worktree|Unrecognized integration|Invalid integration|Integration files changed|Hook configuration changed|Multiple hook paths|Unsupported hook path|Unknown command|worktreeinclude git \S+ output is \d+ bytes)/;
   console.error(`${name}: ${known.test(error.message) ? error.message : 'Operation failed. Check repository permissions and integration state'}`);
   process.exitCode = 1;
 }

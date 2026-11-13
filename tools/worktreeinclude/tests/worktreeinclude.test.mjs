@@ -134,13 +134,21 @@ test('same-content skips support both Claude-before and Git-before ordering with
 });
 
 test('unsafe manifests, tracked selections, and source symlinks fail before copying', async t => {
-  for (const pattern of ['../escape', '/absolute', 'C:/outside', 'local files/../../outside', 'tracked.txt', 'escape']) {
+  for (const [pattern, message] of [
+    ['../escape', /Unsafe manifest or file path/],
+    ['/absolute', /Unsafe manifest or file path/],
+    ['C:/outside', /Unsafe manifest or file path/],
+    ['local files/../../outside', /Unsafe manifest or file path/],
+    ['tracked.txt', /Tracked path rejected/],
+    ['escape', /Symlink rejected/],
+  ]) {
     await t.test(pattern, t => {
       const f = fixture(t, `.env\n${pattern}\n`);
       if (pattern === 'escape') fs.symlinkSync(f.root, path.join(f.main, 'escape'));
       f.add();
       const result = f.invoke(['apply'], f.target);
       assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stderr, message);
       assert.equal(fs.existsSync(path.join(f.target, '.env')), false);
     });
   }
@@ -155,7 +163,9 @@ test('target symlink parents and leaf symlinks are rejected without touching out
       fs.mkdirSync(outside);
       fs.writeFileSync(path.join(outside, 'keep'), 'outside-owned');
       fs.symlinkSync(relative === '.env' ? path.join(outside, 'keep') : outside, path.join(f.target, relative));
-      assert.equal(f.invoke(['apply'], f.target).status, 1);
+      const result = f.invoke(['apply'], f.target);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /Symlink rejected/);
       assert.equal(fs.readFileSync(path.join(outside, 'keep'), 'utf8'), 'outside-owned');
       assert.deepEqual(fs.readdirSync(outside), ['keep']);
     });
@@ -184,7 +194,13 @@ test('hook copy failures are visible after Git has created the target', t => {
 });
 
 test('changed integration, changed config, and per-worktree config fail safely', async t => {
-  for (const scenario of ['files', 'permissions', 'extra-directory', 'config', 'worktree']) {
+  for (const [scenario, message] of [
+    ['files', /Integration files changed/],
+    ['permissions', /Integration files changed/],
+    ['extra-directory', /Integration files changed/],
+    ['config', /Hook configuration changed/],
+    ['worktree', /Per-worktree configuration is unsupported/],
+  ]) {
     await t.test(scenario, t => {
       const f = fixture(t);
       ok(f.hook('install'));
@@ -193,9 +209,11 @@ test('changed integration, changed config, and per-worktree config fail safely',
       if (scenario === 'extra-directory') fs.mkdirSync(path.join(f.main, '.git/worktreeinclude/user-directory'));
       if (scenario === 'config') f.git('config', '--local', 'core.hooksPath', 'other-hooks');
       if (scenario === 'worktree') f.git('config', 'extensions.worktreeConfig', 'true');
-      assert.equal(f.hook('status').status, 1);
-      assert.equal(f.hook('install').status, 1);
-      assert.equal(f.hook('uninstall').status, 1);
+      for (const action of ['status', 'install', 'uninstall']) {
+        const result = f.hook(action);
+        assert.equal(result.status, 1);
+        assert.match(result.stderr, message);
+      }
       assert.ok(fs.existsSync(path.join(f.main, '.git/worktreeinclude')));
       if (scenario === 'files') assert.equal(fs.readFileSync(path.join(f.main, '.git/worktreeinclude/hooks/post-checkout'), 'utf8'), 'user edit');
       if (scenario === 'config') assert.equal(f.git('config', '--get', 'core.hooksPath'), 'other-hooks');
@@ -243,7 +261,11 @@ test('no-checkout and missing creation reflogs are conservative no-ops', t => {
 });
 
 test('symlinked manifests and non-regular ignored sources are rejected', async t => {
-  for (const scenario of ['manifest', 'fifo', 'ancestor']) {
+  for (const [scenario, message] of [
+    ['manifest', /Symlink rejected/],
+    ['fifo', /Non-regular manifest path rejected/],
+    ['ancestor', /Symlink rejected/],
+  ]) {
     await t.test(scenario, t => {
       const f = fixture(t, scenario === 'fifo' ? 'pipe.private\n' : scenario === 'ancestor' ? 'escape/.env\n' : '.env\n');
       if (scenario === 'manifest') {
@@ -256,6 +278,7 @@ test('symlinked manifests and non-regular ignored sources are rejected', async t
       f.add();
       const result = f.invoke(['apply'], f.target);
       assert.equal(result.status, 1);
+      assert.match(result.stderr, message);
       assert.equal(fs.existsSync(path.join(f.target, '.env')), false);
       assert.equal(fs.existsSync(path.join(f.target, 'escape')), false);
     });

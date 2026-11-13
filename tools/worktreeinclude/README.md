@@ -43,6 +43,8 @@ rejected. Spaces and Unicode need no quoting. As with Git ignore files, trailing
 spaces have Git's normal meaning. Symlink paths and symlink ancestors are rejected,
 not followed or copied. Nested repositories and nested worktrees are skipped.
 The source manifest itself must be a tracked regular file.
+An explicit manifest path to a non-regular file is rejected with
+`Non-regular manifest path rejected`.
 
 ## Manage hooks explicitly
 
