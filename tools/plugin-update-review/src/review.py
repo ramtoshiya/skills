@@ -745,12 +745,14 @@ def serve(store, port):
     write_json(session_path, {'pid': os.getpid(), 'url': url})
     previous_signal = signal.getsignal(signal.SIGTERM)
     signal.signal(signal.SIGTERM, lambda *_: threading.Thread(target=server.shutdown, daemon=True).start())
-    threading.Thread(target=timer, daemon=True).start()
+    scanner = threading.Thread(target=timer, daemon=True)
+    scanner.start()
     print('Review server listening on 127.0.0.1:' + str(port) + '. Use plugin-update-review open.', flush=True)
     try:
         server.serve_forever(poll_interval=0.5)
     finally:
         stop.set()
+        scanner.join()
         server.server_close()
         signal.signal(signal.SIGTERM, previous_signal)
         session_path.unlink(missing_ok=True)
