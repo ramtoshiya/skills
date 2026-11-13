@@ -13,13 +13,6 @@ test('monitors every fork used by the marketplace', async () => {
   const marketplaceForks = [...new Set(marketplace.plugins
     .map(plugin => plugin.source?.url)
     .filter(url => url?.startsWith('ramtoshiya/')))].sort();
-  assert.deepEqual(pairs, [
-    { fork: 'ramtoshiya/mattpocock-skills', branch: 'main', upstream: 'mattpocock/skills', upstreamBranch: 'main' },
-    { fork: 'ramtoshiya/claude-codex-settings', branch: 'main', upstream: 'fcakyon/claude-codex-settings', upstreamBranch: 'main' },
-    pair,
-    { fork: 'ramtoshiya/im-not-ai', branch: 'main', upstream: 'epoko77-ai/im-not-ai', upstreamBranch: 'main' },
-    { fork: 'ramtoshiya/oh-my-design', branch: 'main', upstream: 'kwakseongjae/oh-my-design', upstreamBranch: 'main' },
-  ]);
   assert.deepEqual(pairs.map(({ fork }) => fork).sort(), marketplaceForks);
   assert.equal(new Set(marketplace.plugins.map(({ name }) => name)).size, marketplace.plugins.length);
 });

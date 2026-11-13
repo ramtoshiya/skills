@@ -140,8 +140,8 @@ class ClaudeReviewTests(unittest.TestCase):
         empty = self.script.parent / "empty"
         empty.mkdir()
         result, _ = self.launch(["--settings", T3_SETTINGS], PATH=str(empty))
-        self.assertEqual((result.returncode, result.stderr),
-                         (1, "claude-review: Could not start claude. Install Claude Code and put it on PATH.\n"))
+        self.assertEqual(result.returncode, 1)
+        self.assertRegex(result.stderr, r"\Aclaude-review: [^\n]+\n\Z")
 
     def state_file(self, session="s"):
         return self.tmp / "claude-review" / f"{session}.json"

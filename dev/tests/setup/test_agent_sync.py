@@ -263,43 +263,47 @@ class AgentSyncTests(unittest.TestCase):
                 self.assertTrue((self.source / "skills/writing/SKILL.md").is_file())
 
     def test_native_install_does_not_enable_an_already_enabled_plugin(self):
-        operation = sync.Sync(self.root)
-        package = operation.sources.package(self.entry)
-        installed = self.home / ".claude/plugins/cache/example/example/local"
-        operation.inventory = []
-        command = self.home / "bin/claude"
-        inventory = json.dumps([{"id": "example@example", "scope": "user", "installPath": str(installed), "enabled": True}])
-        marketplaces = json.dumps([{"name": "example", "path": str(self.root)}])
-        command.write_text('#!/bin/sh\ncase "$*" in\n  "plugin install example@example --scope user") mkdir -p "' + str(installed.parent) + '"; cp -R "' + str(package.root) + '" "' + str(installed) + '" ;;\n  "plugin marketplace list --json") printf \'%s\\n\' \'' + marketplaces + '\' ;;\n  "plugin list --json") printf \'%s\\n\' \'' + inventory + '\' ;;\n  *) exit 98 ;;\nesac\n')
-        command.chmod(0o755)
-        self.assertEqual(operation.native("claude", self.entry, package, True)[0], "updated")
-        self.assertEqual(operation.native("claude", self.entry, package, True)[0], "ok")
+        self.fake_cli("claude", {
+            "plugin install example@example --scope user": self.deploy("claude", self.source),
+            "plugin enable example@example --scope user": ":",
+        })
+        operation, rows = self.execute(True)
+        self.assertEqual(rows[0]["status"], "updated")
+        _, rows = self.execute(True)
+        self.assertEqual(rows[0]["status"], "ok")
+        self.assertEqual(self.changes("claude"), ["plugin install example@example --scope user"])
+        self.assertEqual((self.cache("claude") / "skills/writing/SKILL.md").read_text(), "original skill\n")
+        self.assertEqual(sync.read_json(operation.state_path)["packages"]["claude:example"]["pin"], self.first)
 
     def test_installer_success_is_not_accepted_when_cached_contents_remain_stale(self):
-        operation = sync.Sync(self.root)
-        package = operation.sources.package(self.entry)
-        installed = self.home / ".codex/plugins/cache/example/example/local"
-        shutil.copytree(package.root, installed)
-        (installed / "skills/writing/SKILL.md").write_text("old managed contents\n")
-        operation.remember("codex", "example", installed, package)
-        operation.inventory = [{"pluginId": "example@example", "installed": True, "enabled": True, "version": "local"}]
-        command = self.home / "bin/codex"
-        command.write_text('#!/bin/sh\ncase "$*" in\n  "plugin add example@example") exit 0 ;;\n  "plugin marketplace list --json") printf \'%s\\n\' \'{"marketplaces":[{"name":"example","root":"' + str(self.root) + '"}]}\' ;;\n  "plugin list --json --marketplace example") printf \'%s\\n\' \'{"installed":[{"pluginId":"example@example","installed":true,"enabled":true,"version":"local"}]}\' ;;\n  *) exit 98 ;;\nesac\n')
-        command.chmod(0o755)
-        with self.assertRaisesRegex(sync.Conflict, "Native installer did not reconcile"):
-            operation.native("codex", self.entry, package, True)
-        self.assertEqual((installed / "skills/writing/SKILL.md").read_text(), "old managed contents\n")
+        self.fake_cli("codex", {"plugin add example@example": self.deploy("codex", self.source)})
+        operation, rows = self.execute(True, "codex")
+        self.assertEqual(rows[0]["status"], "updated")
+        state_before = operation.state_path.read_bytes()
+        (self.upstream / "plugins/example/skills/writing/SKILL.md").write_text("updated skill\n")
+        revision = commit(self.upstream, "Update")
+        self.install_source(revision)
+        self.entry["source"]["sha"] = revision
+        self.set_entries([self.entry])
+        self.fake_cli("codex", {"plugin add example@example": ":"})
+        operation, rows = self.execute(True, "codex")
+        self.assertEqual(rows[0]["status"], "conflict")
+        self.assertIn("Native installer did not reconcile", rows[0]["detail"])
+        self.assertEqual(self.changes("codex"), ["plugin add example@example", "plugin add example@example"])
+        self.assertEqual((self.cache("codex") / "skills/writing/SKILL.md").read_text(), "original skill\n")
+        self.assertEqual(operation.state_path.read_bytes(), state_before)
 
     def test_generated_codex_manifest_cannot_add_unapproved_capabilities(self):
-        operation = sync.Sync(self.root)
-        package = operation.sources.package(self.entry)
-        installed = self.home / "installed"
-        shutil.copytree(package.root, installed)
-        sync.write_json(installed / ".codex-plugin/plugin.json", {
-            "name": "example", "skills": None, "hooks": "./injected.json",
-        })
-        with self.assertRaisesRegex(sync.Conflict, "Unexpected capabilities"):
-            operation.native_files(self.entry, installed, package.expected)
+        manifest = self.cache("codex") / ".codex-plugin/plugin.json"
+        injected = json.dumps({"name": "example", "skills": None, "hooks": "./injected.json"})
+        install = (f"{self.deploy('codex', self.source)} && mkdir -p {shlex.quote(str(manifest.parent))} "
+                   f"&& printf '%s\\n' {shlex.quote(injected)} > {shlex.quote(str(manifest))}")
+        self.fake_cli("codex", {"plugin add example@example": install})
+        operation, rows = self.execute(True, "codex")
+        self.assertEqual(rows[0]["status"], "conflict")
+        self.assertIn("Unexpected capabilities", rows[0]["detail"])
+        self.assertEqual(self.changes("codex"), ["plugin add example@example"])
+        self.assertNotIn("codex:example", sync.read_json(operation.state_path, {"packages": {}})["packages"])
 
     def test_symlinked_state_file_is_not_replaced_or_written_through(self):
         shutil.copytree(self.source, self.cache("claude"))

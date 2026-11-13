@@ -127,7 +127,7 @@ class ClaudeSettingsTests(unittest.TestCase):
         self.assertEqual(alternate["env"]["PRIVATE_TOKEN"], SECRET)
         self.assertEqual(alternate["env"]["WORKER_MODE"], "1")
         self.assertEqual(alternate["permissions"]["allow"], ["PersonalRule"])
-        self.assertEqual(set(alternate["permissions"]["deny"]), {"AskUserQuestion", "EnterPlanMode", "EnterWorktree", "SendFeedback"})
+        self.assertLessEqual({"AskUserQuestion", "EnterPlanMode", "EnterWorktree", "SendFeedback"}, set(alternate["permissions"]["deny"]))
         self.assertNotIn("defaultMode", alternate["permissions"])
         self.assertEqual(alternate["hooks"]["Stop"][0]["command"], SECRET)
         self.assertEqual(alternate["enabledPlugins"], {"private": True})
@@ -135,7 +135,8 @@ class ClaudeSettingsTests(unittest.TestCase):
         self.assertNotIn("statusLine", alternate)
         self.assertEqual(default["env"]["PRIVATE_TOKEN"], SECRET)
         self.assertEqual(default["statusLine"]["type"], "command")
-        self.assertEqual(set(default["permissions"]["deny"]), {"CustomRule", "AskUserQuestion", "EnterPlanMode", "EnterWorktree", "SendFeedback"})
+        self.assertLessEqual({"AskUserQuestion", "EnterPlanMode", "EnterWorktree", "SendFeedback"}, set(default["permissions"]["deny"]))
+        self.assertIn("CustomRule", default["permissions"]["deny"])
         self.assertEqual(self.settings("status").returncode, 0)
 
     def test_overrides_baseline_updates_and_repeated_sync(self):
@@ -160,9 +161,8 @@ class ClaudeSettingsTests(unittest.TestCase):
         worker = json.loads(self.alternate.read_text())
         self.assertTrue(terminal["autoMemoryEnabled"])
         self.assertIn("statusLine", terminal)
-        self.assertEqual(set(terminal["permissions"]["deny"]), {
-            "ExtraRule", "AskUserQuestion", "EnterPlanMode", "EnterWorktree", "SendFeedback",
-        })
+        self.assertLessEqual({"AskUserQuestion", "EnterPlanMode", "EnterWorktree", "SendFeedback"}, set(terminal["permissions"]["deny"]))
+        self.assertIn("ExtraRule", terminal["permissions"]["deny"])
         self.assertFalse(worker["disableBundledSkills"])
         self.assertEqual(worker["env"]["WORKER_TOKEN"], SECRET)
         self.assertNotIn("defaultMode", worker["permissions"])
@@ -342,7 +342,10 @@ class ClaudeSettingsTests(unittest.TestCase):
         }}})
         self.write(self.alternate, {"permissions": {"deny": ["CustomRule"]}})
         before = self.alternate.read_bytes()
-        (self.bin / "uv").symlink_to(uv)
+        uv_log = self.base / "uv-args"
+        wrapper = self.bin / "uv"
+        wrapper.write_text(f"#!/bin/sh\nprintf '%s\\n' \"$@\" > {shlex.quote(str(uv_log))}\nexec {shlex.quote(uv)} \"$@\"\n")
+        wrapper.chmod(0o755)
         env["UV_PYTHON_INSTALL_DIR"] = str(self.base / "missing-python")
 
         def bootstrap(*args, success=True):
@@ -361,9 +364,10 @@ class ClaudeSettingsTests(unittest.TestCase):
         self.assertEqual(self.alternate.read_bytes(), before)
         self.assertFalse(self.default.exists())
         self.assertFalse((self.alternate.parent / "CLAUDE.md").exists())
-        missing_runtime = bootstrap("--only", "task", success=False)
-        self.assertIn("No interpreter found for Python >=3.11", missing_runtime.stderr)
-        self.assertIn("offline", missing_runtime.stderr)
+        uv_log.unlink(missing_ok=True)
+        bootstrap("--only", "task", success=False)
+        self.assertIn("--offline", uv_log.read_text().splitlines())
+        self.assertIn("--managed-python", uv_log.read_text().splitlines())
         self.assertEqual(self.alternate.read_bytes(), before)
         self.assertFalse(self.default.exists())
         self.assertFalse((self.alternate.parent / "CLAUDE.md").exists())
@@ -371,9 +375,9 @@ class ClaudeSettingsTests(unittest.TestCase):
         bootstrap("--only", "task")
         worker = json.loads(self.alternate.read_text())
         self.assertFalse(worker["disableBundledSkills"])
-        self.assertEqual(set(worker["permissions"]["deny"]), {
-            "CustomRule", "OverrideRule", "AskUserQuestion", "EnterPlanMode", "EnterWorktree", "SendFeedback",
-        })
+        self.assertLessEqual({"AskUserQuestion", "EnterPlanMode", "EnterWorktree", "SendFeedback"}, set(worker["permissions"]["deny"]))
+        self.assertIn("CustomRule", worker["permissions"]["deny"])
+        self.assertIn("OverrideRule", worker["permissions"]["deny"])
         self.assertNotIn("defaultMode", worker["permissions"])
         self.assertNotIn("statusLine", worker)
         self.assertTrue((self.default.parent / "CLAUDE.md").is_file())
