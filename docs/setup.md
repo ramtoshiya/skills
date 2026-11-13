@@ -57,8 +57,9 @@ mise does not back up the files it overwrites. Copy the files listed below
 before the first run, or set up
 [dotfile history](https://mise.jdx.dev/dotfiles/history.html) first.
 
-`mise.toml` also declares the repository's Actions analyzers. Run `mise install
---locked` to install them without applying the machine setup. Loading the
+`mise.toml` also declares the repository's Actions analyzers and the Node.js
+and uv versions that `npm test` uses. Run `mise install --locked` to install
+them without applying the machine setup. Loading the
 checkout puts installed tools on mise's activated `PATH` but declares no
 environment variables.
 
@@ -103,6 +104,9 @@ fixed in 1.28.0).
 requests with read-only permissions. It uses a SHA-pinned mise action, an
 exact mise release, and locked tool downloads, without applying dotfiles or
 Homebrew setup. Its security step runs even if the syntax check fails.
+`.github/workflows/test.yml` runs `npm test` on macOS for pushes and pull
+requests with the same permissions, action pins, and locked tools. Run the
+same suite locally with `mise exec -- npm test`.
 The upstream fork drift workflow keeps issue-write permission only for its
 existing reporting job. Checkout does not persist credentials, and setup-node's
 automatic package-manager cache is disabled there.
