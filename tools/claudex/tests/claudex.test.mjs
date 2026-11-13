@@ -75,6 +75,8 @@ test('discovers role models and forwards CLI arguments, credentials, and exit st
   assert.equal(settings.autoCompactEnabled, true);
   assert.equal(settings.env.CLAUDE_CODE_EXTRA_BODY, undefined);
   assert.equal(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '872000');
+  assert.equal(settings.env.ANTHROPIC_BASE_URL, f.baseUrl);
+  assert.equal(settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL, 'gpt-6.1-sol');
   assert.equal(settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL, 'gpt-6-astra');
   assert.equal(settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'gpt-6.1-terra');
   assert.equal(settings.env.CLAUDE_CODE_SUBAGENT_MODEL, 'gpt-6.1-terra');
@@ -167,6 +169,18 @@ test('discovery failures never launch Claude or expose the key', async t => {
     assert.ok(!result.stderr.includes('test-client-key'));
     await assert.rejects(f.capture(), { code: 'ENOENT' });
   }
+});
+
+test('refuses unsafe proxy URLs before sending the key or launching Claude', async t => {
+  const f = await fixture(t, [{ id: 'gpt-6-sol', owned_by: 'openai' }]);
+  const port = new URL(f.baseUrl).port;
+  for (const url of [`http://localhost.:${port}`, `${f.baseUrl}/v1?route=1`, `${f.baseUrl}/v1#route`]) {
+    const result = await f.run([], { CLIPROXY_BASE_URL: url });
+    assert.equal(result.code, 1, url);
+    assert.ok(!result.stderr.includes('test-client-key'));
+  }
+  assert.deepEqual(f.requests, []);
+  await assert.rejects(f.capture(), { code: 'ENOENT' });
 });
 
 test('version works without proxy configuration or discovery', async t => {
