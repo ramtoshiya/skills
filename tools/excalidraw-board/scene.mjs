@@ -15,7 +15,7 @@ const pathDefaults = {
 const bindable = new Set(["rectangle", "diamond", "ellipse", "text", "image", "frame", "magicframe", "embeddable", "iframe"]);
 
 // Append-only fractional indices. A new integer sorts after every fraction of its predecessor.
-export function nextIndex(previous) {
+function nextIndex(previous) {
   if (!previous) return "a0";
   const head = previous[0];
   const length = head >= "a" && head <= "z" ? head.charCodeAt(0) - 97 + 2

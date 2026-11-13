@@ -5,18 +5,31 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inflateSync } from "node:zlib";
-import { decrypt, encrypt, writeScene } from "../protocol.mjs";
+import { writeScene } from "../protocol.mjs";
 import { uploadImage, uploadImages } from "../images.mjs";
 
-const room = { id: "offline-protocol", key: "AAAAAAAAAAAAAAAAAAAAAA" };
+const room = { id: "offline-protocol", key: "AAECAwQFBgcICQoLDA0ODw" };
 const before = "2026-01-01T00:00:00.000001Z";
 const after = "2026-01-01T00:00:00.000002Z";
 const later = "2026-01-01T00:00:00.000003Z";
 const original = [{ id: "a", type: "rectangle", index: "a0", version: 1, versionNonce: 20, x: 1, y: 2, customData: { left: 1, right: 2 } }];
 const batch = { update: [{ id: "a", x: 30, customData: { left: 3, right: 4 } }] };
 
+async function seal(value) {
+  const key = await webcrypto.subtle.importKey("raw", Uint8Array.from({ length: 16 }, (_, i) => i), "AES-GCM", false, ["encrypt"]);
+  const iv = webcrypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await webcrypto.subtle.encrypt({ name: "AES-GCM", iv }, key, Buffer.from(JSON.stringify(value), "utf8"));
+  return { ciphertext, iv };
+}
+
+async function unseal(ciphertext, iv) {
+  const key = await webcrypto.subtle.importKey("raw", Uint8Array.from({ length: 16 }, (_, i) => i), "AES-GCM", false, ["decrypt"]);
+  const plaintext = await webcrypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+  return JSON.parse(Buffer.from(plaintext).toString("utf8"));
+}
+
 async function document(elements, updateTime = before) {
-  const { ciphertext, iv } = await encrypt(room.key, elements);
+  const { ciphertext, iv } = await seal(elements);
   return { updateTime, fields: {
     ciphertext: { bytesValue: Buffer.from(ciphertext).toString("base64") },
     iv: { bytesValue: Buffer.from(iv).toString("base64") },
@@ -25,11 +38,11 @@ async function document(elements, updateTime = before) {
 
 async function elementsIn(request) {
   const { ciphertext, iv } = request.body.fields;
-  return decrypt(room.key, Buffer.from(ciphertext.bytesValue, "base64"), Buffer.from(iv.bytesValue, "base64"));
+  return unseal(Buffer.from(ciphertext.bytesValue, "base64"), Buffer.from(iv.bytesValue, "base64"));
 }
 
 // Script HTTP replies and the relay handshake, without applying or reconciling edits.
-function transport(t, steps) {
+function transport(t, steps, incoming) {
   const requests = [];
   const sent = [];
   const sockets = [];
@@ -47,7 +60,15 @@ function transport(t, steps) {
     send(data) {
       sent.push(data);
       if (data === "40") this.reply('42["init-room"]');
-      if (typeof data === "string" && data.startsWith('42["join-room",')) this.reply('42["first-in-room"]');
+      if (typeof data === "string" && data.startsWith('42["join-room",')) {
+        if (!incoming) this.reply('42["first-in-room"]');
+        else {
+          this.reply('42["room-user-change",["collaborator"]]');
+          this.reply('452-["client-broadcast",{"_placeholder":true,"num":0},{"_placeholder":true,"num":1}]');
+          this.reply(incoming.ciphertext);
+          this.reply(incoming.iv);
+        }
+      }
     }
     close() { this.readyState = 3; }
   }
@@ -74,12 +95,30 @@ function transport(t, steps) {
     async broadcastElements() {
       const index = sent.findIndex(packet => typeof packet === "string" && packet.startsWith("452-"));
       assert.notEqual(index, -1, "Expected a binary scene broadcast");
-      const message = await decrypt(room.key, sent[index + 1], sent[index + 2]);
+      const message = await unseal(sent[index + 1], sent[index + 2]);
       assert.equal(message.type, "SCENE_UPDATE");
       return message.payload.elements;
     },
   };
 }
+
+test("writeScene saves collaborator elements received from the relay", async t => {
+  const collaborator = { id: "collaborator", type: "ellipse", index: "a1", version: 1, versionNonce: 7, x: 80 };
+  const incoming = await seal({ type: "SCENE_INIT", payload: { elements: [collaborator] } });
+  const initial = await document(original);
+  let saved;
+  transport(t, [
+    ["GET", initial], ["GET", initial],
+    ["PATCH", async request => {
+      saved = await elementsIn(request);
+      return Response.json({ updateTime: after });
+    }],
+    ["GET", async () => Response.json(await document(saved, after))],
+  ], incoming);
+  await writeScene(room, batch);
+  assert.deepEqual(saved.find(element => element.id === "collaborator"), collaborator);
+  assert.equal(saved.find(element => element.id === "a").x, 30);
+});
 
 test("writeScene rejects superseded or altered saved elements before broadcasting", async t => {
   const mutations = [
@@ -221,7 +260,7 @@ test("image upload uses the browser's encrypted file format before persisting an
       assert.match(request.url.searchParams.get("name"), /^files\/rooms\/offline-protocol\/[a-f0-9]{40}$/);
       const [format, iv, ciphertext] = chunks(encrypted);
       assert.deepEqual(JSON.parse(format), { version: 2, compression: "pako@1", encryption: "AES-GCM" });
-      const key = await webcrypto.subtle.importKey("raw", Buffer.alloc(16), { name: "AES-GCM" }, false, ["decrypt"]);
+      const key = await webcrypto.subtle.importKey("raw", Uint8Array.from({ length: 16 }, (_, i) => i), { name: "AES-GCM" }, false, ["decrypt"]);
       const compressed = await webcrypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
       const [metadata, data] = chunks(inflateSync(Buffer.from(compressed)));
       assert.equal(data.toString(), `data:image/png;base64,${png.toString("base64")}`);

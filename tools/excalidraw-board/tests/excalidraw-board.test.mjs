@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { webcrypto } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { applyBatch, compact, nextIndex, reconcile, revision } from "../scene.mjs";
+import { applyBatch, compact, reconcile, revision } from "../scene.mjs";
 import { encrypt, decrypt } from "../protocol.mjs";
 
 test("patches reapply to fresh elements without overwriting a concurrent field", () => {
@@ -97,11 +98,15 @@ test("scene reconciliation uses version then lower nonce and retains tombstones"
   assert.equal(reconcile(remote, local)[0].isDeleted, true);
 });
 
-test("fractional successors and timestamp revisions preserve the wire contracts", () => {
-  assert.equal(nextIndex(null), "a0");
-  assert.equal(nextIndex("a0V"), "a1");
-  assert.equal(nextIndex("az"), "b00");
-  assert.equal(nextIndex("Zz"), "a0");
+test("added elements follow the scene's fractional indices", () => {
+  const add = { add: [{ id: "new", type: "rectangle" }, { id: "next", type: "ellipse" }] };
+  for (const [previous, expected] of [[null, ["a0", "a1"]], ["a0V", ["a1", "a2"]], ["az", ["b00", "b01"]], ["Zz", ["a0", "a1"]]]) {
+    const elements = previous ? [{ id: "old", index: previous }] : [];
+    assert.deepEqual(applyBatch(elements, add).elements.filter(element => element.id !== "old").map(element => element.index), expected);
+  }
+});
+
+test("timestamp revisions and compact elements preserve the wire contracts", () => {
   assert.equal(revision("2026-01-01T00:00:00.123456789Z"), "1767225600123456");
   assert.deepEqual(compact({ id: "a", type: "rectangle", x: 1.23456, width: 10, height: 20, version: 3, seed: 123, future: true }), { id: "a", type: "rectangle", x: 1.23, w: 10, h: 20, future: true });
 });
@@ -143,11 +148,16 @@ test("outline escapes remote ids, labels, and malformed coordinate strings", t =
   assert.equal(JSON.parse(lines[2].split("\t")[2]), elements[1].text);
 });
 
-test("encrypted scenes round-trip and reject a different room key", async () => {
-  const key = "AAAAAAAAAAAAAAAAAAAAAA";
+test("encrypted scenes interoperate with AES-GCM and reject a different room key", async () => {
+  const key = "AAECAwQFBgcICQoLDA0ODw";
   const message = [{ id: "a", text: "shared board 한글" }];
+  const rawKey = await webcrypto.subtle.importKey("raw", Uint8Array.from({ length: 16 }, (_, i) => i), "AES-GCM", false, ["encrypt", "decrypt"]);
+  const iv = Uint8Array.from({ length: 12 }, (_, i) => i + 1);
+  const ciphertext = await webcrypto.subtle.encrypt({ name: "AES-GCM", iv }, rawKey, Buffer.from(JSON.stringify(message), "utf8"));
+  assert.deepEqual(await decrypt(key, ciphertext, iv), message);
   const encrypted = await encrypt(key, message);
   assert.equal(encrypted.iv.length, 12);
-  assert.deepEqual(await decrypt(key, encrypted.ciphertext, encrypted.iv), message);
+  const plaintext = await webcrypto.subtle.decrypt({ name: "AES-GCM", iv: encrypted.iv }, rawKey, encrypted.ciphertext);
+  assert.deepEqual(JSON.parse(Buffer.from(plaintext).toString("utf8")), message);
   await assert.rejects(decrypt("AQEBAQEBAQEBAQEBAQEBAQ", encrypted.ciphertext, encrypted.iv));
 });
