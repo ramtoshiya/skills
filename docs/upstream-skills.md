@@ -70,6 +70,9 @@ output language, not the language of the instructions. Ordinary private chat,
 research, explanations, and read-only reviews do not invoke either unless also
 writing files, publishing, or explicitly humanizing text.
 
+Both humanizers are currently paused on Claude Code and installed only in
+Codex. [Setup](setup.md) describes the host selection.
+
 Its hook checks file writes, commits, pull requests, and Slack or Linear
 posts for AI-sounding wording. Findings are advisory warnings and do not block
 the call or override normal permissions. The fork runs the hook through

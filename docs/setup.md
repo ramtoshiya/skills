@@ -160,9 +160,10 @@ Agents:
 | `~/.local/bin/quotio-cli` | Copy of `setup/agents/quotio-cli`, an executable shell script that runs the command-line helper inside the [Quotio](https://github.com/nguyenphutrong/quotio) app from `/Applications`. The `lead` skill reads weekly quota through it. Setup does not install Quotio, and without it the script exits with an error |
 
 The managed plugin synchronization workflow reads host selections from
-`setup/agents/hosts.json`. Both humanizers are selected together on Claude Code
-and Codex so Korean delegation has an installed target. This policy file does
-not install plugins during `mise bootstrap`.
+`setup/agents/hosts.json`. Both humanizers are paused on Claude Code and
+selected together on Codex so Korean delegation has an installed target. Add
+`claude` back to both entries and run the sync to resume them. This policy file
+does not install plugins during `mise bootstrap`.
 
 The shared instructions distinguish missing configuration and invalid or incompatible
 tools from an absent installation. They direct agents to inspect documented trusted
