@@ -4,7 +4,7 @@
       "id": "package-check",
       "label": "Check packaged skill copies",
       "kind": "static",
-      "argv": ["uv", "run", "--offline", "--no-project", "--managed-python", "--python", ">=3.11", "--no-config", "--exclude-newer", "3 days", "python", "scripts/build_hermes_plugin.py", "--check"]
+      "argv": ["uv", "run", "--offline", "--no-project", "--managed-python", "--python", ">=3.11", "--no-config", "--exclude-newer", "3 days", "python", "scripts/check_package.py", "--check"]
     }
   ]
 }

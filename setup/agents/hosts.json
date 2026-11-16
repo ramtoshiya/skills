@@ -1,10 +1,10 @@
 {
-  "hosts": ["claude", "codex", "hermes"],
+  "hosts": ["claude", "codex"],
   "plugins": {
     "ramtoshiya-cc": ["claude"],
-    "humanize": ["codex", "hermes"],
-    "humanize-korean": ["codex", "hermes"],
-    "omd-kr-writer": ["claude", "codex", "hermes"],
+    "humanize": ["codex"],
+    "humanize-korean": ["codex"],
+    "omd-kr-writer": ["claude", "codex"],
     "omd": [],
     "open-pencil": ["claude", "codex"],
     "mattpocock-productivity": ["claude", "codex"],

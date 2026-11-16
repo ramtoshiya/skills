@@ -9,9 +9,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 SOURCE = Path(__file__).resolve().parents[3] / "setup/agents/sync.py"
 SPEC = importlib.util.spec_from_file_location("agent_sync", SOURCE)
@@ -38,14 +37,13 @@ class AgentSyncTests(unittest.TestCase):
         self.root = self.home / "repository"
         (self.root / ".claude-plugin").mkdir(parents=True)
         (self.root / "setup/agents").mkdir(parents=True)
-        shutil.copyfile(SOURCE.with_name("hermes-skills.py"), self.root / "setup/agents/hermes-skills.py")
         self.policy = self.root / "setup/agents/hosts.json"
         sync.write_json(self.policy, {"hosts": ["claude", "codex"], "plugins": {}})
         self.marketplace = self.root / ".claude-plugin/marketplace.json"
         commands = self.home / "bin"
         commands.mkdir()
         # These stubs keep a test that forgets fake_cli from reaching a real host command.
-        for host in ("claude", "codex", "hermes"):
+        for host in ("claude", "codex"):
             (commands / host).write_text("#!/bin/sh\nexit 99\n")
             (commands / host).chmod(0o755)
         self.environment = patch.dict(os.environ, {
@@ -54,7 +52,6 @@ class AgentSyncTests(unittest.TestCase):
             "HOME": str(self.home), "XDG_STATE_HOME": str(self.home / "state"),
             "CLAUDE_CONFIG_DIR": str(self.home / ".claude"),
             "CODEX_HOME": str(self.home / ".codex"),
-            "HERMES_HOME": str(self.home / ".hermes"),
         })
         self.environment.start()
         self.addCleanup(self.environment.stop)
@@ -322,209 +319,6 @@ class AgentSyncTests(unittest.TestCase):
         self.assertIn("symlinked", rows[0]["detail"])
         self.assertTrue(state.is_symlink())
         self.assertEqual(target.read_bytes(), before)
-
-    def fake_hermes(self):
-        flags = shlex.quote(str(self.home / "hermes-enabled"))
-        script = (
-            "#!/bin/sh\n"
-            f"printf '%s\\n' \"$*\" >> {shlex.quote(str(self.home / 'hermes.log'))}\n"
-            f"mkdir -p {flags}\n"
-            'case "$1 $2" in\n'
-            f"  'plugins list') printf '['; sep=''; for f in {flags}/*; do [ -e \"$f\" ] || continue; "
-            "printf '%s{\"name\":\"%s\",\"status\":\"enabled\"}' \"$sep\" \"$(basename \"$f\")\"; sep=','; done; printf ']\\n' ;;\n"
-            f"  'plugins enable') touch {flags}/\"$3\" ;;\n"
-            f"  'plugins disable') rm -f {flags}/\"$3\" ;;\n"
-            "  'plugins doctor') exit 0 ;;\n"
-            "  *) exit 98 ;;\n"
-            "esac\n"
-        )
-        (self.home / "bin/hermes").write_text(script)
-
-    def use_hermes(self):
-        sync.write_json(self.policy, {"hosts": ["hermes"], "plugins": {}})
-        self.fake_hermes()
-
-    def pin_upstream_file(self, relative, content):
-        target = self.upstream / "plugins/example" / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content)
-        revision = commit(self.upstream, "Add " + relative)
-        self.entry["source"]["sha"] = revision
-        self.set_entries([self.entry])
-        commit(self.root, "Approve " + relative)
-        return self.install_source(revision)
-
-    def register_installed_plugin(self, name):
-        spec = importlib.util.spec_from_file_location("installed_" + name, self.home / ".hermes/plugins" / name / "__init__.py")
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        context = SimpleNamespace(register_skill=Mock(), register_hook=Mock())
-        parser = SimpleNamespace(parse_frontmatter=lambda text: ({}, text))
-        with patch.dict(sys.modules, {"agent.skill_utils": parser}):
-            module.register(context)
-        return context
-
-    def test_native_hermes_plugin_is_linked_enabled_and_disabled_on_retirement(self):
-        native = self.root / "plugins/native"
-        (native / "skills/writing").mkdir(parents=True)
-        (native / "skills/writing/SKILL.md").write_text("native skill\n")
-        (native / "plugin.yaml").write_text("name: native\n")
-        sync.write_json(self.policy, {"hosts": ["hermes"], "plugins": {}})
-        self.set_entries([{"name": "native", "source": "./plugins/native"}])
-        commit(self.root, "Add native plugin")
-        self.fake_hermes()
-        _, rows = self.execute(True, "hermes")
-        self.assertEqual([row["status"] for row in rows], ["updated"], rows)
-        link = self.home / ".hermes/plugins/native"
-        self.assertEqual(link.resolve(), native.resolve())
-        self.assertEqual(self.changes("hermes"), [f"plugins doctor {link} --ci", "plugins enable native --no-allow-tool-override"])
-        _, rows = self.execute(True, "hermes")
-        self.assertEqual([row["status"] for row in rows], ["ok"], rows)
-        self.assertEqual(len(self.changes("hermes")), 2)
-        self.set_entries([])
-        commit(self.root, "Retire native plugin")
-        _, rows = self.execute(True, "hermes")
-        self.assertEqual([row["status"] for row in rows], ["updated"], rows)
-        self.assertEqual(self.changes("hermes")[-1], "plugins disable native")
-        self.assertTrue(link.is_symlink())
-
-    def test_retiring_a_generated_hermes_adapter_disables_it_and_keeps_its_files(self):
-        self.use_hermes()
-        _, rows = self.execute(True, "hermes")
-        self.assertEqual([row["status"] for row in rows], ["updated"], rows)
-        self.set_entries([])
-        commit(self.root, "Retire example")
-        operation, rows = self.execute(True, "hermes")
-        self.assertEqual([row["status"] for row in rows], ["updated"], rows)
-        self.assertEqual(self.changes("hermes")[-1], "plugins disable example")
-        self.assertTrue((self.home / ".hermes/plugins/example/plugin.yaml").is_file())
-        self.assertNotIn("hermes:example", sync.read_json(operation.state_path)["packages"])
-        calls = self.changes("hermes")
-        _, rows = self.execute(True, "hermes")
-        self.assertEqual(rows, [])
-        self.assertEqual(self.changes("hermes"), calls)
-
-    def test_retiring_an_already_disabled_generated_hermes_adapter_makes_no_disable_call(self):
-        self.use_hermes()
-        self.execute(True, "hermes")
-        (self.home / "hermes-enabled/example").unlink()
-        self.set_entries([])
-        commit(self.root, "Retire example")
-        operation, rows = self.execute(True, "hermes")
-        self.assertEqual([row["status"] for row in rows], ["updated"], rows)
-        self.assertNotIn("plugins disable example", self.changes("hermes"))
-        self.assertNotIn("hermes:example", sync.read_json(operation.state_path)["packages"])
-
-    def test_humanize_without_its_advisory_flag_is_not_reported_as_current(self):
-        self.entry["name"] = "humanize"
-        self.pin_upstream_file("hooks/hooks.json", '{"hooks":{"PreToolUse":[]}}')
-        self.use_hermes()
-        operation, rows = self.execute(True, "hermes")
-        self.assertEqual([row["status"] for row in rows], ["updated"], rows)
-        _, rows = self.execute(False, "hermes")
-        self.assertEqual([row["status"] for row in rows], ["ok"], rows)
-        plugin = self.home / ".hermes/plugins/humanize"
-        metadata = sync.read_json(plugin / "source.json")
-        del metadata["advisory_hooks"]
-        sync.write_json(plugin / "source.json", metadata)
-        operation.remember("hermes", "humanize", plugin, operation.sources.package(self.entry))
-        _, rows = self.execute(False, "hermes")
-        self.assertEqual([row["status"] for row in rows], ["drift"], rows)
-
-    def test_generated_hermes_adapters_follow_template_changes_but_preserve_local_edits(self):
-        self.fake_hermes()
-        operation = sync.Sync(self.root)
-        package = operation.sources.package(self.entry)
-        self.assertEqual(operation.hermes(self.entry, package, True)[0], "updated")
-        template = self.root / "setup/agents/hermes-skills.py"
-        template.write_text(template.read_text() + "\n# Updated registration adapter.\n")
-        operation = sync.Sync(self.root)
-        self.assertEqual(operation.hermes(self.entry, package, True)[0], "updated")
-        installed = self.home / ".hermes/plugins/example/__init__.py"
-        self.assertEqual(installed.read_bytes(), template.read_bytes())
-        before = installed.stat().st_mtime_ns
-        operation = sync.Sync(self.root)
-        self.assertEqual(operation.hermes(self.entry, package, True)[0], "ok")
-        self.assertEqual(installed.stat().st_mtime_ns, before)
-        installed.write_text("local adapter customization\n")
-        operation = sync.Sync(self.root)
-        with self.assertRaisesRegex(sync.Conflict, "Locally changed"):
-            operation.hermes(self.entry, package, True)
-        self.assertEqual(installed.read_text(), "local adapter customization\n")
-
-    def test_generated_hermes_adapter_registers_the_skills_of_the_pinned_checkout(self):
-        self.fake_hermes()
-        operation = sync.Sync(self.root)
-        package = operation.sources.package(self.entry)
-        self.assertEqual(operation.hermes(self.entry, package, True)[0], "updated")
-        self.assertNotIn("provides_hooks", (self.home / ".hermes/plugins/example/plugin.yaml").read_text())
-        context = self.register_installed_plugin("example")
-        context.register_skill.assert_called_once()
-        self.assertEqual(context.register_skill.call_args.args[:2], ("writing", self.source / "skills/writing/SKILL.md"))
-        context.register_hook.assert_not_called()
-
-    def test_generated_hermes_adapter_declares_and_registers_the_hooks_a_source_ships(self):
-        self.pin_upstream_file("hooks/hooks.json", '{"hooks":{"PreToolUse":[]}}')
-        self.fake_hermes()
-        operation = sync.Sync(self.root)
-        package = operation.sources.package(self.entry)
-        self.assertEqual(operation.hermes(self.entry, package, True)[0], "updated")
-        plugin = self.home / ".hermes/plugins/example"
-        self.assertIn("provides_hooks:\n  - pre_tool_call\n  - transform_tool_result\n", (plugin / "plugin.yaml").read_text())
-        self.assertIs(sync.read_json(plugin / "source.json")["advisory_hooks"], True)
-        context = self.register_installed_plugin("example")
-        self.assertEqual({call.args[0] for call in context.register_hook.call_args_list}, {"pre_tool_call", "transform_tool_result"})
-
-    def test_failed_link_replacement_restores_the_original_directory(self):
-        operation = sync.Sync(self.root)
-        plugin = self.home / ".hermes/plugins/example"
-        plugin.mkdir(parents=True)
-        (plugin / "original.txt").write_text("original plugin\n")
-        with patch.object(sync.os, "replace", side_effect=OSError("replacement failed")):
-            with self.assertRaisesRegex(OSError, "replacement failed"):
-                operation.install_link(plugin, self.upstream / "plugins/example")
-        self.assertEqual((plugin / "original.txt").read_text(), "original plugin\n")
-        self.assertFalse(plugin.is_symlink())
-        self.assertFalse(plugin.with_name("example.sync-link").is_symlink())
-
-    def test_leftover_staging_link_from_an_interrupted_install_is_replaced(self):
-        source = self.pin_upstream_file("plugin.yaml", "name: example\n")
-        self.use_hermes()
-        plugins = self.home / ".hermes/plugins"
-        plugins.mkdir(parents=True)
-        leftover = plugins / "example.sync-link"
-        leftover.symlink_to(self.source, target_is_directory=True)
-        _, rows = self.execute(True, "hermes")
-        self.assertEqual([row["status"] for row in rows], ["updated"], rows)
-        self.assertEqual((plugins / "example").resolve(), source.resolve())
-        self.assertFalse(leftover.is_symlink())
-
-    def test_staging_path_that_is_not_a_link_is_kept_and_reported_as_a_conflict(self):
-        self.pin_upstream_file("plugin.yaml", "name: example\n")
-        self.use_hermes()
-        notes = self.home / ".hermes/plugins/example.sync-link/notes.txt"
-        notes.parent.mkdir(parents=True)
-        notes.write_text("user data\n")
-        _, rows = self.execute(True, "hermes")
-        self.assertEqual([row["status"] for row in rows], ["conflict"], rows)
-        self.assertEqual(notes.read_text(), "user data\n")
-        self.assertFalse((self.home / ".hermes/plugins/example").exists())
-        self.assertEqual(self.changes("hermes"), [])
-
-    def test_managed_hermes_link_moved_to_another_checkout_is_reported_and_kept(self):
-        self.pin_upstream_file("plugin.yaml", "name: example\n")
-        self.use_hermes()
-        _, rows = self.execute(True, "hermes")
-        self.assertEqual([row["status"] for row in rows], ["updated"], rows)
-        link = self.home / ".hermes/plugins/example"
-        other = self.home / "other-checkout"
-        shutil.copytree(link.resolve(), other)
-        link.unlink()
-        link.symlink_to(other, target_is_directory=True)
-        _, rows = self.execute(True, "hermes")
-        self.assertEqual([row["status"] for row in rows], ["conflict"], rows)
-        self.assertIn("another checkout", rows[0]["detail"])
-        self.assertEqual(link.resolve(), other.resolve())
 
     def test_lock_rejects_concurrent_sync(self):
         first = sync.Sync(self.root)

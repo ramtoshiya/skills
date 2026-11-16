@@ -55,7 +55,7 @@ Configuration is version 1 JSON:
       "id": "package-check",
       "label": "Check the package",
       "kind": "static",
-      "argv": ["uv", "run", "--offline", "--no-project", "--managed-python", "--python", ">=3.11", "--no-config", "--exclude-newer", "3 days", "python", "scripts/build_hermes_plugin.py", "--check"]
+      "argv": ["uv", "run", "--offline", "--no-project", "--managed-python", "--python", ">=3.11", "--no-config", "--exclude-newer", "3 days", "python", "scripts/check_package.py", "--check"]
     }]
   }],
   "install_targets": [{
@@ -69,7 +69,7 @@ Configuration is version 1 JSON:
 }
 ```
 
-The example test is the known package check for a fork containing that script.
+The example test runs a package check script that the fork ships itself.
 Register it only for a source that contains the script. A copy is in
 [registered-tests.json](templates/registered-tests.json). Register only
 commands you have inspected. The tool never discovers test suites. In

@@ -1,10 +1,9 @@
 # Agent plugins
 
-This repository has two plugins. `ramtoshiya` works in Claude Code, Codex, and
-Hermes Agent. `ramtoshiya-cc` works only in Claude Code. Claude Code and Codex
-install both from the marketplace file `.claude-plugin/marketplace.json`, which
-also lists the [third-party skills](upstream-skills.md). Hermes loads
-`ramtoshiya` as a native plugin from a local clone.
+This repository has two plugins. `ramtoshiya` works in Claude Code and Codex.
+`ramtoshiya-cc` works only in Claude Code. Both agents install them from the
+marketplace file `.claude-plugin/marketplace.json`, which also lists the
+[third-party skills](upstream-skills.md).
 
 ## What the plugins contain
 
@@ -46,7 +45,6 @@ instructions, not automatic hook enforcement.
   shell command.
 - A Git hygiene check for the moment the agent is about to stop. It ships
   unregistered, so no agent runs it until you add it to `hooks/hooks.json`.
-  Hermes has no registration for it.
 
 `ramtoshiya-cc` contains:
 
@@ -163,14 +161,13 @@ A project's own config file can set them too. The
 [machine setup](setup.md) writes the npm, pnpm, and uv settings.
 
 The plugins have no third-party runtime dependencies. Tested with Claude Code
-2.1.301, Codex CLI 0.162.1, and Hermes Agent 0.22.5.
+2.1.301 and Codex CLI 0.162.1.
 
 ## Install
 
 Install the agents themselves from their own instructions:
-[Claude Code](https://code.claude.com/docs/en/setup),
-[Codex CLI](https://github.com/openai/codex), and
-[Hermes Agent](https://hermes-agent.nousresearch.com/docs/getting-started/installation).
+[Claude Code](https://code.claude.com/docs/en/setup) and
+[Codex CLI](https://github.com/openai/codex).
 
 Claude Code:
 
@@ -192,41 +189,11 @@ trust the `ramtoshiya` `PreToolUse` and `PostToolUse` hooks. Installing or enabl
 plugin does not trust them. Codex can see `ramtoshiya-cc` in the marketplace, but
 it does not work there, so do not install it.
 
-Hermes, from the root of a local clone:
-
-```sh
-mkdir -p ~/.hermes/plugins
-ln -s "$PWD/plugins/ramtoshiya" ~/.hermes/plugins/ramtoshiya
-hermes plugins doctor ~/.hermes/plugins/ramtoshiya --ci
-hermes plugins enable ramtoshiya
-```
-
-Use an unused destination for the link. Hermes reads
-`plugins/ramtoshiya/plugin.yaml` and `plugins/ramtoshiya/__init__.py` through its
-[plugin API](https://hermes-agent.nousresearch.com/docs/developer-guide/plugins).
-The adapter does the following:
-
-- Registers every skill in `plugins/ramtoshiya/skills/` as `ramtoshiya:<name>`.
-  Hermes has no setting that limits a skill to explicit use, so
-  `reorganize-commits` is offered to the model like the others. The
-  [machine setup](setup.md) disables it in Hermes.
-- Runs the package and Python guard before each `terminal` tool call.
-- Adds `$HERMES_HOME/AGENTS.md`, or `~/.hermes/AGENTS.md` by default, to new
-  sessions as a system prompt section of up to 4,000 characters, when that file
-  exists. Hermes does not load this global `AGENTS.md` on its own. The optional
-  [machine setup](setup.md) writes it.
-
-Hermes does not read the marketplace file, so this command installs neither
-`ramtoshiya-cc` nor the third-party skills. `mise run agents:sync`, described
-below, installs the third-party entries selected for Hermes.
-
 To install Claude Code or Codex from a local clone instead, use its path in
 place of `ramtoshiya/skills`. Claude Code then loads the plugin from the
 checkout, so edits apply after a reload.
 
 Restart the agent after installing, or run `/reload-plugins` in Claude Code.
-Hermes reads the plugin and its preferences file only at startup, so restart
-it after changing either.
 
 For a local review of third-party updates before changing pins, see
 [Plugin update review](../tools/plugin-update-review/README.md). Its
@@ -247,7 +214,7 @@ mise run agents:sync
 commands may refresh their own metadata caches. The task exits nonzero for
 missing packages, outdated contents, settings drift, or conflicts. `sync`
 reconciles packages for supported agent executables on `PATH`, skipping agents
-that are not installed. Use `--host claude`, `--host codex`, or `--host hermes`
+that are not installed. Use `--host claude` or `--host codex`
 to restrict either task. Repeat `--plugin NAME` to limit installation and
 retirement to named packages, leaving other managed registrations and user
 settings alone. Unknown names are errors. `--json` prints the results as JSON.
@@ -273,10 +240,10 @@ selects the hosts for each entry:
 
 | Entry | Hosts |
 | --- | --- |
-| `ramtoshiya` | Claude Code, Codex, Hermes |
+| `ramtoshiya` | Claude Code, Codex |
 | `ramtoshiya-cc` | Claude Code |
-| `omd-kr-writer` | Claude Code, Codex, Hermes |
-| `humanize`, `humanize-korean` | Codex, Hermes |
+| `omd-kr-writer` | Claude Code, Codex |
+| `humanize`, `humanize-korean` | Codex |
 | `open-pencil`, `mattpocock-productivity`, `fcakyon-test-audit`, `ouroboros-interview` | Claude Code, Codex |
 | `omd` | None |
 
@@ -292,21 +259,6 @@ present, is its effective installation, even if an older cache still exists.
 Native installer results are checked against the approved source files.
 Same-version cache problems are reported, never repaired with cache edits.
 
-Hermes has no marketplace command, so sync manages `~/.hermes/plugins/<name>`
-directly. A package whose source folder has a Hermes `plugin.yaml`, such as
-`ramtoshiya` and `humanize-korean`, is linked there. Sync creates a thin adapter
-directory for any other pinned entry. The adapter holds a `plugin.yaml`, an
-`__init__.py` copied from `setup/agents/hermes-skills.py`, and a `source.json`
-that names the pinned checkout. It registers the pinned skills from that
-checkout without copying upstream files. For `humanize`, the adapter also runs
-the pinned advisory hook before each matching tool call and appends any warning
-to the tool result. It never blocks the call. Sync then runs
-`hermes plugins doctor --ci` on the directory and
-`hermes plugins enable <name> --no-allow-tool-override`.
-
-An adapter directory that sync did not create has `"managed_adapter": false` in
-its `source.json`. Sync keeps its files and updates only `source.json`.
-
 Sync records owned paths and file fingerprints under
 `$XDG_STATE_HOME/ramtoshiya-agents`, or `~/.local/state/ramtoshiya-agents`.
 Third-party sources are fetched at the approved commit into that state
@@ -321,12 +273,11 @@ produce a conflict.
 
 Removing a declared package retires only its recorded registrations. Claude and
 Codex use their uninstall commands, with Claude persistent data retained.
-For Hermes, sync disables the plugin and keeps its directory. Downloaded
-source checkouts are retained.
+Downloaded source checkouts are retained.
 
 Sync does not upgrade upstream pins, install agent executables or skill CLIs,
 apply other dotfiles, grant hook trust, or restart running sessions. Review
-Codex hooks in `/hooks` and restart Claude Code and Hermes after changes.
+Codex hooks in `/hooks` and restart Claude Code after changes.
 Finish active Codex turns before installation and coordinate any shared-server
 restart as described below. The status table verifies installed files and
 configuration, not what an existing session has loaded.
@@ -338,8 +289,6 @@ In each agent, ask it to run these commands:
 1. `git status` runs normally.
 2. `pip --version` is blocked with a message that points to uv or a virtual
    environment's pip.
-
-In Hermes, `hermes plugins list` shows whether `ramtoshiya` is enabled.
 
 In Claude Code, `/plugin` lists the installed plugins. Each skill should appear
 once in the agent's skill list. A loose copy of the same skill, for example in
@@ -362,7 +311,6 @@ marketplace repository as a new version.
 | --- | --- |
 | Claude Code | `claude plugin marketplace update ramtoshiya`, then `claude plugin update ramtoshiya@ramtoshiya` (and `ramtoshiya-cc@ramtoshiya`) and a restart |
 | Codex | Follow the source refresh, installation, and restart steps below. Changed hooks need your trust again in `/hooks` |
-| Hermes | Update the linked checkout, run `hermes plugins doctor ~/.hermes/plugins/ramtoshiya --ci`, then restart Hermes |
 
 Refreshing Codex's installed plugin does not reload active sessions. Use a fresh
 process to load the changed skills. If a session reports a missing plugin file
@@ -396,14 +344,8 @@ plugins/ramtoshiya/hooks/global-package-guard.py   Package and Python rules
 plugins/ramtoshiya/hooks/python-module-hint.py     uv hint after a failed import
 plugins/ramtoshiya/hooks/git-hygiene-guard.py      Stop check, not registered
 plugins/ramtoshiya/hooks/hooks.json            Hook registration for Claude Code and Codex
-plugins/ramtoshiya/plugin.yaml                 Hermes native plugin manifest
-plugins/ramtoshiya/__init__.py                 Hermes skills, preferences, and guard adapter
 plugins/ramtoshiya-cc/                         Claude Code-only skills and hooks
-setup/agents/hermes-skills.py                  Template for Hermes adapters of third-party entries
 ```
 
 The rules live only in the guard scripts. `hooks.json` registers them for
-Claude Code and Codex. The Hermes adapter passes each `terminal` call to the
-package guard and its result to the Python module hint, and translates the
-answers. It registers every skill under
-`skills/` with the description and frontmatter from its `SKILL.md`.
+Claude Code and Codex.

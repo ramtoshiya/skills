@@ -1,7 +1,7 @@
 # Hooks
 
 The plugins add five hooks. Two come with `ramtoshiya` and run in Claude
-Code, Codex, and Hermes Agent. Three come with `ramtoshiya-cc` and run only in
+Code and Codex. Three come with `ramtoshiya-cc` and run only in
 Claude Code. The `ramtoshiya` plugin also ships a Git hygiene check that is not
 registered, so no agent runs it.
 
@@ -13,10 +13,7 @@ registered, so no agent runs it.
 | Context budget | After each tool call, on each prompt, and after a compaction | `ramtoshiya-cc` |
 
 Each hook is a Python script that uses only the standard library. Claude Code
-and Codex run it through `hooks/hooks.json`. Hermes runs the package and Python
-guard and the Python module hint through the native plugin adapter
-`plugins/ramtoshiya/__init__.py`. Every
-hook runs as:
+and Codex run it through `hooks/hooks.json`. Every hook runs as:
 
 ```sh
 uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python <hook>
@@ -124,16 +121,7 @@ splits command sequences, follows `sh -c` and similar wrappers, and skips
 heredoc bodies. A denial reaches the agent as the hook's reason.
 
 When the guard cannot run, Claude Code and Codex apply their own rules for a
-failing hook process. The Hermes adapter blocks the command if uv fails, the
-guard takes longer than five seconds, or its output cannot be read.
-
-In Hermes, the guard sees `terminal` tool calls. It checks the call's
-`workdir` when supplied, otherwise `TERMINAL_CWD` or the Hermes process's
-working directory. It does not track a `cd` that persists between calls. The
-guard inspects the local filesystem, so use it with Hermes's local terminal
-backend. It does not inspect package settings inside a remote or container
-backend, input sent to a running process, or processes that another plugin
-starts directly.
+failing hook process.
 
 ## Python module hint
 
@@ -148,16 +136,13 @@ to `--offline` for versions already in uv's cache. The package and Python
 guard still checks the rerun.
 
 Claude Code and Codex receive the hint as added context for the `Bash` tool
-call. Hermes appends it to the `terminal` result. The hint never blocks a
-command, and any error adds nothing. Output that only mentions the error, for
+call. The hint never blocks a command, and any error adds nothing. Output that only mentions the error, for
 example a log being read, also gets the hint.
 
 ## Git hygiene check
 
 `plugins/ramtoshiya/hooks/git-hygiene-guard.py` is not registered in
 `plugins/ramtoshiya/hooks/hooks.json`, so Claude Code and Codex do not run it.
-The Hermes adapter does not register it either, and no setting turns it on for
-Hermes.
 It is off to see whether agents leave uncommitted work behind without it. To
 turn it on, add this entry under `"hooks"` in that file, then follow the update
 steps in [Agent plugins](agent-pack.md). Codex asks you to trust the new `Stop`
@@ -274,7 +259,4 @@ Limits:
 `dev/tests/plugins/test_global_package_guard.py`, `dev/tests/plugins/test_python_module_hint.py`,
 `dev/tests/plugins/test_git_hygiene_guard.py`,
 `dev/tests/plugins/test_commit_trailer_guard.py`, and `dev/tests/plugins/test_context_budget.py`
-cover the rules. `dev/tests/plugins/test_hermes_adapter.py` covers the Hermes
-adapter's skill registration, its translation of the guard's answer, and its
-failure handling. Run them with `npm test`. `hermes plugins doctor` checks the
-registration against an installed Hermes.
+cover the rules. Run them with `npm test`.

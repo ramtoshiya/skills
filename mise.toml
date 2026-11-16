@@ -51,8 +51,6 @@ zsh = true
 
 # Agents
 "~/.codex/AGENTS.md" = { source = "setup/agents/preferences.md", mode = "copy" }
-"~/.hermes/AGENTS.md" = { source = "setup/agents/hermes-preferences.md", mode = "copy" }
-"~/.hermes/config.yaml/preferences" = { source = "setup/agents/hermes-config.yaml", merge = true }
 "~/.claude/status-line.sh" = { source = "setup/agents/claude-statusline.sh", mode = "copy" }
 "~/.local/bin/claude-review" = { source = "setup/agents/claude-review", mode = "copy" }
 "~/.local/share/claude-review/claude-review.py" = { source = "setup/agents/claude-review.py", mode = "copy" }

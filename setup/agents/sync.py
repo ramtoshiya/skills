@@ -449,7 +449,6 @@ class Sync:
         self.homes = {
             "claude": Path(os.environ.get("CLAUDE_CONFIG_DIR", home / ".claude")),
             "codex": Path(os.environ.get("CODEX_HOME", home / ".codex")),
-            "hermes": Path(os.environ.get("HERMES_HOME", home / ".hermes")),
         }
         self.state_dir = Path(os.environ.get("XDG_STATE_HOME", home / ".local/state")) / "ramtoshiya-agents"
         self.state_path = self.state_dir / "state.json"
@@ -462,7 +461,6 @@ class Sync:
             self.policy = read_json(root / "setup/agents/hosts.json")
             self.sources = Sources(root, self.state_dir)
         self.results = []
-        self.hermes_inventory = None
 
     def record(self, host, name, status, detail):
         self.results.append({"host": host, "component": name, "status": status, "detail": detail})
@@ -596,95 +594,6 @@ class Sync:
             detail += ". Review hook trust in /hooks (never granted by sync)"
         return "updated" if changed else "ok", detail
 
-    def hermes_enabled(self):
-        if self.hermes_inventory is None:
-            self.hermes_inventory = json.loads(run("hermes", "plugins", "list", "--user", "--json"))
-        return [row["name"] for row in self.hermes_inventory if row["status"] == "enabled"]
-
-    def install_link(self, path, target):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        staging = path.with_name(path.name + ".sync-link")
-        if staging.is_symlink():
-            staging.unlink()
-        elif staging.exists():
-            raise Conflict(f"Unexpected staging path: {staging}")
-        staging.symlink_to(target, target_is_directory=True)
-        backup = None
-        try:
-            if path.exists() and not path.is_symlink():
-                backups = self.state_dir / "backups"
-                backups.mkdir(parents=True, exist_ok=True)
-                backup = Path(tempfile.mkdtemp(prefix=path.name + "-", dir=backups)) / path.name
-                path.rename(backup)
-            os.replace(staging, path)
-        except OSError:
-            if backup is not None and backup.exists() and not path.exists():
-                backup.rename(path)
-            raise
-        finally:
-            if staging.is_symlink():
-                staging.unlink()
-
-    def hermes(self, entry, package, apply):
-        host = "hermes"
-        name = entry["name"]
-        path = self.homes[host] / "plugins" / name
-        enabled = name in self.hermes_enabled()
-        if (package.root / "plugin.yaml").exists():
-            if path.is_symlink() and not path.exists():
-                raise Conflict(f"Broken plugin link: {path}")
-            if path.is_symlink() and path.resolve() != package.root.resolve() and not path.resolve().is_relative_to(self.sources.directory.resolve()):
-                raise Conflict(f"Plugin link points to another checkout: {path}")
-            if path.exists() and path.resolve() != package.root.resolve():
-                self.adopt_native(host, entry, path, package, None, apply)
-            matches = path.exists() and files(path) == package.expected
-            if apply and not matches:
-                self.install_link(path, package.root)
-        else:
-            metadata_path = path / "source.json"
-            metadata = read_json(metadata_path)
-            managed_adapter = metadata.get("managed_adapter", False) if metadata else True
-            template = (self.root / "setup/agents/hermes-skills.py").read_bytes()
-            advisory = (package.root / "hooks/hooks.json").is_file()
-            manifest = f"name: {name}\ndescription: Skills from the pinned marketplace source\n"
-            if advisory:
-                manifest += "provides_hooks:\n  - pre_tool_call\n  - transform_tool_result\n"
-            desired = {
-                "source": "git-subdir", **entry["source"],
-                "checkout": str(package.repository), "root": str(package.root),
-                "skills": [str(p.relative_to(package.root)) for p in package.skills()],
-                "advisory_hooks": advisory, "managed_adapter": managed_adapter,
-            }
-            if path.exists():
-                self.check_owned(host, name, path)
-                if not metadata or metadata.get("url") != entry["source"]["url"] or metadata.get("path") != entry["source"]["path"]:
-                    raise Conflict(f"Unrecognized Hermes wrapper: {path}")
-                self.sources.referenced(entry, Path(metadata["checkout"]), metadata["sha"])
-            matches = metadata is not None and all(metadata.get(k) == desired[k] for k in ["sha", "checkout", "root", "skills", "advisory_hooks", "managed_adapter"])
-            if managed_adapter and path.exists():
-                template_matches = (path / "__init__.py").read_bytes() == template and (path / "plugin.yaml").read_text() == manifest
-                if not template_matches and not self.owned(host, name):
-                    raise Conflict(f"Unrecognized generated Hermes adapter: {path}")
-                matches = matches and template_matches
-            if apply and not matches:
-                path.mkdir(parents=True, exist_ok=True)
-                if managed_adapter:
-                    (path / "plugin.yaml").write_text(manifest)
-                    (path / "__init__.py").write_bytes(template)
-                write_json(metadata_path, desired)
-        changed = not matches or not enabled
-        if not apply:
-            return ("ok", package.ref[:12]) if not changed else ("drift", "missing, disabled, or outdated plugin")
-        if changed or not self.owned(host, name):
-            run("hermes", "plugins", "doctor", str(path), "--ci")
-            if not enabled:
-                run("hermes", "plugins", "enable", name, "--no-allow-tool-override")
-                self.hermes_inventory = None
-                if name not in self.hermes_enabled():
-                    raise Conflict(f"Hermes did not enable {name}")
-        self.remember(host, name, path, package)
-        return "updated" if changed else "ok", "restart Hermes" if changed else package.ref[:12]
-
     def retire(self, host, names, apply, selected=None):
         retiring = {
             key for key in self.state["packages"]
@@ -703,10 +612,8 @@ class Sync:
                     continue
                 if host == "claude":
                     run(host, "plugin", "uninstall", name + "@" + self.marketplace["name"], "--scope", "user", "--keep-data")
-                elif host == "codex":
+                else:
                     run(host, "plugin", "remove", name + "@" + self.marketplace["name"])
-                elif name in self.hermes_enabled():
-                    run("hermes", "plugins", "disable", name)
                 del self.state["packages"][key]
                 self.save()
                 self.record(host, name, "updated", "retired managed registration, source checkouts retained")
@@ -725,8 +632,7 @@ class Sync:
                 self.record(host, "host", "absent", "executable not on PATH")
                 continue
             try:
-                if host != "hermes":
-                    self.marketplace_setup(host, apply)
+                self.marketplace_setup(host, apply)
             except ERRORS as error:
                 self.record(host, "marketplace", "conflict", str(error))
                 continue
@@ -743,10 +649,7 @@ class Sync:
                 try:
                     package = self.sources.package(entry, fetch=apply)
                     package.check()
-                    if host == "hermes":
-                        status, detail = self.hermes(entry, package, apply)
-                    else:
-                        status, detail = self.native(host, entry, package, apply)
+                    status, detail = self.native(host, entry, package, apply)
                     self.record(host, name, status, detail)
                 except ERRORS as error:
                     self.record(host, name, "conflict", str(error))
@@ -769,7 +672,7 @@ class Sync:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["status", "sync"])
-    parser.add_argument("--host", action="append", choices=["claude", "codex", "hermes"])
+    parser.add_argument("--host", action="append", choices=["claude", "codex"])
     parser.add_argument("--plugin", action="append", help="check or sync only this plugin (repeatable)")
     parser.add_argument("--settings-only", action="store_true", help="check or sync registered Claude settings and instructions only")
     parser.add_argument("--json", action="store_true", help="print machine-readable results")

@@ -1,5 +1,0 @@
-name: ramtoshiya
-description: Shared coding skills, the package and Python guard, and the Python module hint
-provides_hooks:
-  - pre_tool_call
-  - transform_tool_result
