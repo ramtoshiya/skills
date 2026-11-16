@@ -1,5 +1,3 @@
-"""Register selected skills from a pinned checkout without copying upstream files."""
-
 import json
 import os
 from pathlib import Path
@@ -37,13 +35,12 @@ def tool_payloads(tool_name, args, cwd):
 
 
 def advisory_hooks(context, source):
-    """Translate the pinned Humanize PreToolUse advisory, without changing its rules."""
     root = Path(source["root"])
     hooks = json.loads((root / "hooks/hooks.json").read_text())["hooks"]
     if set(hooks) != {"PreToolUse"}:
         raise ValueError("Unsupported advisory hook events")
 
-    def before(tool_name, args, **ids):
+    def advisory_warnings_or_empty_on_failure(tool_name, args):
         warnings = []
         try:
             cwd = args.get("workdir") or os.environ.get("TERMINAL_CWD") or os.getcwd()
@@ -65,8 +62,11 @@ def advisory_hooks(context, source):
                         if isinstance(warning, str) and warning.strip():
                             warnings.append(warning)
         except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
-            # Humanize is advisory. Its failure must not block the user's tool.
-            pass
+            return []
+        return warnings
+
+    def before(tool_name, args, **ids):
+        warnings = advisory_warnings_or_empty_on_failure(tool_name, args)
         with LOCK:
             key = call_key(tool_name, args, ids)
             PENDING.pop(key, None)

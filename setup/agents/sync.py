@@ -598,21 +598,16 @@ class Sync:
 
     def hermes_enabled(self):
         if self.hermes_inventory is None:
-            output = run("hermes", "plugins", "list", "--user", "--json")
-            try:
-                self.hermes_inventory = json.loads(output)
-            except ValueError:
-                # Hermes prints a human message instead of JSON for an empty inventory.
-                if any((self.homes["hermes"] / "plugins").glob("*/plugin.yaml")):
-                    raise Conflict("Hermes returned an invalid plugin inventory")
-                self.hermes_inventory = []
+            self.hermes_inventory = json.loads(run("hermes", "plugins", "list", "--user", "--json"))
         return [row["name"] for row in self.hermes_inventory if row["status"] == "enabled"]
 
     def install_link(self, path, target):
         path.parent.mkdir(parents=True, exist_ok=True)
         staging = path.with_name(path.name + ".sync-link")
-        if staging.exists() or staging.is_symlink():
-            raise Conflict(f"Unexpected staging link: {staging}")
+        if staging.is_symlink():
+            staging.unlink()
+        elif staging.exists():
+            raise Conflict(f"Unexpected staging path: {staging}")
         staging.symlink_to(target, target_is_directory=True)
         backup = None
         try:
@@ -638,6 +633,8 @@ class Sync:
         if (package.root / "plugin.yaml").exists():
             if path.is_symlink() and not path.exists():
                 raise Conflict(f"Broken plugin link: {path}")
+            if path.is_symlink() and path.resolve() != package.root.resolve() and not path.resolve().is_relative_to(self.sources.directory.resolve()):
+                raise Conflict(f"Plugin link points to another checkout: {path}")
             if path.exists() and path.resolve() != package.root.resolve():
                 self.adopt_native(host, entry, path, package, None, apply)
             matches = path.exists() and files(path) == package.expected
@@ -648,24 +645,22 @@ class Sync:
             metadata = read_json(metadata_path)
             managed_adapter = metadata.get("managed_adapter", False) if metadata else True
             template = (self.root / "setup/agents/hermes-skills.py").read_bytes()
+            advisory = (package.root / "hooks/hooks.json").is_file()
             manifest = f"name: {name}\ndescription: Skills from the pinned marketplace source\n"
-            if name == "humanize":
+            if advisory:
                 manifest += "provides_hooks:\n  - pre_tool_call\n  - transform_tool_result\n"
             desired = {
                 "source": "git-subdir", **entry["source"],
                 "checkout": str(package.repository), "root": str(package.root),
                 "skills": [str(p.relative_to(package.root)) for p in package.skills()],
-                "advisory_hooks": name == "humanize", "managed_adapter": managed_adapter,
+                "advisory_hooks": advisory, "managed_adapter": managed_adapter,
             }
             if path.exists():
                 self.check_owned(host, name, path)
                 if not metadata or metadata.get("url") != entry["source"]["url"] or metadata.get("path") != entry["source"]["path"]:
                     raise Conflict(f"Unrecognized Hermes wrapper: {path}")
-                checkout = Path(metadata["root"])
-                for _ in relative_path(entry["source"]["path"]).parts:
-                    checkout = checkout.parent
-                self.sources.referenced(entry, checkout, metadata["sha"])
-            matches = metadata is not None and all(metadata.get(k) == desired[k] for k in ["sha", "root", "skills", "advisory_hooks", "managed_adapter"])
+                self.sources.referenced(entry, Path(metadata["checkout"]), metadata["sha"])
+            matches = metadata is not None and all(metadata.get(k) == desired[k] for k in ["sha", "checkout", "root", "skills", "advisory_hooks", "managed_adapter"])
             if managed_adapter and path.exists():
                 template_matches = (path / "__init__.py").read_bytes() == template and (path / "plugin.yaml").read_text() == manifest
                 if not template_matches and not self.owned(host, name):
