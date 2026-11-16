@@ -404,6 +404,68 @@ against the clock of the session that started them. A hook that fails prints one
 line to stderr and lets the call go ahead. Each clock is a file under
 `claude-review/` in the system temporary directory.
 
+## Hermes operator profile
+
+`mise run hermes:operator` sets up a [Hermes Agent](https://github.com/NousResearch/hermes-agent)
+profile named `operator` for conversation only. You talk to it in a bb thread
+with the `acp-hermes-agent` provider. It remembers, discusses, and writes
+briefs. Every implementation task and every skill change goes to a coding
+agent as a bb draft thread, which you approve by sending it and reject by
+deleting it. `mise bootstrap` does not run this task.
+
+It needs:
+
+- Hermes Agent with its `hermes` command on `PATH`.
+- A Git checkout that contains `plugins/pstack-mode/mode.md` and
+  `plugins/pstack-mode/skills/`, at `~/workspaces/pstack-mode` by default. Pass
+  another path with `mise run hermes:operator -- --pstack <path>`. Workers read
+  its `mode.md`, and the profile gets seven of its skills.
+- bb with the [held-drafts](../bb-plugins/held-drafts/README.md) plugin, which
+  provides `bb draft create`.
+
+The task creates the profile with `hermes profile create operator --no-skills`
+if it is missing and makes it the default with `hermes profile use operator`.
+bb starts Hermes without `HERMES_HOME`, so bb threads use the default profile.
+Then it changes these files under `~/.hermes/profiles/operator/`:
+
+| Target | Change |
+| --- | --- |
+| `SOUL.md` | A block from `setup/hermes/soul-operator.md` between `<!-- BEGIN ramtoshiya:operator -->` and `<!-- END ramtoshiya:operator -->`, after the Hermes default text |
+| `skills/` | Copies of the pstack skills `in-your-own-words`, `why`, `how`, `interrogate`, `statechart`, `technical-writing`, and `unslop` (files Git tracks only), and of `setup/hermes/skills/operator-handoff`, with this machine's paths filled in |
+| `plugins/skill-drafts/` | A copy of `setup/hermes/plugins/skill-drafts` and a `sources.json` that maps each skill to the checkout it came from |
+| `config.yaml` | The settings below, and the `skill-drafts` plugin enabled |
+
+| Setting | Value | Effect |
+| --- | --- | --- |
+| `agent.disabled_toolsets` | `["file", "code_execution"]` | No file reading or writing tools and no code execution. The terminal stays on for `bb` |
+| `skills.auto_load` | `["operator-handoff"]` | The handoff procedure is in every session |
+| `skills.project_discovery` | `false` | Skills in the thread's working directory are not loaded |
+| `curator.enabled` | `false` | Hermes does not archive or merge skills on its own |
+| `memory.write_approval` | `false` | Hermes writes its built-in memory without asking. Memory limits stay at the defaults |
+
+Running the task again replaces the copies it manages and leaves memories,
+sessions, credentials, and other settings alone. It reports any other skill it
+finds in the profile and leaves it in place.
+
+### How a change reaches a skill
+
+The installed skills are copies, so a local edit would drift from its source.
+The `skill-drafts` plugin blocks every `skill_manage` call, including the
+background self-review's, and creates a held draft instead. The draft's brief
+names the owning repository, the raw arguments, a diff against the installed
+copy, the Hermes session to read for the reason, and the authority to commit,
+push, and reinstall. A worker started by sending the draft makes the change at
+the source, then runs `mise run hermes:operator` to refresh the copies. When
+the plugin cannot create the draft, it still blocks the call and tells Hermes
+why.
+
+For other work, the `operator-handoff` skill tells Hermes how to write a brief
+and create the draft. Drafts are held while the held-drafts plugin's `mode`
+setting is `draft`. Setting it to `direct` sends new drafts immediately.
+
+The terminal can still edit files, so keeping Hermes to conversation relies on
+`SOUL.md` and the skill.
+
 ## How mise applies each entry
 
 In `mise.toml`, the key of a block, line, or merge entry is the target path

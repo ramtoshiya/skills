@@ -1,0 +1,5 @@
+name: skill-drafts
+version: "0.1.0"
+description: "Blocks every skill_manage call and turns it into a bb draft thread for a coding agent, so skill changes are made in the repository that owns the skill after the user sends the draft."
+provides_hooks:
+  - pre_tool_call

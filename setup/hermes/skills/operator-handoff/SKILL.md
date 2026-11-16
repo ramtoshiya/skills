@@ -1,0 +1,69 @@
+---
+name: operator-handoff
+description: Hand implementation work or a skill change to a coding agent as a bb draft thread that the user approves by sending. Use whenever the user wants something built, fixed, changed, or committed, or when a skill should change.
+---
+
+# Operator handoff {:#operator-handoff}
+
+You do not implement. Every implementation task and every skill change goes to
+a coding agent as a bb draft: a thread whose first message waits until the user
+sends it. Sending is the approval. Deleting the thread is the rejection.
+
+## Write the brief {:#brief}
+
+The worker sees only the brief, so it must stand on its own. Write it in
+English and include, in this order:
+
+1. This opening line, verbatim:
+   `Read {{MODE_MD}} and follow it for this task.`
+2. Goal: the outcome the user wants, in one or two sentences.
+3. Context: what the user said, what you know from memory or earlier sessions,
+   and the files, threads, or links involved. Quote the user where wording
+   matters.
+4. Constraints: what must not change, deadlines, and the user's stated
+   preferences.
+5. Expected result: what done looks like and how the worker proves it.
+6. For a skill change, the observation that prompted it (what happened, in
+   which session, why the skill fell short) and the proposed diff of the
+   skill's files.
+7. This authority paragraph, verbatim:
+
+   > Sending this draft is the user's approval. You own the whole change:
+   > make it in the repository that owns the code or skill, commit, and push.
+   > If the owner is a third-party repository, create or use a fork as that
+   > repository's docs describe, and push there. If the change touches a skill
+   > installed in the Hermes operator profile, reinstall the profile's copies
+   > afterwards by running `mise run hermes:operator` in `{{SKILLS_REPO}}`.
+   > Report what you changed, the commits, and anything left undone.
+
+## Create the draft {:#create}
+
+Find the project that owns the work with `bb projects list --json`. Match the
+project's `sources[].path` to the repository. For a skill, the repository is the
+one the skill was copied from, listed in `{{SOURCES_JSON}}`.
+
+```sh
+bb draft create --json --project <project-id> --new-environment worktree \
+  --provider claude-code --title "<short title>" --prompt "$(cat <<'EOF'
+<the complete brief>
+EOF
+)"
+```
+
+- Use `--provider codex` when the user asks for Codex. Omit `--model` unless
+  the user names one.
+- The output is `{"threadId": "...", "held": true|false}`. Tell the user
+  `@thread:<threadId>` and that sending it is the approval. `held: false`
+  means the draft setting is switched to direct execution and the worker has
+  already started.
+- If `bb` fails, show the user the error and stop. Do not work around it.
+
+## Never {:#never}
+
+- Never call `skill_manage`. A plugin turns every call into a draft built from
+  the raw arguments, without your observation. Write the brief yourself
+  instead.
+- Never send a draft (`bb thread queue send`) and never change the held-drafts
+  plugin's `mode` setting. Approval belongs to the user.
+- Never edit files, commit, or push through the terminal. Use the terminal for
+  `bb` and for reading.
