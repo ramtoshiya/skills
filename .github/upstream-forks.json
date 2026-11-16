@@ -28,5 +28,11 @@
     "branch": "main",
     "upstream": "kwakseongjae/oh-my-design",
     "upstreamBranch": "main"
+  },
+  {
+    "fork": "ramtoshiya/pstack-mode",
+    "branch": "main",
+    "upstream": "backnotprop/pstack",
+    "upstreamBranch": "main"
   }
 ]

@@ -248,7 +248,7 @@ selects the hosts for each entry:
 | `ramtoshiya-cc` | Claude Code |
 | `omd-kr-writer` | Claude Code, Codex |
 | `humanize`, `humanize-korean` | Codex |
-| `open-pencil`, `mattpocock-productivity`, `fcakyon-test-audit`, `ouroboros-interview` | Claude Code, Codex |
+| `open-pencil`, `mattpocock-productivity`, `fcakyon-test-audit`, `ouroboros-interview`, `pstack-mode` | Claude Code, Codex |
 | `omd` | None |
 
 Full `omd` is excluded from user-level sync and installed only in explicitly

@@ -9,6 +9,7 @@
     "open-pencil": ["claude", "codex"],
     "mattpocock-productivity": ["claude", "codex"],
     "fcakyon-test-audit": ["claude", "codex"],
-    "ouroboros-interview": ["claude", "codex"]
+    "ouroboros-interview": ["claude", "codex"],
+    "pstack-mode": ["claude", "codex"]
   }
 }

@@ -16,6 +16,7 @@ those repositories. This repository holds none of them.
 | `humanize-korean` | Korean prose diagnosis, editing, and verification | `plugins/humanize-korean` in the fork [ramtoshiya/im-not-ai](https://github.com/ramtoshiya/im-not-ai) | MIT |
 | `ouroboros-interview` | `interview`, `unstuck` | `plugins/ouroboros-interview` in the fork [ramtoshiya/ouroboros](https://github.com/ramtoshiya/ouroboros) | MIT |
 | `omd-kr-writer` | Korean writing with 12 voice presets | `plugins/omd/skills/omd-kr-writer` in the fork [ramtoshiya/oh-my-design](https://github.com/ramtoshiya/oh-my-design) | MIT |
+| `pstack-mode` | `/pstack-mode:mode` and the pstack workflows and principles it selects | `plugins/pstack-mode` in [ramtoshiya/pstack-mode](https://github.com/ramtoshiya/pstack-mode), generated from [backnotprop/pstack](https://github.com/backnotprop/pstack) | MIT |
 
 `grill-me` and `handoff` run only when you invoke them, so the agent's own
 skill list shows only `grilling`. Installed skills carry the entry name as a
@@ -62,6 +63,15 @@ The marketplace source points at the OmD skills directory but exposes only
 preference hooks. Claude Code and Codex use the marketplace's `skills`
 selection. Restart or reload
 the affected agent after changing the installation.
+
+`pstack-mode` is a generated package, not a plain fork. Its repository keeps
+an unchanged pstack mirror under `upstream/` and a generator that writes
+`plugins/pstack-mode/`. Its README and docs describe the selection, activation,
+and build. The mode reads `ramtoshiya:worker-routing`, so a host that installs
+`pstack-mode` also needs the `ramtoshiya` plugin. To update the pin, push the
+rebuilt `main` of `ramtoshiya/pstack-mode` and set the entry's `sha` to that
+commit. A change that touches both repositories therefore lands in two
+commits, first in `pstack-mode`, then the pin here.
 
 The `humanize` skill handles English writing and existing code/configuration
 changes. Korean text, including new publication drafts, goes to
@@ -245,6 +255,7 @@ It monitors every fork used by this marketplace:
 | `ramtoshiya/ouroboros:main` | `Q00/ouroboros:main` |
 | `ramtoshiya/im-not-ai:main` | `epoko77-ai/im-not-ai:main` |
 | `ramtoshiya/oh-my-design:main` | `kwakseongjae/oh-my-design:main` |
+| `ramtoshiya/pstack-mode:main` | `backnotprop/pstack:main` |
 
 The Ouroboros fork first runs its own [upstream sync workflow](https://github.com/ramtoshiya/ouroboros/blob/main/.github/workflows/sync-upstream.yml)
 every Monday at 04:00 UTC. It rebases the fork's customization commits onto

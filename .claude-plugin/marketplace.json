@@ -70,6 +70,19 @@
       "license": "MIT"
     },
     {
+      "name": "pstack-mode",
+      "description": "Selected pstack workflows and principles as a session mode started with /pstack-mode:mode, built from backnotprop/pstack.",
+      "source": {
+        "source": "git-subdir",
+        "url": "ramtoshiya/pstack-mode",
+        "path": "plugins/pstack-mode",
+        "sha": "0150293003b350db2326f5ea97fbc353378b2372"
+      },
+      "author": { "name": "Lauren Tan" },
+      "repository": "https://github.com/ramtoshiya/pstack-mode",
+      "license": "MIT"
+    },
+    {
       "name": "humanize-korean",
       "description": "Korean publication writing plus diagnosis, editing, and verification from epoko77-ai's im-not-ai, packaged for Claude Code and Codex.",
       "source": {
