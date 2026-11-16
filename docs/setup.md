@@ -156,6 +156,8 @@ Agents:
 | --- | --- |
 | Registered Claude profiles' `CLAUDE.md` | A managed block from `setup/agents/preferences.md`, preserving text outside the block |
 | `~/.codex/AGENTS.md` | A copy of `setup/agents/preferences.md` |
+| `~/.hermes/AGENTS.md` | A copy of `setup/agents/hermes-preferences.md`, the personal-assistant instructions |
+| `~/.hermes/config.yaml` | The keys in `setup/agents/hermes-config.yaml` |
 | Registered Claude profiles' `settings.json` | Common keys from `setup/agents/claude-settings.json`, with terminal defaults from `setup/agents/claude-terminal-settings.json` only for `~/.claude` |
 | `~/.claude/status-line.sh` | Copy of `setup/agents/claude-statusline.sh` |
 | `~/.local/bin/claude-review` | Copy of `setup/agents/claude-review`, an executable shell script that starts the review launcher |
@@ -164,9 +166,46 @@ Agents:
 
 The managed plugin synchronization workflow reads host selections from
 `setup/agents/hosts.json`. Both humanizers are paused on Claude Code and
-selected together on Codex so Korean delegation has an installed target. Add
-`claude` back to both entries and run the sync to resume them. This policy file
-does not install plugins during `mise bootstrap`.
+selected together on Codex and Hermes so Korean delegation has an installed
+target. Add `claude` back to both entries and run the sync to resume them. This
+policy file does not install plugins during `mise bootstrap`.
+
+Hermes reads `~/.hermes/AGENTS.md` through the `ramtoshiya` native plugin, which
+you install separately as described in [Agent plugins](agent-pack.md).
+
+`hermes-config.yaml` sets Hermes up as a personal assistant:
+
+- `security.protected_instruction_files` asks for approval before Hermes writes
+  an instruction file.
+- Image generation uses Hermes's own `image_generate` tool with the
+  `openai-codex` provider and `gpt-image-2-medium`. This provider signs in with
+  a ChatGPT subscription, not an OpenAI API key. Run
+  `hermes auth add openai-codex` if you have not signed in. Subscription limits
+  apply, and the backend can return a different quality or size from the
+  request. Credentials stay in Hermes's local authentication store, outside
+  this repository.
+- `skills.disabled` hides bundled development, product-design, and unused
+  personal-service skills. It also hides the `ramtoshiya` skills `figma-rest`,
+  `imagegen`, `reorganize-commits`, and `stable-refs`. The other `ramtoshiya`
+  skills stay on.
+- `plugins.disabled` turns off `fcakyon-test-audit`, `mattpocock-productivity`,
+  and `ouroboros-interview`, plus the Orca lifecycle plugin `orca-status`.
+
+mise merges these keys without replacing other Hermes configuration. Lists are
+replaced as a whole, so add local exclusions to the source before applying. A
+disabled skill stays on disk and does not become active after a bundle update.
+New bundled skill names are not excluded until you add them.
+
+The Hermes instructions cover personal tasks and disposable scripts, not project
+or product implementation. They require approval before handing coding work to
+Claudex or Codex. They default email to reading and drafting, and ask for
+confirmation before sending, reservations, payments, and destructive actions,
+unless a specific authorization or standing rule covers the action. The
+disabled plugin list leaves `omd` available for a project that enables it
+explicitly. Keep the full `omd` package out of `~/.hermes/plugins` and enable
+project discovery only when launching in that project. Orca can recreate its
+managed plugin when it launches Hermes, so avoid that launch path if you do not
+want the Orca integration.
 
 The shared instructions distinguish missing configuration and invalid or incompatible
 tools from an absent installation. They direct agents to inspect documented trusted
@@ -433,9 +472,10 @@ Mise's dotfile target paths are fixed. Register intentionally separate
 `CLAUDE_CONFIG_DIR` settings and instruction targets in the local profile
 registry. Status-line scripts and plugin installations are separate from
 profile reconciliation.
-For other target changes, including `CODEX_HOME`, `NPM_CONFIG_USERCONFIG`, or
-`XDG_CONFIG_HOME` (pnpm then reads `$XDG_CONFIG_HOME/pnpm/config.yaml`), change
-the matching entries in `mise.toml`.
+For other target changes, including `CODEX_HOME`, `HERMES_HOME`,
+`NPM_CONFIG_USERCONFIG`, or `XDG_CONFIG_HOME` (pnpm then reads
+`$XDG_CONFIG_HOME/pnpm/config.yaml`), change the matching entries in
+`mise.toml`.
 
 ## What it leaves alone
 

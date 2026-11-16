@@ -99,6 +99,11 @@ Agent-facing docs are this file and the `SKILL.md` files.
 
 - `plugins/ramtoshiya/` is shared across supported hosts, documented in
   `docs/agent-pack.md`. Hook rules live only in the shared guard scripts.
+  Host adapters, such as `hooks/hooks.json` and the Hermes adapter
+  `__init__.py`, only translate events and guard responses and must not add or
+  change rules.
+- A new skill under `plugins/ramtoshiya/skills/` also needs an entry in the
+  `SKILLS` map of `plugins/ramtoshiya/__init__.py`, or Hermes does not load it.
 - Hook scripts use only the Python standard library and run through the uv
   command shown in `docs/hooks.md`. The plugins take no third-party runtime
   dependencies and have no `version` field.

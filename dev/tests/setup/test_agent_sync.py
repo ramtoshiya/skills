@@ -37,13 +37,14 @@ class AgentSyncTests(unittest.TestCase):
         self.root = self.home / "repository"
         (self.root / ".claude-plugin").mkdir(parents=True)
         (self.root / "setup/agents").mkdir(parents=True)
+        shutil.copyfile(SOURCE.with_name("hermes-skills.py"), self.root / "setup/agents/hermes-skills.py")
         self.policy = self.root / "setup/agents/hosts.json"
         sync.write_json(self.policy, {"hosts": ["claude", "codex"], "plugins": {}})
         self.marketplace = self.root / ".claude-plugin/marketplace.json"
         commands = self.home / "bin"
         commands.mkdir()
         # These stubs keep a test that forgets fake_cli from reaching a real host command.
-        for host in ("claude", "codex"):
+        for host in ("claude", "codex", "hermes"):
             (commands / host).write_text("#!/bin/sh\nexit 99\n")
             (commands / host).chmod(0o755)
         self.environment = patch.dict(os.environ, {
@@ -52,6 +53,7 @@ class AgentSyncTests(unittest.TestCase):
             "HOME": str(self.home), "XDG_STATE_HOME": str(self.home / "state"),
             "CLAUDE_CONFIG_DIR": str(self.home / ".claude"),
             "CODEX_HOME": str(self.home / ".codex"),
+            "HERMES_HOME": str(self.home / ".hermes"),
         })
         self.environment.start()
         self.addCleanup(self.environment.stop)
@@ -121,7 +123,7 @@ class AgentSyncTests(unittest.TestCase):
         """Return the calls sync made to the host command, without its read-only queries."""
         log = self.home / f"{host}.log"
         calls = log.read_text().splitlines() if log.exists() else []
-        return [call for call in calls if not call.startswith(("plugin marketplace list", "plugin list"))]
+        return [call for call in calls if not call.startswith(("plugin marketplace list", "plugin list", "plugins list"))]
 
     def execute(self, apply, host="claude"):
         operation = sync.Sync(self.root)
@@ -319,6 +321,94 @@ class AgentSyncTests(unittest.TestCase):
         self.assertIn("symlinked", rows[0]["detail"])
         self.assertTrue(state.is_symlink())
         self.assertEqual(target.read_bytes(), before)
+
+    def fake_hermes(self):
+        """Replace hermes with a script that logs calls and keeps enabled plugins as flag files."""
+        flags = shlex.quote(str(self.home / "hermes-enabled"))
+        script = (
+            "#!/bin/sh\n"
+            f"printf '%s\\n' \"$*\" >> {shlex.quote(str(self.home / 'hermes.log'))}\n"
+            f"mkdir -p {flags}\n"
+            'case "$1 $2" in\n'
+            f"  'plugins list') printf '['; sep=''; for f in {flags}/*; do [ -e \"$f\" ] || continue; "
+            "printf '%s{\"name\":\"%s\",\"status\":\"enabled\"}' \"$sep\" \"$(basename \"$f\")\"; sep=','; done; printf ']\\n' ;;\n"
+            f"  'plugins enable') touch {flags}/\"$3\" ;;\n"
+            f"  'plugins disable') rm -f {flags}/\"$3\" ;;\n"
+            "  'plugins doctor') exit 0 ;;\n"
+            "  *) exit 98 ;;\n"
+            "esac\n"
+        )
+        (self.home / "bin/hermes").write_text(script)
+
+    def test_native_hermes_plugin_is_linked_enabled_and_disabled_on_retirement(self):
+        native = self.root / "plugins/native"
+        (native / "skills/writing").mkdir(parents=True)
+        (native / "skills/writing/SKILL.md").write_text("native skill\n")
+        (native / "plugin.yaml").write_text("name: native\n")
+        sync.write_json(self.policy, {"hosts": ["hermes"], "plugins": {}})
+        self.set_entries([{"name": "native", "source": "./plugins/native"}])
+        commit(self.root, "Add native plugin")
+        self.fake_hermes()
+        _, rows = self.execute(True, "hermes")
+        self.assertEqual([row["status"] for row in rows], ["updated"], rows)
+        link = self.home / ".hermes/plugins/native"
+        self.assertEqual(link.resolve(), native.resolve())
+        self.assertEqual(self.changes("hermes"), [f"plugins doctor {link} --ci", "plugins enable native --no-allow-tool-override"])
+        _, rows = self.execute(True, "hermes")
+        self.assertEqual([row["status"] for row in rows], ["ok"], rows)
+        self.assertEqual(len(self.changes("hermes")), 2)
+        self.set_entries([])
+        commit(self.root, "Retire native plugin")
+        _, rows = self.execute(True, "hermes")
+        self.assertEqual([row["status"] for row in rows], ["updated"], rows)
+        self.assertEqual(self.changes("hermes")[-1], "plugins disable native")
+        self.assertTrue(link.is_symlink())
+
+    def test_humanize_without_its_advisory_flag_is_not_reported_as_current(self):
+        operation = sync.Sync(self.root)
+        entry = {**self.entry, "name": "humanize"}
+        package = operation.sources.package(entry)
+        sync.write_json(self.home / ".hermes/plugins/humanize/source.json", {
+            **entry["source"], "root": str(package.root), "skills": ["skills/writing"], "managed_adapter": False,
+        })
+        self.fake_hermes()
+        (self.home / "hermes-enabled").mkdir()
+        (self.home / "hermes-enabled/humanize").touch()
+        status, _ = operation.hermes(entry, package, False)
+        self.assertEqual(status, "drift")
+
+    def test_generated_hermes_adapters_follow_template_changes_but_preserve_local_edits(self):
+        self.fake_hermes()
+        operation = sync.Sync(self.root)
+        package = operation.sources.package(self.entry)
+        self.assertEqual(operation.hermes(self.entry, package, True)[0], "updated")
+        template = self.root / "setup/agents/hermes-skills.py"
+        template.write_text(template.read_text() + "\n# Updated registration adapter.\n")
+        operation = sync.Sync(self.root)
+        self.assertEqual(operation.hermes(self.entry, package, True)[0], "updated")
+        installed = self.home / ".hermes/plugins/example/__init__.py"
+        self.assertEqual(installed.read_bytes(), template.read_bytes())
+        before = installed.stat().st_mtime_ns
+        operation = sync.Sync(self.root)
+        self.assertEqual(operation.hermes(self.entry, package, True)[0], "ok")
+        self.assertEqual(installed.stat().st_mtime_ns, before)
+        installed.write_text("local adapter customization\n")
+        operation = sync.Sync(self.root)
+        with self.assertRaisesRegex(sync.Conflict, "Locally changed"):
+            operation.hermes(self.entry, package, True)
+        self.assertEqual(installed.read_text(), "local adapter customization\n")
+
+    def test_failed_link_replacement_restores_the_original_directory(self):
+        operation = sync.Sync(self.root)
+        plugin = self.home / ".hermes/plugins/example"
+        plugin.mkdir(parents=True)
+        (plugin / "original.txt").write_text("original plugin\n")
+        with patch.object(sync.os, "replace", side_effect=OSError("replacement failed")):
+            with self.assertRaisesRegex(OSError, "replacement failed"):
+                operation.install_link(plugin, self.upstream / "plugins/example")
+        self.assertEqual((plugin / "original.txt").read_text(), "original plugin\n")
+        self.assertFalse(plugin.is_symlink())
+        self.assertFalse(plugin.with_name("example.sync-link").is_symlink())
 
     def test_lock_rejects_concurrent_sync(self):
         first = sync.Sync(self.root)

@@ -1,0 +1,4 @@
+name: ramtoshiya
+description: Shared coding skills and the package and Python guard
+provides_hooks:
+  - pre_tool_call
