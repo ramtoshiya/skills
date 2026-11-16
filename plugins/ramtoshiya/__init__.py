@@ -44,6 +44,20 @@ def package_guard(tool_name, args, **kwargs):
         return {"action": "block", "message": UNAVAILABLE}
 
 
+def module_hint(tool_name, args, result, **kwargs):
+    if tool_name != "terminal" or not isinstance(result, str):
+        return None
+    try:
+        output = run_guard("python-module-hint.py", {
+            "tool_name": "Bash", "tool_input": args, "tool_response": result,
+            "cwd": args.get("workdir") or working_directory(),
+        }, 5)
+        context = output and output["hookSpecificOutput"]["additionalContext"]
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        return None
+    return f"{result}\n\n{context}" if isinstance(context, str) and context else None
+
+
 def register_optional_machine_preferences(ctx):
     from hermes_constants import get_hermes_home
 
@@ -56,6 +70,7 @@ def register_optional_machine_preferences(ctx):
 
 def register(ctx):
     ctx.register_hook("pre_tool_call", package_guard)
+    ctx.register_hook("transform_tool_result", module_hint)
     from agent.skill_utils import parse_frontmatter
 
     for path in sorted((ROOT / "skills").glob("*/SKILL.md")):

@@ -1,6 +1,6 @@
 # Hooks
 
-The plugins add four hooks. One comes with `ramtoshiya` and runs in Claude
+The plugins add five hooks. Two come with `ramtoshiya` and run in Claude
 Code, Codex, and Hermes Agent. Three come with `ramtoshiya-cc` and run only in
 Claude Code. The `ramtoshiya` plugin also ships a Git hygiene check that is not
 registered, so no agent runs it.
@@ -8,12 +8,14 @@ registered, so no agent runs it.
 | Hook | Runs | Plugin |
 | --- | --- | --- |
 | Package and Python guard | Before each shell command | `ramtoshiya` |
+| Python module hint | After each shell command | `ramtoshiya` |
 | Commit attribution guard | Before each shell command | `ramtoshiya-cc` |
 | Context budget | After each tool call, on each prompt, and after a compaction | `ramtoshiya-cc` |
 
 Each hook is a Python script that uses only the standard library. Claude Code
 and Codex run it through `hooks/hooks.json`. Hermes runs the package and Python
-guard through the native plugin adapter `plugins/ramtoshiya/__init__.py`. Every
+guard and the Python module hint through the native plugin adapter
+`plugins/ramtoshiya/__init__.py`. Every
 hook runs as:
 
 ```sh
@@ -132,6 +134,23 @@ guard inspects the local filesystem, so use it with Hermes's local terminal
 backend. It does not inspect package settings inside a remote or container
 backend, input sent to a running process, or processes that another plugin
 starts directly.
+
+## Python module hint
+
+`plugins/ramtoshiya/hooks/python-module-hint.py` reads a shell command's
+output after it runs. When the output contains `ModuleNotFoundError: No module
+named '<module>'`, it tells the agent to rerun the command as
+`uv run --with PACKAGE==VERSION python SCRIPT ARGS`. Agents otherwise tend to
+report a script as unrunnable when the system Python lacks one of its
+packages, even though uv can supply the package. The hint names the module,
+notes that the package name can differ (`pyyaml` provides `yaml`), and points
+to `--offline` for versions already in uv's cache. The package and Python
+guard still checks the rerun.
+
+Claude Code and Codex receive the hint as added context for the `Bash` tool
+call. Hermes appends it to the `terminal` result. The hint never blocks a
+command, and any error adds nothing. Output that only mentions the error, for
+example a log being read, also gets the hint.
 
 ## Git hygiene check
 
@@ -252,7 +271,8 @@ Limits:
 
 ## Tests
 
-`dev/tests/plugins/test_global_package_guard.py`, `dev/tests/plugins/test_git_hygiene_guard.py`,
+`dev/tests/plugins/test_global_package_guard.py`, `dev/tests/plugins/test_python_module_hint.py`,
+`dev/tests/plugins/test_git_hygiene_guard.py`,
 `dev/tests/plugins/test_commit_trailer_guard.py`, and `dev/tests/plugins/test_context_budget.py`
 cover the rules. `dev/tests/plugins/test_hermes_adapter.py` covers the Hermes
 adapter's skill registration, its translation of the guard's answer, and its

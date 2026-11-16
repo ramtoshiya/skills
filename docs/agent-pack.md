@@ -42,6 +42,8 @@ instructions, not automatic hook enforcement.
 `ramtoshiya` hooks, described in [Hooks](hooks.md):
 
 - A package and Python guard that checks each shell command before it runs.
+- A Python module hint that points a failed import at `uv run --with` after a
+  shell command.
 - A Git hygiene check for the moment the agent is about to stop. It ships
   unregistered, so no agent runs it until you add it to `hooks/hooks.json`.
   Hermes has no registration for it.
@@ -186,7 +188,7 @@ codex plugin add ramtoshiya@ramtoshiya
 ```
 
 Codex runs a plugin hook only after you trust it. Open `/hooks` in Codex and
-trust the `ramtoshiya` `PreToolUse` hook. Installing or enabling the
+trust the `ramtoshiya` `PreToolUse` and `PostToolUse` hooks. Installing or enabling the
 plugin does not trust them. Codex can see `ramtoshiya-cc` in the marketplace, but
 it does not work there, so do not install it.
 
@@ -391,6 +393,7 @@ plugins such as `humanize`, also follow [Third-party skills](upstream-skills.md)
 plugins/ramtoshiya/.claude-plugin/plugin.json  Plugin manifest, read by Claude Code and Codex
 plugins/ramtoshiya/skills/                     Skills
 plugins/ramtoshiya/hooks/global-package-guard.py   Package and Python rules
+plugins/ramtoshiya/hooks/python-module-hint.py     uv hint after a failed import
 plugins/ramtoshiya/hooks/git-hygiene-guard.py      Stop check, not registered
 plugins/ramtoshiya/hooks/hooks.json            Hook registration for Claude Code and Codex
 plugins/ramtoshiya/plugin.yaml                 Hermes native plugin manifest
@@ -401,5 +404,6 @@ setup/agents/hermes-skills.py                  Template for Hermes adapters of t
 
 The rules live only in the guard scripts. `hooks.json` registers them for
 Claude Code and Codex. The Hermes adapter passes each `terminal` call to the
-package guard and translates the answer. It registers every skill under
+package guard and its result to the Python module hint, and translates the
+answers. It registers every skill under
 `skills/` with the description and frontmatter from its `SKILL.md`.

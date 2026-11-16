@@ -31,11 +31,12 @@ class HermesAdapterTests(unittest.TestCase):
             adapter.register(context)
         return context
 
-    def test_registers_every_shipped_skill_with_its_frontmatter_and_only_the_package_guard(self):
+    def test_registers_every_shipped_skill_with_its_frontmatter_and_only_the_shared_hooks(self):
         with tempfile.TemporaryDirectory() as directory:
             context = self.register_with_home(Path(directory))
-            hooks = {call.args[0] for call in context.register_hook.call_args_list}
-            self.assertEqual(hooks, {"pre_tool_call"})
+            hooks = {call.args[0]: call.args[1] for call in context.register_hook.call_args_list}
+            self.assertEqual(hooks, {"pre_tool_call": adapter.package_guard,
+                                     "transform_tool_result": adapter.module_hint})
             registered = {call.args[1] for call in context.register_skill.call_args_list}
             shipped = set((adapter.ROOT / "skills").glob("*/SKILL.md"))
             self.assertTrue(shipped)
@@ -71,6 +72,18 @@ class HermesAdapterTests(unittest.TestCase):
             self.assertEqual(result["action"], "block")
             self.assertIn("40-character commit hash", result["message"])
             self.assertIsNone(adapter.package_guard("read_file", args))
+
+    def test_missing_python_module_appends_the_uv_hint_to_terminal_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = {"command": "python3 validate.py", "workdir": directory}
+            output = '{"output": "ModuleNotFoundError: No module named \'yaml\'", "exit_code": 1}'
+            result = adapter.module_hint("terminal", args, output)
+            self.assertTrue(result.startswith(output + "\n\n"))
+            self.assertIn("`yaml`", result)
+            self.assertIsNone(adapter.module_hint("terminal", args, '{"output": "ok", "exit_code": 0}'))
+            self.assertIsNone(adapter.module_hint("read_file", args, output))
+            with patch.dict(os.environ, {"PATH": directory}):
+                self.assertIsNone(adapter.module_hint("terminal", args, output))
 
     def test_guard_failure_blocks_the_command(self):
         with tempfile.TemporaryDirectory() as directory:
