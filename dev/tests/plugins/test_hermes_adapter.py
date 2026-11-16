@@ -37,6 +37,9 @@ class HermesAdapterTests(unittest.TestCase):
             hooks = {call.args[0]: call.args[1] for call in context.register_hook.call_args_list}
             self.assertEqual(hooks, {"pre_tool_call": adapter.package_guard,
                                      "transform_tool_result": adapter.module_hint})
+            manifest = (adapter.ROOT / "plugin.yaml").read_text().split("provides_hooks:\n", 1)[1]
+            declared = {line[4:] for line in manifest.splitlines() if line.startswith("  - ")}
+            self.assertEqual(declared, set(hooks))
             registered = {call.args[1] for call in context.register_skill.call_args_list}
             shipped = set((adapter.ROOT / "skills").glob("*/SKILL.md"))
             self.assertTrue(shipped)
