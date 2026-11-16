@@ -98,7 +98,16 @@ instructions, not automatic hook enforcement.
   auto-compact window, the hook asks the agent to compact at the next natural
   boundary. The agent writes a handoff note first. In T3 Code it then queues
   `/compact` and a resume message to its own thread, so the work continues
-  without you. On macOS Paseo Desktop, a background helper waits for the current
+  without you. In BB with its `claude-code` provider, a helper uses the installed
+  `bb` CLI and Node.js to wait for the turn to end and request native compaction.
+  It sends the resume only after the matching turn reports an actual compaction
+  boundary and successful completion. Unsupported providers, pending work,
+  interactions, and missing proof keep the handoff note and stop the helper.
+  A queued resume receipt reports uncertain delivery and its queue id.
+  This path requires exclusive control of the thread and Bash background
+  completion notifications. Do not send new prompts until the helper finishes.
+  The CLI cannot atomically send only if no new work arrived after the last check.
+  On macOS Paseo Desktop, a background helper waits for the current
   turn to finish, sends the provider's native `/compact` command, and sends a
   resume instruction only after a completed compaction event tied to that command.
   This proof of concept requires exclusive control of the session and a shell

@@ -30,7 +30,8 @@ class ContextBudgetTests(unittest.TestCase):
         self.transcript.write_text("")
         self.env = {**os.environ, "CLAUDE_CONFIG_DIR": str(self.config),
                     "XDG_STATE_HOME": str(self.tmp / "state"), "CLAUDE_PROJECT_DIR": str(self.project)}
-        self.env.pop("T3CODE_THREAD_ID", None)
+        for key in ("T3CODE_THREAD_ID", "BB_THREAD_ID", "PASEO_AGENT_ID"):
+            self.env.pop(key, None)
 
     def write_settings(self, path, data):
         path.write_text(json.dumps(data))
@@ -60,7 +61,7 @@ class ContextBudgetTests(unittest.TestCase):
         text = self.run_hook()
         self.assertIn("about 76% of the 100,000-token", text)
         self.assertIn(f"Handoff note path: {self.scratch / 'handoff.md'}", text)
-        self.assertIn("not run in T3 Code", text)
+        self.assertIn("automatic compaction is the fallback", text)
         self.append(assistant(79000))
         self.assertIsNone(self.run_hook(event="UserPromptSubmit"))
         self.append(assistant(81000))
@@ -80,10 +81,19 @@ class ContextBudgetTests(unittest.TestCase):
         self.append(assistant(90000))
         self.assertIsNone(self.run_hook(agent_id="a1"))
 
-    def test_names_the_t3_thread(self):
+    def test_names_the_host_and_its_compaction_path(self):
         self.append(assistant(76000))
-        text = self.run_hook(env={**self.env, "T3CODE_THREAD_ID": "thread-9"})
-        self.assertIn("T3 Code, thread id thread-9", text)
+        for host, variables, expected in (
+            ("t3", {"T3CODE_THREAD_ID": "thread-9"}, "T3 Code, thread id thread-9"),
+            ("bb", {"BB_THREAD_ID": "thr_test", "T3CODE_THREAD_ID": "stale"},
+             "BB, thread id thr_test. Use the BB section"),
+            ("paseo", {"PASEO_AGENT_ID": "agent-9", "T3CODE_THREAD_ID": "stale"},
+             "Paseo, agent id agent-9. Use the Paseo section"),
+        ):
+            with self.subTest(host=host):
+                text = self.run_hook(env={**self.env, **variables}, session_id=host)
+                self.assertIn(expected, text)
+                self.assertNotIn("automatic compaction is the fallback", text)
 
     def test_project_settings_override_user_settings(self):
         self.write_settings(self.project / ".claude/settings.json", {"autoCompactWindow": 200000})

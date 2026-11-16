@@ -227,10 +227,15 @@ further five points, at 80%, 85%, and so on, and starts over after a
 compaction. When Claude Code starts again after a compaction and the handoff
 note exists, the hook tells the agent to read it.
 
-The hook cannot start a compaction. In T3 Code the skill has the agent queue
-`/compact` and a resume message to its own thread, and T3 Code runs them after
-the turn ends. In a terminal session the agent can only keep the handoff note
-current, and Claude Code still compacts on its own near the window.
+The hook cannot start a compaction. It identifies BB, T3 Code, or Paseo from
+the host's thread or agent id and directs the agent to the matching skill
+instructions. In BB with Claude Code, a background helper waits for the turn
+to end, requests native compaction, and verifies the actual compaction boundary
+and successful turn before sending the resume. In T3 Code the agent queues
+`/compact` and a resume message to its own thread. Paseo Desktop has a separate
+background helper. [Agent plugins](agent-pack.md) describes their requirements
+and concurrency limits. Other hosts keep the note current and use Claude
+Code's automatic compaction.
 
 Limits:
 

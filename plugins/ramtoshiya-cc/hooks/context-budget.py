@@ -131,10 +131,16 @@ def suggestion(payload):
     text = (f"Context budget: about {percent}% of the {window:,}-token auto-compact window is in use "
             f"({tokens:,} tokens). At the next natural boundary, compact on your own by following the "
             f"ramtoshiya-cc:self-compact skill. Handoff note path: {handoff_path(payload)}.")
+    thread = os.environ.get("BB_THREAD_ID")
+    if thread:
+        return text + f" This session runs in BB, thread id {thread}. Use the BB section of the skill."
+    agent = os.environ.get("PASEO_AGENT_ID")
+    if agent:
+        return text + f" This session runs in Paseo, agent id {agent}. Use the Paseo section of the skill."
     thread = os.environ.get("T3CODE_THREAD_ID")
     if thread:
         return text + f" This session runs in T3 Code, thread id {thread}."
-    return text + " This session does not run in T3 Code, so automatic compaction is the fallback."
+    return text + " Without a supported host control, automatic compaction is the fallback."
 
 
 def after_compaction(payload):
