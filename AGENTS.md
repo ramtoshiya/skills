@@ -71,7 +71,8 @@ This repository is meant to be public.
 
 ## Documentation {:#documentation}
 
-Human-facing docs are `README.md`, `docs/*.md`, and the READMEs under `tools/`.
+Human-facing docs are `README.md`, `docs/*.md`, and the READMEs under `tools/`
+and `bb-plugins/`.
 Agent-facing docs are this file and the `SKILL.md` files.
 
 - Write human-facing docs for a stranger on a Mac who has no context.
@@ -94,6 +95,7 @@ Agent-facing docs are this file and the `SKILL.md` files.
 | Marketplace entries for third-party skills, forks, pin updates | `docs/upstream-skills.md` |
 | `mise.toml` and `setup/` | `docs/setup.md` |
 | Each standalone CLI under `tools/` | `tools/<tool>/README.md` |
+| Each bb plugin under `bb-plugins/` | `bb-plugins/<plugin>/README.md` |
 
 ## Layout and boundaries {:#layout}
 
@@ -110,6 +112,9 @@ Agent-facing docs are this file and the `SKILL.md` files.
   entry pinned by commit, as `docs/upstream-skills.md` describes.
 - `mise.toml` and `setup/` are the machine setup. Files in `setup/` are copied
   or merged into place by mise. Identity, signing, and credentials stay out.
+- `bb-plugins/` contains plugins for the bb app, each installed separately
+  with `bb plugin install`. They are not agent-pack plugins and follow the
+  same exact-pin and release-age rules as `tools/`.
 - `tools/` contains independently installed commands and their tests. `dev/`
   contains repository tests, automation, evals, and disabled skills. `docs/`
   contains human-facing repository documentation.

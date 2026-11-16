@@ -1,0 +1,27 @@
+{
+  "name": "bb-plugin-held-drafts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Create bb threads whose first message waits in the Queue until a person sends it.",
+  "engines": {
+    "bb": ">=0.49",
+    "bbPluginSdk": ">=0.6.132"
+  },
+  "bb": {
+    "name": "Held Drafts",
+    "description": "Create bb threads whose first message waits in the Queue until a person sends it.",
+    "branding": {
+      "icon": "EditFile"
+    },
+    "server": "./server.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc"
+  },
+  "devDependencies": {
+    "@get-bb/plugin-sdk": "0.6.132",
+    "@types/node": "22.19.1",
+    "typescript": "5.9.3"
+  }
+}

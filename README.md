@@ -14,6 +14,7 @@ preferences, so fork the repository and edit it before you run it.
 | `ramtoshiya-cc` plugin | Claude Code only: a skill for claude.ai/design projects, an opt-in lead mode that hands work to subagents on the cheapest model that can do it, and a hook that blocks AI attribution lines in commits and pull requests | [Agent plugins](docs/agent-pack.md) |
 | Third-party skills | Skills from other repositories, listed in this repository's marketplace and pinned to exact commits | [Third-party skills](docs/upstream-skills.md) |
 | Machine setup | A `mise.toml` that installs a few Homebrew packages and writes shell, Git, package manager, and agent settings | [Machine setup](docs/setup.md) |
+| `held-drafts` bb plugin | Lets agents create [bb](https://getbb.app) threads whose first message waits until a person sends it | [README](bb-plugins/held-drafts/README.md) |
 | `sidecar` | A macOS command that connects an iPad as a Sidecar display, and an iPad shortcut that runs it over SSH | [README](tools/sidecar/README.md) |
 | `claudex` | Runs Claude Code with GPT models discovered from a [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) server | [README](tools/claudex/README.md) |
 | `plugin-update-review` | Prepares local plugin update candidates for human review, tests, and application | [README](tools/plugin-update-review/README.md) |
@@ -79,6 +80,7 @@ every file the setup changes and the settings it applies.
 .claude-plugin/marketplace.json   Claude Code and Codex marketplace
 plugins/                          Skills and hooks for supported hosts
 tools/                            Independently installed commands and their tests
+bb-plugins/                       Plugins for the bb app, installed separately
 setup/                            Machine configuration copied or merged by mise
 dev/                              Repository tests, automation, evals, and disabled skills
 docs/                             Human-facing documentation
