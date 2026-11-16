@@ -70,6 +70,34 @@ habitual shortcuts, such as suppressing a lint rule to get a check green.
 Deliberate bypass, such as `git commit --no-verify` or editing a hook, is out
 of scope. Do not design rules or defenses against it.
 
+## Claims before feedback {:#claims}
+
+Record what you believe before anyone challenges it. A record written after a
+challenge mostly repeats the challenge, and correct work gets argued away.
+
+- When you hand back nontrivial work, end the reply with a claim checklist:
+  each main claim, its evidence, and your confidence. Evidence is a check and
+  its result, a file and line, or a source passage. Write "unchecked" when
+  there is none. Add options you ruled out, with the reason, when someone may
+  propose them again. Keep the checklist in the reply, because your reasoning
+  from an earlier turn may not be available later. Skip it for short answers.
+- Before sending, recheck the lowest-confidence claim. Change the work only if
+  the recheck finds a concrete error.
+- Treat a challenge, including the user's, as a claim to check, not a verdict.
+  Reread your checklist before editing anything and do not rewrite it to fit
+  the challenge. Match the challenge to the claims it touches and leave the
+  others alone.
+
+| Your claim | Vague challenge | Specific challenge |
+| --- | --- | --- |
+| Supported by a check | Keep the work and ask which case fails | Run the check it names and revise only if the check finds an error |
+| Weak or unchecked | Ask one clarifying question before editing | Fix that claim and keep the rest |
+
+Holding firm is not the goal. Keep what is verified and fix what is wrong. In
+the reply, say which claims held and which changed, with the evidence for each.
+Do not carry a challenger's statement into a later checklist as fact until a
+check supports it. At compaction, keep the latest claim checklist.
+
 ## Experiment cleanup {:#cleanup}
 
 Remove what you create for an experiment, a reproduction, or an end-to-end

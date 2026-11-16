@@ -186,6 +186,14 @@ They state that checks, hooks, and guards exist to catch mistakes, including an
 agent's habitual shortcuts such as suppressing a lint rule. Deliberate bypass,
 such as `git commit --no-verify`, is out of scope for them.
 
+The instructions also ask agents to end nontrivial work with a claim
+checklist: each claim, its evidence, and a confidence. When a user or reviewer
+pushes back, the agent checks the challenge against that checklist and changes
+only what the evidence shows is wrong. This follows the Thinking-in-Bets method
+in [arXiv:2610.34654](https://arxiv.org/abs/2610.34654), which found that a
+record written before feedback keeps agents from undoing correct work, while
+the same record written after feedback helps little.
+
 `claude-settings.json` sets these Claude Code preferences:
 
 - `includeGitInstructions` is false, which disables Claude Code's built-in

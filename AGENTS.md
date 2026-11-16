@@ -151,3 +151,12 @@ scope, so do not add rules for it. The [package and Python
 guard](docs/hooks.md) applies to your own shell commands here as well. Run this
 repository's Python with `uv run python`, as `npm test` does, because the hooks
 need Python 3.11 or newer and the system `python3` can be older.
+
+## Claims and checks {:#claims}
+
+Hand back work in this repository with the claim checklist that
+[`setup/agents/preferences.md`](setup/agents/preferences.md) describes. Read
+its claims section if your session did not load those preferences. Cite each
+check above that you ran, with its result. Mark each agent, hook path, or host
+you did not exercise as unchecked. When a reviewer challenges a change, rerun
+the checks the challenge touches before you edit anything.
