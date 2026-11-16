@@ -98,8 +98,18 @@ instructions, not automatic hook enforcement.
   auto-compact window, the hook asks the agent to compact at the next natural
   boundary. The agent writes a handoff note first. In T3 Code it then queues
   `/compact` and a resume message to its own thread, so the work continues
-  without you. Elsewhere Claude Code's automatic compaction still decides when,
-  and the hook points the agent to the note afterward.
+  without you. On macOS Paseo Desktop, a background helper waits for the current
+  turn to finish, sends the provider's native `/compact` command, and sends a
+  resume instruction only after a completed compaction event tied to that command.
+  This proof of concept requires exclusive control of the session and a shell
+  tool with background completion notifications. Do not send new prompts until
+  the helper finishes. Paseo cannot atomically reject a send when another turn
+  starts, so concurrent prompts could be interrupted. The provider must advertise
+  `/compact`. The helper uses the installed Desktop bundle's SDK
+  and runtime, not extra dependencies. It does not support standalone or remote
+  daemons. Set `PASEO_DESKTOP_APP` for a nonstandard bundle location. Other hosts
+  use Claude Code's automatic compaction, and the hook points the agent to the
+  note afterward.
 - A hook that blocks AI attribution lines in commits and pull requests.
 
 Excalidraw board requests update a shared room. A `.excalidraw` attachment is
