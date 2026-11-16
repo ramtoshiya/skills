@@ -75,8 +75,8 @@ the line names the file, not the skill. Start a child lead as a fresh `general-p
 subagent, never as a fork, because a fork is told to do the work itself. Subagents nest at most
 three levels below the main session. At that depth the Agent tool is gone and the child works
 directly. A child lead on Codex, such as a Sol review, has no Agent tool either and works directly.
-A Claude child lead whose host banned the Agent tool still delegates, through `delegate_task` as
-[Worker route](#worker-route) says, because each such child is a separate thread.
+A Claude child lead whose host removed the Agent tool still delegates, through the thread tool that
+the worker-route section of **worker-routing** names, because each such child is a separate thread.
 
 ## Briefs {:#briefs}
 

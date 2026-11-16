@@ -20,7 +20,7 @@ marketplace file `.claude-plugin/marketplace.json`, which also lists the
 | `read-x` | Reads public X posts, threads, profiles, and searches through the mdfromx HTTP API | HTTP access to [mdfromx](https://mdfromx.com/) and curl |
 | `reorganize-commits` | Rewrites the current branch's commits into reviewable chunks. Runs only when you invoke it | Git |
 | `stable-refs` | Gives documents and plans permanent identifiers that survive edits | Nothing |
-| `worker-routing` | Supplies the shared model, effort, provider, quota, retry, and escalation policy when another skill or session mode names it. It does not activate lead mode | T3 Code for cross-provider workers. Outside T3, the host's agent tool |
+| `worker-routing` | Supplies the shared model, effort, provider, quota, retry, and escalation policy when another skill or session mode names it. It does not activate lead mode | T3 Code or BB for cross-provider workers, and for Claude workers when the host hides Claude Code's own subagent tools. Elsewhere, the host's agent tool |
 
 The `codex-session-reader` skill is inactive. Its source remains in
 [`dev/disabled-skills/codex-session-reader`](../dev/disabled-skills/codex-session-reader/SKILL.md),
@@ -69,10 +69,10 @@ instructions, not automatic hook enforcement.
   minutes and its tool calls are refused after 30, counted from its latest
   prompt. Without the launcher, the 30 minutes are only an instruction.
   Outside T3 Code, the session recommends a review in its final report
-  instead. In T3 Code, the file `~/.config/ramtoshiya/lead-route.json`
+  instead. In T3 Code and BB, the file `~/.config/ramtoshiya/lead-route.json`
   decides where Haiku- and Sonnet-level workers run. With
   `{"workers": "codex"}` or `{"workers": "claudex"}` they run on GPT Luna and
-  Terra models through that T3 Code provider, and the review runs on GPT Sol
+  Terra models through that provider. In T3 Code the review runs on GPT Sol
   through the Codex provider. On both GPT routes, Luna workers use `low` for
   the Haiku low row and `max` for the Haiku max row. Terra workers use only
   `max`. When T3 Code lists a Codex provider instance named for workers, the
@@ -88,6 +88,10 @@ instructions, not automatic hook enforcement.
   instance bans Claude Code's own subagent tools, for example with the launch
   argument `--disallowedTools Agent,Task,Workflow,SendMessage,ListAgents`, the
   session starts its Claude workers with T3 Code's `delegate_task` instead.
+  In BB, the Claude Code provider setting `subagentsDisabled` hides the
+  `Agent`, `Task`, and `ListAgents` tools. The session then starts every
+  worker with `bb thread spawn` as a child thread, waits for BB's
+  notification that the child finished, and archives the child afterward.
   Claude workers and child leads started with `delegate_task`, for that or any
   other reason, run on a Claude provider instance named for workers when T3
   Code lists one, and on the session's own instance otherwise. Opus or Fable
