@@ -1,5 +1,3 @@
-"""Hermes registration and translation for the shared package guard."""
-
 import json
 import os
 from pathlib import Path
@@ -14,30 +12,6 @@ UNAVAILABLE = (
     "Package/Python guard could not verify this command. Check uv, a cached "
     "uv-managed Python >=3.11, and the guard source. The command was not executed."
 )
-SKILLS = {
-    "excalidraw-board": "Read and draw on shared Excalidraw rooms.",
-    "figma-rest": "Read Figma designs through the REST API.",
-    "github-actions-authoring": (
-        "Use before creating or editing .github/workflows/*.yml, "
-        ".github/workflows/*.yaml, action.yml, or action.yaml. Verify official "
-        "releases, the 72-hour cooldown, compatibility, and immutable commit pins."
-    ),
-    "imagegen": "Generate and edit raster images with GPT Image or Grok Imagine.",
-    "impeccable-interview": (
-        "Clarify or resume an Impeccable product task or user flow, and save "
-        "approved surface-brief context without implementing UI."
-    ),
-    "mermaid-check": "Validate Mermaid diagrams with the real parser before delivery.",
-    "read-x": "Read public X posts, profiles, and searches through the mdfromx API.",
-    "reorganize-commits": "Reorganize branch commits when explicitly requested.",
-    "stable-refs": "Keep document and plan identifiers stable through edits.",
-    "worker-routing": (
-        "Shared model, effort, provider, quota, retry, and escalation policy. Read when "
-        "a skill or session mode names it. Loading it does not activate lead mode."
-    ),
-}
-
-
 def working_directory():
     return os.environ.get("TERMINAL_CWD") or os.getcwd()
 
@@ -70,12 +44,7 @@ def package_guard(tool_name, args, **kwargs):
         return {"action": "block", "message": UNAVAILABLE}
 
 
-def register(ctx):
-    ctx.register_hook("pre_tool_call", package_guard)
-    for name, description in SKILLS.items():
-        ctx.register_skill(name, ROOT / "skills" / name / "SKILL.md", description)
-
-    # Preferences are optional machine setup, independent of plugin installation.
+def register_optional_machine_preferences(ctx):
     from hermes_constants import get_hermes_home
 
     preferences = get_hermes_home() / "AGENTS.md"
@@ -83,3 +52,13 @@ def register(ctx):
         ctx.register_system_prompt_section(
             "ramtoshiya.preferences", preferences.read_text(), max_chars=4000,
         )
+
+
+def register(ctx):
+    ctx.register_hook("pre_tool_call", package_guard)
+    from agent.skill_utils import parse_frontmatter
+
+    for path in sorted((ROOT / "skills").glob("*/SKILL.md")):
+        frontmatter, _ = parse_frontmatter(path.read_text())
+        ctx.register_skill(path.parent.name, path, frontmatter.get("description", ""), frontmatter)
+    register_optional_machine_preferences(ctx)

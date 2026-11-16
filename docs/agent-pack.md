@@ -392,6 +392,5 @@ setup/agents/hermes-skills.py                  Template for Hermes adapters of t
 
 The rules live only in the guard scripts. `hooks.json` registers them for
 Claude Code and Codex. The Hermes adapter passes each `terminal` call to the
-package guard and translates the answer. Each skill under `skills/` also needs
-an entry in the adapter's `SKILLS` map. A test checks that every shipped skill
-is listed.
+package guard and translates the answer. It registers every skill under
+`skills/` with the description and frontmatter from its `SKILL.md`.
