@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 LaunchState = Literal["running", "finished", "lost"]
 SUGGEST_PERCENT = 75
 BAND_PERCENT = 5
-# Hermes marks web_*, browser_* and mcp_* results as untrusted.
+# Hermes marks web_*, browser_* and mcp_* results as untrusted. Their reminder rides the next request instead.
 TRUSTED_CARRIERS = frozenset({"terminal", "process", "self_compact", "skill_view", "skills_list", "memory", "todo"})
 RESETTING_KINDS = frozenset({"summarize", "provider_native"})
 NOTE_LIMIT_BYTES = 64 * 1024
@@ -302,6 +302,47 @@ def on_transform_tool_result(tool_name: str = "", result: Any = None, session_id
     return f"{PREFIX}{text}\n\n{result}" if text else None
 
 
+def with_notice(request: dict, text: str) -> Optional[dict]:
+    """Return `request` with `text` as a user message after everything else, or None for an unknown shape.
+
+    The message stands apart from every tool result, so an untrusted result keeps its wrapper and
+    nothing is added inside it."""
+    items = request.get("input")
+    if isinstance(items, list):
+        message = {"type": "message", "role": "user", "content": [{"type": "input_text", "text": text}]}
+        return {**request, "input": [*items, message]}
+    messages = request.get("messages")
+    if not isinstance(messages, list) or not messages or not isinstance(messages[-1], dict):
+        return None
+    last = messages[-1]
+    if last.get("role") != "user":
+        return {**request, "messages": [*messages, {"role": "user", "content": text}]}
+    content = last.get("content")
+    if isinstance(content, list):
+        return {**request, "messages": [*messages[:-1], {**last, "content": [*content, {"type": "text", "text": text}]}]}
+    if isinstance(content, str):
+        return {**request, "messages": [*messages[:-1], {**last, "content": f"{content}\n\n{text}"}]}
+    return None
+
+
+def on_llm_request(request: Any = None, session_id: str = "", turn_id: str = "", api_request_id: str = "",
+                   **_: Any) -> Optional[dict]:
+    """Show a reminder that no trusted tool result carried, such as during a loop of web, browser or MCP
+    calls. Hermes does not store the rewritten request, so the reminder rides every later request of the
+    turn until a trusted result or the next turn stores it, or a compaction or self_compact drops it."""
+    if not isinstance(request, dict) or not session_id:
+        return None
+    with _record_transaction(_root(), session_id) as record:
+        if not _live(record, turn_id):
+            return None
+        text = (record.get("pending") or {}).get("budget")
+    updated = with_notice(request, PREFIX + text) if text else None
+    if updated is None:
+        return None
+    logger.info("self-compact: budget reminder added to request %s of session %s", api_request_id, session_id)
+    return {"request": updated, "source": "self-compact", "reason": "context budget reminder"}
+
+
 def on_post_compaction(session_id: str = "", old_session_id: str = "", kind: str = "", reason: str = "",
                        before_tokens: Optional[int] = None, after_tokens: Optional[int] = None, **_: Any) -> None:
     if not session_id:
@@ -449,3 +490,4 @@ def register(ctx) -> None:
     ctx.register_hook("pre_llm_call", on_pre_llm_call)
     ctx.register_hook("transform_tool_result", on_transform_tool_result)
     ctx.register_hook("post_compaction", on_post_compaction)
+    ctx.register_middleware("llm_request", on_llm_request)

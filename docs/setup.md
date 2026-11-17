@@ -728,8 +728,13 @@ sessions in bb, as Claude Code's context budget hook does for Claude Code.
 - The reminder reaches the agent with the next turn's message or at the head of
   the next result from `terminal`, `process`, `self_compact`, `skill_view`,
   `skills_list`, `memory`, or `todo`. Hermes marks web, browser, and MCP results
-  as untrusted, so they carry no reminder. A loop of only those tools,
-  including bb's own MCP tools, gets the reminder at its next turn.
+  as untrusted data, so the plugin adds nothing to them. During a run of only
+  those tools, including bb's own MCP tools, the plugin's `llm_request`
+  middleware adds the reminder as a separate user message after the last tool
+  result of each model request. Hermes does not store that message, so the
+  reminder rides every request of the turn until a trusted result or the next
+  turn's message stores it. A single slow tool call gets the reminder at the
+  next model request after it returns.
 - The `self_compact` tool is the only way the operator writes its handoff
   note. Action `compact` saves the note and starts the skill's bb helper for
   the calling session's thread, `read` returns the note and the last helper's

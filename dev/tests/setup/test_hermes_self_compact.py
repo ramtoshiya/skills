@@ -61,6 +61,9 @@ class FakePluginContext:
     def register_hook(self, name, callback):
         self.hooks[name] = callback
 
+    def register_middleware(self, kind, callback):
+        self.hooks[kind] = callback
+
 
 class SelfCompactPluginTests(unittest.TestCase):
     def setUp(self):
@@ -96,6 +99,11 @@ class SelfCompactPluginTests(unittest.TestCase):
 
     def tool_result(self, session, tool, result="output", turn=""):
         return self.ctx.hooks["transform_tool_result"](tool_name=tool, result=result, session_id=session, turn_id=turn)
+
+    def llm_request(self, session, request, turn=""):
+        answer = self.ctx.hooks["llm_request"](request=request, original_request=request, session_id=session,
+                                               turn_id=turn, api_request_id="req")
+        return answer["request"] if answer else None
 
     def compaction(self, session, kind="summarize", reason="manual", old=""):
         self.ctx.hooks["post_compaction"](session_id=session, old_session_id=old, kind=kind, reason=reason,
@@ -179,6 +187,41 @@ class SelfCompactPluginTests(unittest.TestCase):
         self.assertTrue(carried.endswith("\n\nls output"))
         self.assertIsNone(self.tool_result("sess_a", "terminal"))
         self.assertIsNone(self.turn_start("sess_a"))
+
+    def test_an_external_only_loop_sees_the_reminder_on_each_request_until_a_turn_stores_it(self):
+        wrapped = '<untrusted_tool_result source="web_search">\nresults\n</untrusted_tool_result>'
+        request = {"model": "m", "input": [{"type": "message", "role": "user", "content": "task"},
+                                           {"type": "function_call", "call_id": "c1", "name": "web_search", "arguments": "{}"},
+                                           {"type": "function_call_output", "call_id": "c1", "output": wrapped}]}
+        self.assertIsNone(self.turn_start("sess_a", turn="t1"))
+        self.assertIsNone(self.llm_request("sess_a", request, turn="t1"))
+        self.request("sess_a", 250_000, turn="t1")
+        self.assertIsNone(self.tool_result("sess_a", "web_search", wrapped, turn="t1"))
+        for _ in range(2):
+            sent = self.llm_request("sess_a", request, turn="t1")
+            self.assertEqual(sent["input"][:3], request["input"], "the tool result and its wrapper stay as they were")
+            self.assertEqual(sent["input"][3]["role"], "user")
+            self.assertTrue(sent["input"][3]["content"][0]["text"].startswith(self.plugin.PREFIX + "Context budget: about 83%"))
+        self.assertIsNone(self.llm_request("sess_a", request, turn="fork"))
+        self.assertIn("about 83%", self.turn_start("sess_a", turn="t2"))
+        self.assertIsNone(self.llm_request("sess_a", request, turn="t2"))
+        self.request("sess_a", 256_000, turn="t2")
+        self.assertIn("about 85%", self.tool_result("sess_a", "terminal", turn="t2"))
+        self.assertIsNone(self.llm_request("sess_a", request, turn="t2"))
+
+    def test_the_reminder_follows_the_last_message_of_chat_and_anthropic_requests(self):
+        self.request("sess_a", 250_000)
+        chat = {"messages": [{"role": "user", "content": "task"}, {"role": "tool", "tool_call_id": "c1", "content": "x"}]}
+        sent = self.llm_request("sess_a", chat)
+        self.assertEqual(sent["messages"][:2], chat["messages"])
+        self.assertEqual(sent["messages"][2]["role"], "user")
+        self.assertIn("about 83%", sent["messages"][2]["content"])
+        block = {"type": "tool_result", "tool_use_id": "c1", "content": "x"}
+        anthropic = {"messages": [{"role": "user", "content": [block]}]}
+        sent = self.llm_request("sess_a", anthropic)
+        self.assertEqual(sent["messages"][0]["content"][0], block)
+        self.assertEqual(sent["messages"][0]["content"][1]["type"], "text")
+        self.assertIsNone(self.llm_request("sess_a", {"contents": []}))
 
     def test_a_review_fork_sharing_the_session_neither_raises_the_band_nor_takes_notices(self):
         self.assertIsNone(self.turn_start("sess_a", turn="t1"))
