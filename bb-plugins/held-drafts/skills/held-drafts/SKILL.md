@@ -10,13 +10,17 @@ The person approves by pressing **Send now** and rejects by deleting the
 thread. Until then nothing runs and no worktree exists.
 
 ```sh
-bb draft create --json --title "<short title>" \
-  --new-environment worktree --provider <provider-id> --model <model-id> \
-  --prompt "$(cat <<'EOF'
+read -r -d '' brief <<'EOF'
 <the complete brief>
 EOF
-)"
+bb draft create --json --title "<short title>" \
+  --new-environment worktree --provider <provider-id> --model <model-id> \
+  --prompt "$brief"
 ```
+
+`bb draft create` has no `--prompt-file`. Keep the heredoc out of `$(...)`,
+because macOS `/bin/bash` 3.2 fails with "unexpected EOF" there when the brief
+contains an apostrophe.
 
 - `--prompt` is the entire first message. The receiving agent sees nothing
   else, so write a self-contained brief.
