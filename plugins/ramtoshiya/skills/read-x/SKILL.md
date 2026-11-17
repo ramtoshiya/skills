@@ -19,6 +19,8 @@ curl -sS -i -G 'https://mdfromx.com/api/v1/posts' \
 
 Substitute the user's permalink for the example. Preserve the status path, including a photo or video suffix if present. The default response may include parent posts, the author's thread, and available replies. Identify the requested post by URL or ID instead of assuming it is the first result. Use `thread=off` when only the requested post is needed. JSON contains `markdown`, structured `posts`, `warnings`, and source and cache metadata. Article content may appear in `markdown` and in the post's `article` field, rather than its `text` field. Media links are not the media itself.
 
+The post endpoint returns only about nine top replies, even when the post has hundreds and `warnings` is empty. A larger `thread` value does not add replies. The root post's `replies` field holds the total. When the replies are what the user asked about, list more with search `q=conversation_id:<root status id>` and page through it as Profiles and search describes. Uncached searches can spend the account-backed search allowance, so check each response's HTTP status: an error body has no `posts` and looks like an empty page. Report how many replies you read against the root's total, and note that search can omit replies.
+
 Do not assume that `t.co` links work with the post endpoint. Resolve them only when appropriate and safe, verify that the destination is an X or Twitter status URL, then use that URL. If resolution or retrieval fails, report the limitation.
 
 ## Profiles and search {:#browse}
