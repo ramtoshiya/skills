@@ -123,6 +123,12 @@ contains an apostrophe.
   a thread with `bb thread spawn` instead, pass `--parent-self`. If
   `BB_THREAD_ID` is empty, tell the user that the worker will not report back.
 - If `bb` fails, show the user the error and stop. Do not work around it.
+- A project whose source path does not exist yet fails at workspace setup
+  after the user sends the draft, and the worker cannot create it. You cannot
+  create it either, so ask the user to create the empty directory before
+  sending. Until the path is a Git repository, omit `--new-environment`. A
+  worktree needs a repository, and bb accepts `personal` only for
+  `proj_personal`.
 
 ## Research {:#research}
 
@@ -229,6 +235,13 @@ lost.
    set.
 6. In the same reply, name each child you archived. Name each child you kept,
    with the check it failed.
+
+When a result shows that the harness misbehaved, such as a worker that skipped
+its workflow's independent roles or ran on unintended defaults, do not offer
+a sentence to repeat in future briefs and do not ask the user to choose one.
+Brief a fix at a layer every worker already reads, such as a bb setting,
+`~/.bb/AGENTS.md`, `worker-routing`, or pstack-mode, and hand it off in the
+same turn. A per-brief workaround leaves every other worker exposed.
 
 Archive only children of this thread whose result you handled in this
 conversation. Leave other threads alone, even finished ones. To archive a

@@ -42,6 +42,8 @@ Keep a small conversation record of product facts and sources, reported or obser
 
 Ask the answerable question most likely to change the work, usually one focused question per turn. Resolve prerequisites before timing, layout, channels, or other dependent choices. Investigate readable facts yourself. Ask the requester for missing judgment, inaccessible evidence, or a real tradeoff. Offer alternatives when useful, not a preferred answer to every question.
 
+When alternatives differ in layout, panels, or structure, show each as a small ASCII diagram over the same example data instead of describing it in prose.
+
 Relevant tracks can include the task and situation, information needed to act, scope, interruptions, recovery, constraints, and observable success. They are not required fields for every task. When the audience or goal changes, revisit dependent decisions and retire obsolete assumptions. Do not infer agreement from silence or a short answer to another question.
 
 ## Close without overstating evidence {:#closure}
