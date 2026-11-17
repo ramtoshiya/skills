@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import types
 import unittest
 from unittest import mock
@@ -212,6 +213,60 @@ class SkillDraftsHookTests(unittest.TestCase):
         self.skill_md.write_text("# Unslop\n\nCut filler.\nKeep examples.\n")
         self.review(self.PATCH, turn="sess_1:task:t3")
         self.assertEqual(len(self.spawns()), 2)
+
+    def test_concurrent_flushes_send_a_repeated_proposal_to_one_analyst(self):
+        second_reached_dispatch = threading.Event()
+        first_spawning = threading.Event()
+        gate_timed_out = []
+        lock, run = self.proposals.dispatching, self.hook.run
+
+        def note_second():
+            if threading.current_thread().name == "second flush":
+                second_reached_dispatch.set()
+
+        class WatchedLock:
+            def __enter__(self):
+                note_second()
+                return lock.__enter__()
+
+            def __exit__(self, *exc):
+                return lock.__exit__(*exc)
+
+        def gated_run(command, stdin=None):
+            if command[1:3] == ["thread", "spawn"]:
+                note_second()
+                if threading.current_thread().name == "first flush":
+                    first_spawning.set()
+                    if not second_reached_dispatch.wait(10):
+                        gate_timed_out.append(True)
+            return run(command, stdin)
+
+        self.enterContext(mock.patch.object(self.proposals, "dispatching", WatchedLock()))
+        self.enterContext(mock.patch.object(self.hook, "run", gated_run))
+        outcomes = {}
+
+        def flush(name):
+            thread = threading.Thread(name=name, target=lambda: outcomes.update({name: self.proposals.flush_due()}))
+            thread.start()
+            return thread
+
+        def record(turn):
+            self.respond("Checking unslop against this session.", tools=1, turn=turn)
+            self.call(self.PATCH, turn=turn)
+            self.respond("Done.", turn=turn)
+
+        record("sess_1:task:t1")
+        first = flush("first flush")
+        self.assertTrue(first_spawning.wait(10))
+        record("sess_1:task:t2")
+        second = flush("second flush")
+        first.join(10)
+        second.join(10)
+
+        self.assertEqual(gate_timed_out, [])
+        self.assertTrue(outcomes["first flush"][0].startswith("spawned"), outcomes)
+        self.assertTrue(outcomes["second flush"][0].startswith("duplicate"), outcomes)
+        self.assertEqual(len(self.spawns()), 1)
 
     def test_partial_repeat_names_the_earlier_analyst(self):
         self.review(self.PATCH)
