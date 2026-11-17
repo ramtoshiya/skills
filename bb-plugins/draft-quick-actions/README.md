@@ -126,8 +126,9 @@ The check creates one temporary draft for each of four cases:
 In the two header cases, the check holds the request until the button shows
 **Sending draft…** and is disabled. In every case, it checks that exactly one
 request carries the displayed target, and that the original message leaves
-the Held Drafts wait without navigation or replacement messages. It waits for the expected
-Claude Haiku 5.5 reply and for the control to disappear. The check deletes its
+the Held Drafts wait without navigation or replacement messages, and waits for
+the expected Claude Haiku 5.5 reply. In the header and menu cases, it also
+waits for **Run draft** to disappear after the send. The check deletes its
 test threads even on failure. It does not approve existing drafts or download
 a browser. Touch emulation in Chromium is not a physical iPad.
 

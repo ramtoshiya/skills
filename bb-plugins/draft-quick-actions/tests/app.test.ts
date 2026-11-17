@@ -21,6 +21,7 @@ const { act } = await import("@testing-library/react");
 const app = await loadPluginApp(() => import("../app.ts"));
 const actions = new Map(app.threadActions.map((registration) => [registration.id, registration]));
 const action = actions.get("run-draft");
+const header = app.threadActions.filter((registration) => registration.placement === "header");
 const target = { threadId: "draft-thread", queuedMessageId: "draft-message", updatedAt: 10 };
 const draft = () => makeQueueEntry({
   id: target.queuedMessageId,
@@ -30,7 +31,7 @@ const draft = () => makeQueueEntry({
   waitingOn: { kind: "plugin", pluginId: "held-drafts", reason: "Draft" },
 });
 
-function Row({ registration = action }) {
+function Row({ registration }) {
   const sdk = useSdk();
   const navigate = useBbNavigate();
   const data = registration.useData({ threadIds: [target.threadId, "another-thread"] });
@@ -44,17 +45,16 @@ function Row({ registration = action }) {
   }, item.label);
 }
 
-test("Run draft keeps its menu key and adds a header button that needs no hover", () => {
+test("Run draft keeps its sidebar quick-action key as a menu action and adds one header action", () => {
   assert.equal(action.placement ?? "menu", "menu", "draft-quick-actions/run-draft is the sidebar quick-action key and must stay a menu action.");
-  assert.equal(actions.get("run-draft-header")?.placement, "header");
+  assert.equal(header.length, 1);
 });
 
-for (const id of ["run-draft", "run-draft-header"]) {
-  test(`one ${id} click sends the displayed target and blocks a second click`, async (t) => {
+for (const [surface, registration] of [["menu", action], ["header", header[0]]]) {
+  test(`one ${surface} Run draft click sends the displayed target and blocks a second click`, async (t) => {
     let release;
     const completed = new Promise((resolve) => { release = resolve; });
     const calls = [];
-    const registration = actions.get(id);
     const slot = renderSlot({ component: () => createElement(Row, { registration }) }, {}, {
       sdk: { subscribe: () => () => {}, threads: { queue: { list: async () => [draft()] } } },
       rpc: { runDraft: async (input) => { calls.push(input); await completed; return { kind: "sent" }; } },
@@ -82,7 +82,7 @@ test("a draft with an additional scheduled message has no unusable Run draft but
     sendAt: 1000,
     waitingOn: { kind: "time" },
   };
-  const slot = renderSlot({ component: Row }, {}, {
+  const slot = renderSlot({ component: () => createElement(Row, { registration: action }) }, {}, {
     sdk: {
       subscribe: () => () => {},
       threads: { queue: { list: async ({ waitHolder }) => waitHolder ? [held] : [held, scheduled] } },
@@ -98,7 +98,7 @@ test("queue events and reconnection update the button, and unmount disposes subs
   const disposed = [];
   let messages = [];
   let reads = 0;
-  const slot = renderSlot({ component: Row }, {}, {
+  const slot = renderSlot({ component: () => createElement(Row, { registration: action }) }, {}, {
     sdk: {
       subscribe: ({ event, callback }) => { callbacks.set(event, callback); return () => disposed.push(event); },
       threads: { queue: { list: async () => { reads++; return messages; } } },
