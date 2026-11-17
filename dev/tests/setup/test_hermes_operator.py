@@ -15,10 +15,6 @@ ROOT = Path(__file__).resolve().parents[3]
 PLUGIN = ROOT / "setup/hermes/plugins/skill-drafts/__init__.py"
 SETUP = ROOT / "setup/hermes/operator_profile.py"
 THREAD_ENV = ROOT / "setup/hermes/plugins/bb-thread-env/__init__.py"
-# Stands in for the bb CLI. It appends each call's arguments and stdin to $CALLS when that is set,
-# keeps the provider-acp plugin settings in $HOME/bb-provider-acp.json, lists Claude models, and
-# starts threads. FAIL_SPAWN makes `thread spawn` fail. Any command the fake does not know fails,
-# as the real CLI does.
 FAKE_BB = f"""#!{sys.executable}
 import json, os, sys
 from pathlib import Path
@@ -50,7 +46,6 @@ else:
     print(json.dumps({{"ok": False, "error": {{"code": "unknown_command", "message": "unknown command"}}}}))
     sys.exit(1)
 """
-# Stands in for `hermes sessions export`: writes one line to the requested file.
 FAKE_EXPORT = f"""#!{sys.executable}
 import sys
 open(sys.argv[-1], "w").write('{{"role": "user", "content": "keep it short"}}\\n')
@@ -69,7 +64,6 @@ def option(args, name):
 
 
 def hermes_runtime(origin, resolve):
-    """The two Hermes modules the hook imports: the write origin and the session-env resolver."""
     tools, approval = types.ModuleType("tools"), types.ModuleType("tools.write_approval")
     approval.current_origin = origin
     cli, session_env = types.ModuleType("hermes_cli"), types.ModuleType("hermes_cli.plugins_session_env")
@@ -84,8 +78,6 @@ def reply(content, tools=0):
 
 
 class SkillDraftsHookTests(unittest.TestCase):
-    """Drives the hooks as Hermes calls them and the worker step that the plugin's thread runs."""
-
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)

@@ -1,21 +1,8 @@
-"""Block every skill_manage call. Hand a background review's proposals to an analyst agent.
-
-Installed skills are copies of files that live in other repositories, so no call may change them.
-
-A call from the operator's own conversation is sent back: the operator writes the brief itself, as
-its operator-handoff skill describes, because only it knows why the skill fell short.
-
-A call from Hermes's background skill review is recorded instead. That review runs in a fork whose
-messages are never stored, so this plugin also keeps the reviewer's own text from each of its model
-responses. When the review ends, one analyst bb thread receives an evidence packet with every
-blocked call, its diff, the reviewer's text, and the stored conversation. The analyst decides
-whether a change is warranted and, if so, creates a held draft that the user approves by sending.
-The analyst and its draft are children of the operator thread that shows the session, when that
-thread can be found.
+"""Hermes's background skill review runs in a fork whose messages are never stored, so this plugin
+keeps the reviewer's own text from each of its model responses.
 
 Hooks only touch memory: Hermes abandons a hook after 30 s and then skips that hook for a while.
-Every bb and hermes command runs on the plugin's own worker thread. Hermes treats an exception in
-a hook as "proceed", so the hooks catch everything and still block.
+Every bb and hermes command runs on the plugin's own worker thread.
 """
 
 from __future__ import annotations
@@ -62,7 +49,6 @@ QUEUED_BLOCK = (
 
 @dataclass
 class Turn:
-    """What one review turn left behind: its blocked calls and the reviewer's text, in order."""
     session_id: str
     context: contextvars.Context
     calls: list[dict[str, Any]] = field(default_factory=list)
@@ -119,14 +105,12 @@ def proposed_diff(sources: dict[str, Any], op: dict[str, Any]) -> str:
 
 
 def fingerprint(sources: dict[str, Any], op: dict[str, Any]) -> str:
-    """The same operation on the same installed file. A changed skill makes an old proposal new again."""
     baseline = hashlib.sha256(installed_text(sources, op).encode()).hexdigest()
     canonical = json.dumps(op, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(f"{baseline}\n{canonical}".encode()).hexdigest()
 
 
 def owner(sources: dict[str, Any], name: str) -> str:
-    """Where a change to the skill starts. Unknown names are new skills for the default repository."""
     skill = sources.get("skills", {}).get(name)
     if skill is None:
         return f"a new skill. Place it in `{sources['defaultRepo']}` where that repository's docs say"
@@ -142,7 +126,6 @@ def skill_names(ops: list[dict[str, Any]]) -> list[str]:
 
 
 def message_text(message: Any) -> str:
-    """The reviewer's words in one model response: reasoning, text, and the tools it called."""
     parts = []
     reasoning = getattr(message, "reasoning", None) or getattr(message, "reasoning_content", None)
     if isinstance(reasoning, str) and reasoning.strip():
@@ -171,7 +154,6 @@ def write_origin() -> str:
 
 
 def operator_thread(session_id: str) -> str | None:
-    """The bb thread that shows the session, from the bb-thread-env plugin's session env."""
     try:
         from hermes_cli.plugins_session_env import resolve_session_env
         return resolve_session_env(session_id).get("BB_THREAD_ID") or None
@@ -195,7 +177,6 @@ def run(command: list[str], stdin: str | None = None) -> str:
 
 
 def analyst_model(models: Any) -> str:
-    """The highest-numbered Opus ID without a suffix that lists the analyst's effort."""
     listed = models if isinstance(models, list) else models.get("models", [])
     candidates = []
     for model in listed:
@@ -209,8 +190,6 @@ def analyst_model(models: Any) -> str:
 
 
 class Ledger:
-    """Proposals an analyst already received, by fingerprint. Only the worker thread writes it."""
-
     def __init__(self, path: Path):
         self.path = path
 
@@ -229,8 +208,6 @@ class Ledger:
 
 
 class Proposals:
-    """Collects each review turn in memory and, on the worker thread, hands it to one analyst."""
-
     def __init__(self, state: Path, sources_path: Path, clock: Callable[[], float] = time.time):
         self.state = state
         self.sources_path = sources_path
@@ -238,6 +215,7 @@ class Proposals:
         self.ledger = Ledger(state / "ledger.json")
         self.turns: dict[str, Turn] = {}
         self.lock = threading.Lock()
+        self.dispatching = threading.Lock()
         self.wake = threading.Event()
         self.stopping = False
         self.worker: threading.Thread | None = None
@@ -278,7 +256,6 @@ class Proposals:
             self.poke()
 
     def due(self, now: float, everything: bool) -> list[tuple[str, Turn]]:
-        """Remove and return the turns that ended or went quiet. Turns without calls are dropped."""
         with self.lock:
             ready = [key for key, turn in self.turns.items()
                      if everything or turn.ended or now - turn.last_seen >= IDLE_SECONDS]
@@ -290,9 +267,9 @@ class Proposals:
         return [(key, turn) for key, turn in taken if turn.calls]
 
     def flush_due(self, now: float | None = None, everything: bool = False) -> list[str]:
-        """Hand every finished turn to an analyst. Returns one outcome line per turn."""
         now = self.clock() if now is None else now
-        return [self.dispatch(key, turn, now) for key, turn in self.due(now, everything)]
+        with self.dispatching:
+            return [self.dispatch(key, turn, now) for key, turn in self.due(now, everything)]
 
     def dispatch(self, turn_id: str, turn: Turn, now: float) -> str:
         key = hashlib.sha256(turn_id.encode()).hexdigest()[:12]
@@ -332,7 +309,6 @@ class Proposals:
 
     def write_packet(self, key: str, turn: Turn, sources: dict[str, Any], ops: list[dict[str, Any]],
                      entries: dict[str, dict[str, Any]], parent: str | None, now: float) -> Path:
-        """Write the analyst's evidence files and return their directory."""
         for old in (self.state / "proposals").glob("*"):
             if now - old.stat().st_mtime >= KEEP_SECONDS:
                 shutil.rmtree(old, ignore_errors=True)
@@ -381,7 +357,6 @@ class Proposals:
         return packet
 
     def report_failure(self, key: str, names: list[str], parent: str | None, error: Exception) -> None:
-        """Tell the operator thread, which tells the user. Without one, the gateway log is the record."""
         if not parent:
             return
         message = (f"[skill-drafts plugin] Hermes's background skill review proposed changes to "
@@ -395,7 +370,6 @@ class Proposals:
             logger.warning("skill-drafts: could not tell thread %s about review %s: %s", parent, key, tell_error)
 
     def poke(self) -> None:
-        """Wake the worker, starting it on first use. Never blocks."""
         with self.lock:
             if self.worker is None and not self.stopping:
                 self.worker = threading.Thread(target=self.serve, name="skill-drafts", daemon=True)
@@ -410,7 +384,6 @@ class Proposals:
         self.flush_due(everything=True)
 
     def stop(self) -> None:
-        """On unload: the worker hands over whatever was collected, then exits."""
         self.stopping = True
         self.wake.set()
 
