@@ -87,15 +87,15 @@ class SelfCompactPluginTests(unittest.TestCase):
         helper.parent.mkdir(parents=True)
         helper.write_text(FAKE_HELPER)
 
-    def request(self, session, tokens):
-        self.ctx.hooks["post_api_request"](session_id=session, usage={"total_tokens": tokens})
+    def request(self, session, tokens, turn=""):
+        self.ctx.hooks["post_api_request"](session_id=session, usage={"total_tokens": tokens}, turn_id=turn)
 
-    def turn_start(self, session):
-        answer = self.ctx.hooks["pre_llm_call"](session_id=session)
+    def turn_start(self, session, turn=""):
+        answer = self.ctx.hooks["pre_llm_call"](session_id=session, turn_id=turn)
         return answer["context"] if answer else None
 
-    def tool_result(self, session, tool, result="output"):
-        return self.ctx.hooks["transform_tool_result"](tool_name=tool, result=result, session_id=session)
+    def tool_result(self, session, tool, result="output", turn=""):
+        return self.ctx.hooks["transform_tool_result"](tool_name=tool, result=result, session_id=session, turn_id=turn)
 
     def compaction(self, session, kind="summarize", reason="manual", old=""):
         self.ctx.hooks["post_compaction"](session_id=session, old_session_id=old, kind=kind, reason=reason,
@@ -179,6 +179,18 @@ class SelfCompactPluginTests(unittest.TestCase):
         self.assertTrue(carried.endswith("\n\nls output"))
         self.assertIsNone(self.tool_result("sess_a", "terminal"))
         self.assertIsNone(self.turn_start("sess_a"))
+
+    def test_a_review_fork_sharing_the_session_neither_raises_the_band_nor_takes_notices(self):
+        self.assertIsNone(self.turn_start("sess_a", turn="t1"))
+        self.request("sess_a", 230_000, turn="t1")
+        self.assertIn("about 76%", self.tool_result("sess_a", "terminal", turn="t1"))
+        self.request("sess_a", 239_000, turn="t1")
+        # Hermes's background review fork reuses the session id, skips pre_llm_call, and has its own turn id.
+        self.request("sess_a", 242_000, turn="fork")
+        self.assertIsNone(self.tool_result("sess_a", "skill_view", turn="fork"))
+        self.assertIsNone(self.turn_start("sess_a", turn="t2"))
+        self.request("sess_a", 243_000, turn="t2")
+        self.assertIn("about 81%", self.tool_result("sess_a", "terminal", turn="t2"))
 
     def test_compact_saves_the_note_and_runs_the_helper_for_the_calling_thread(self):
         self.request("sess_a", 250_000)

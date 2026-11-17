@@ -714,6 +714,10 @@ sessions in bb, as Claude Code's context budget hook does for Claude Code.
   band to compact at the next natural boundary. The reminder starts over after
   a compaction that summarizes the session. A session already over 75% gets
   one reminder for its current band after its first request.
+- Only the session's live turn counts. Hermes runs a background review after
+  some turns under the same session id. The plugin ignores that review's
+  requests and tool results, so the review neither raises the band nor takes
+  a reminder meant for the agent.
 - The reminder reaches the agent with the next turn's message or at the head of
   the next result from `terminal`, `process`, `self_compact`, `skill_view`,
   `skills_list`, `memory`, or `todo`. Hermes marks web, browser, and MCP results
@@ -733,9 +737,9 @@ sessions in bb, as Claude Code's context budget hook does for Claude Code.
   nothing queued or pending. Otherwise the plugin tells the agent at its next
   turn or trusted tool result. Neither retries, and the note stays.
 
-The plugin keeps its state in
-`~/.hermes/profiles/operator/plugin-data/self-compact/`, which reinstalling
-leaves alone: `sessions/` holds each session's last size and reminded band,
+The plugin keeps its state in the directory Hermes gives it,
+`~/.hermes/profiles/operator/plugin-data/agent-plugin-self-compact-<hash>/`,
+which reinstalling leaves alone: `sessions/` holds each session's last size and reminded band,
 `notes/<thread id>.md` holds each thread's note, and `launches/<thread id>/`
 holds the latest helper run with its ledger and output. A note stays until the
 agent clears it. A helper that stopped without writing a result, for example

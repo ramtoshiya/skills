@@ -160,11 +160,13 @@ def _rename_record_transaction(root: Path, old: str, new: str) -> None:
         source.clear()
 
 
-def _thread_for(root: Path, session_id: str) -> Optional[str]:
+def _thread_for(root: Path, session_id: str, turn_id: str = "") -> Optional[str]:
     thread = _thread_from_env(session_id) if session_id else None
     with _record_transaction(root, session_id) as record:
         if thread:
             record["thread"] = thread
+        if turn_id:
+            record["turn"] = turn_id
         return record.get("thread")
 
 
@@ -243,8 +245,19 @@ def _take_unreported_failure(root: Path, thread: str) -> Optional[str]:
     return text
 
 
-def drain(root: Path, session_id: str) -> Optional[str]:
+def _live(record: dict, turn_id: str) -> bool:
+    """Whether a hook call belongs to the session's live turn.
+
+    Hermes runs background review forks under the parent's session id. A fork skips
+    `pre_llm_call`, so its turn id never becomes the recorded one, and its usage and tool
+    results must not raise the band or take the parent's notices."""
+    return not turn_id or not record.get("turn") or record["turn"] == turn_id
+
+
+def drain(root: Path, session_id: str, turn_id: str = "") -> Optional[str]:
     with _record_transaction(root, session_id) as record:
+        if not _live(record, turn_id):
+            return None
         pending = record.get("pending") or {}
         texts = [pending.pop(kind) for kind in ("budget", "after") if kind in pending]
         thread = record.get("thread")
@@ -253,7 +266,7 @@ def drain(root: Path, session_id: str) -> Optional[str]:
     return "\n\n".join(texts) or None
 
 
-def on_post_api_request(session_id: str = "", usage: Optional[dict] = None, **_: Any) -> None:
+def on_post_api_request(session_id: str = "", usage: Optional[dict] = None, turn_id: str = "", **_: Any) -> None:
     tokens = (usage or {}).get("total_tokens")
     if not session_id or not isinstance(tokens, int) or isinstance(tokens, bool) or tokens <= 0:
         return
@@ -262,6 +275,8 @@ def on_post_api_request(session_id: str = "", usage: Optional[dict] = None, **_:
         return
     current = band(tokens, window)
     with _record_transaction(_root(), session_id) as record:
+        if not _live(record, turn_id):
+            return
         record["tokens"] = tokens
         previous = record.get("band")
         if current is not None and (previous is None or current > previous):
@@ -269,19 +284,20 @@ def on_post_api_request(session_id: str = "", usage: Optional[dict] = None, **_:
             record.setdefault("pending", {})["budget"] = budget_notice(tokens, window)
 
 
-def on_pre_llm_call(session_id: str = "", **_: Any) -> Optional[dict]:
+def on_pre_llm_call(session_id: str = "", turn_id: str = "", **_: Any) -> Optional[dict]:
     if not session_id:
         return None
     root = _root()
-    _thread_for(root, session_id)
-    text = drain(root, session_id)
+    _thread_for(root, session_id, turn_id)
+    text = drain(root, session_id, turn_id)
     return {"context": PREFIX + text} if text else None
 
 
-def on_transform_tool_result(tool_name: str = "", result: Any = None, session_id: str = "", **_: Any) -> Optional[str]:
+def on_transform_tool_result(tool_name: str = "", result: Any = None, session_id: str = "", turn_id: str = "",
+                             **_: Any) -> Optional[str]:
     if tool_name not in TRUSTED_CARRIERS or not isinstance(result, str) or not session_id:
         return None
-    text = drain(_root(), session_id)
+    text = drain(_root(), session_id, turn_id)
     # At the head, because Hermes moves an oversized result to a file and keeps only its start inline.
     return f"{PREFIX}{text}\n\n{result}" if text else None
 
