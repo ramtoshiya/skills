@@ -63,6 +63,27 @@ test("one sidebar action click sends the displayed target and blocks a second cl
   assert.equal(slot.inspection.navigateCalls.length, 0);
 });
 
+test("a draft with an additional scheduled message has no unusable Run draft button", async (t) => {
+  const held = draft();
+  const scheduled = {
+    ...draft(),
+    id: "scheduled-message",
+    originPluginId: null,
+    state: "scheduled",
+    sendAt: 1000,
+    waitingOn: { kind: "time" },
+  };
+  const slot = renderSlot({ component: Row }, {}, {
+    sdk: {
+      subscribe: () => () => {},
+      threads: { queue: { list: async ({ waitHolder }) => waitHolder ? [held] : [held, scheduled] } },
+    },
+  });
+  t.after(() => slot.lifecycle.unmount());
+  await act(async () => {});
+  assert.equal(slot.queryByRole("button", { name: "Run draft" }) === null, true, "The sidebar must hide a draft whose complete queue is ineligible.");
+});
+
 test("queue events and reconnection update the button, and unmount disposes subscriptions", async () => {
   const callbacks = new Map();
   const disposed = [];
