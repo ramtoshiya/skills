@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import json
 import os
@@ -183,6 +184,42 @@ def sync(h):
             if digest(target) == digest(source):
                 entries[name] = digest(source)
     save(h, entries)
+def reload_gateway(h):
+    # A gateway serving h, marked by gateway-running, re-imports the enabled plugins' code from disk.
+    marker = h / "gateway-running"
+    if not marker.exists():
+        return None
+    if marker.read_text() == "refuse":
+        return {"reloaded": False, "error": "reload refused"}
+    enabled = json.loads((h / "fake-config.json").read_text()).get("plugins.enabled", [])
+    loaded = {p: hashlib.sha256((h / "plugins" / p / "__init__.py").read_bytes()).hexdigest() for p in enabled}
+    (h / "gateway-plugins.json").write_text(json.dumps(loaded))
+    return {"reloaded": True, "plugins": sorted(loaded)}
+def run_plugin_command(h, command):
+    # Hermes attaches the CLI commands that enabled plugins register, then calls the handler.
+    import argparse, importlib.util, types
+    activation = types.ModuleType("hermes_cli.plugins_activation")
+    activation.reload_running_gateway = lambda: reload_gateway(h)
+    sys.modules["hermes_cli"] = types.ModuleType("hermes_cli")
+    sys.modules["hermes_cli.plugins_activation"] = activation
+    commands = {}
+    class Context:
+        def register_cli_command(self, name, help, setup_fn, handler_fn=None, description=""):
+            commands[name] = (setup_fn, handler_fn)
+        def __getattr__(self, name):
+            return lambda *a, **k: None
+    for plugin in json.loads((h / "fake-config.json").read_text()).get("plugins.enabled", []):
+        spec = importlib.util.spec_from_file_location(f"plugin_{plugin}".replace("-", "_"), h / "plugins" / plugin / "__init__.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.register(Context())
+    if command[0] not in commands:
+        sys.exit(f"hermes: '{command[0]}' is not a `hermes` command.")
+    parser = argparse.ArgumentParser(prog=f"hermes {command[0]}")
+    setup_fn, handler_fn = commands[command[0]]
+    setup_fn(parser)
+    parsed = parser.parse_args(command[1:])
+    sys.exit((handler_fn or parsed.func)(parsed) or 0)
 if args[0] == "profile":
     if args[1] == "show" and not home(args[2]).is_dir():
         sys.exit(1)
@@ -206,8 +243,12 @@ elif command[:2] == ["config", "set"]:
         values[command[2]] = json.loads(command[3])
     except ValueError:
         values[command[2]] = command[3]
-elif command[:2] == ["plugins", "enable"] and command[2] not in values.get("plugins.enabled", []):
-    values.setdefault("plugins.enabled", []).append(command[2])
+elif command[:2] == ["plugins", "enable"]:
+    # Like Hermes, only an enable that changes the list reloads the running gateway.
+    if command[2] not in values.get("plugins.enabled", []):
+        values.setdefault("plugins.enabled", []).append(command[2])
+        path.write_text(json.dumps(values))
+        reload_gateway(h)
 elif command[:2] == ["skills", "opt-out"]:
     (h / ".no-bundled-skills").touch()
     if "--remove" in command:
@@ -229,6 +270,8 @@ elif command[:2] == ["skills", "reset"]:
     sync(h)
 elif command == ["sync"]:
     sync(h)
+elif command[0] not in {"config", "plugins", "skills"}:
+    run_plugin_command(h, command)
 path.parent.mkdir(parents=True, exist_ok=True)
 path.write_text(json.dumps(values))
 """.replace("PYTHON", sys.executable)
@@ -456,6 +499,30 @@ class OperatorProfileSetupTests(unittest.TestCase):
         expected = self.expected() - {"grilling", "korean-pack:korean"}
         self.assertEqual(set(runtime_skills(self.operator)), expected)
         self.assertEqual(bb_catalog(self.home), expected)
+
+    def test_running_gateway_gets_changed_plugin_code(self):
+        self.setup_profile()
+        (self.operator / "gateway-running").touch()
+        hook = "setup/hermes/plugins/skill-drafts/__init__.py"
+        commit_repo(self.repo, {hook: (self.repo / hook).read_text() + "\n# changed\n"})
+
+        output = self.setup_profile()
+
+        loaded = json.loads((self.operator / "gateway-plugins.json").read_text())
+        installed = (self.operator / "plugins/skill-drafts/__init__.py").read_bytes()
+        self.assertTrue(installed.endswith(b"# changed\n"))
+        self.assertEqual(loaded["skill-drafts"], hashlib.sha256(installed).hexdigest())
+        self.assertIn("reloaded", output)
+
+    def test_gateway_that_refuses_the_reload_fails_setup(self):
+        self.setup_profile()
+        (self.operator / "gateway-running").write_text("refuse")
+
+        result = subprocess.run([sys.executable, str(self.repo / "setup/hermes/operator_profile.py"),
+                                 "--pstack", str(self.pstack)], env=self.env, capture_output=True, text=True)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("reload refused", result.stderr)
 
     def test_plugin_package_named_differently_from_its_entry_stops_setup(self):
         self.marketplace["plugins"][3]["name"] = "korean"
