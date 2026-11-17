@@ -130,7 +130,7 @@ def suggestion(payload):
         return None
     text = (f"Context budget: about {percent}% of the {window:,}-token auto-compact window is in use "
             f"({tokens:,} tokens). At the next natural boundary, compact on your own by following the "
-            f"ramtoshiya-cc:self-compact skill. Handoff note path: {handoff_path(payload)}.")
+            f"ramtoshiya:self-compact skill. Handoff note path: {handoff_path(payload)}.")
     thread = os.environ.get("BB_THREAD_ID")
     if thread:
         return text + f" This session runs in BB, thread id {thread}. Use the BB section of the skill."
