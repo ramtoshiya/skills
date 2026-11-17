@@ -475,7 +475,8 @@ third-party entry selects. pstack-mode is the exception and contributes only
 the seven skills above. Knowing a skill lets Hermes plan around it and name it
 in a brief. It does not let Hermes do the skill's work, because the
 operator-handoff skill sends anything beyond conversation and reading to a
-coding agent. An entry that ships a native Hermes plugin (a `plugin.yaml`,
+coding agent. The exception is `self-compact`, which Hermes follows
+through the `self_compact` tool described below. An entry that ships a native Hermes plugin (a `plugin.yaml`,
 such as `humanize-korean`) is installed as that plugin, and Hermes loads its
 skills as `<plugin>:<skill>`, such as `humanize-korean:humanize-korean`. The
 plugin's `name` must match its marketplace entry, or the task stops. Hermes's
@@ -493,6 +494,7 @@ Then it changes these files under `~/.hermes/profiles/operator/`:
 | `plugins/<entry>/` | The files Git tracks in each marketplace entry that is a native Hermes plugin |
 | `plugins/skill-drafts/` | A copy of `setup/hermes/plugins/skill-drafts` and a `sources.json` that maps each skill to the checkout and, for a third-party skill, the fork and commit it came from. The plugin keeps its evidence packets and proposal record in the profile's `skill-drafts/` folder, which a reinstall leaves alone |
 | `plugins/bb-thread-env/` | A copy of `setup/hermes/plugins/bb-thread-env` |
+| `plugins/self-compact/` | A copy of `setup/hermes/plugins/self-compact` |
 | `config.yaml` | The settings below, and the plugins enabled |
 
 | Setting | Value | Effect |
@@ -502,6 +504,7 @@ Then it changes these files under `~/.hermes/profiles/operator/`:
 | `skills.project_discovery` | `false` | Skills in the thread's working directory are not loaded |
 | `curator.enabled` | `false` | Hermes does not archive or merge skills on its own |
 | `memory.write_approval` | `false` | Hermes writes its built-in memory without asking. Memory limits stay at the defaults |
+| `compression.threshold_tokens` | `300000` | Hermes compresses a session on its own when a request reaches 300,000 tokens. The self-compact plugin reminds the agent to compact from 75% of this number |
 
 Running the task again replaces the copies it manages, removes skills that
 the marketplace no longer selects, and leaves memories, sessions,
@@ -591,6 +594,9 @@ an entry whose id is `hermes-agent` in the ACP providers plugin's
   `hermes/skills/` with the `<plugin>:` prefix. bb lists
   `humanize-korean:humanize-korean`, the name Hermes loads it by.
 - It sets reasoning through Hermes's `reasoning_effort` option.
+- It turns on manual compaction, which bb's shipped entry leaves off, so
+  `bb thread compact` works for Hermes threads. Hermes runs the `/compact` it
+  receives as its own `/compress`.
 
 The task keeps every other custom agent and replaces only an earlier
 `hermes-agent` entry. When `bb` is not on `PATH`, it skips this step and says
@@ -693,6 +699,46 @@ receives each worker's completion message.
 The plugin reads the server list from the gateway's in-memory session state,
 which Hermes does not document for plugins. If `bb status` in an operator
 session shows `Thread: (not set)` after a Hermes update, check that state first.
+
+### How a session compacts itself
+
+The `self-compact` plugin runs the shared `self-compact` skill for operator
+sessions in bb, as Claude Code's context budget hook does for Claude Code.
+
+- After each model request it records the session's context size. From 75% of
+  `compression.threshold_tokens`, it reminds the agent once per five-point
+  band to compact at the next natural boundary. The reminder starts over after
+  a compaction that summarizes the session. A session already over 75% gets
+  one reminder for its current band after its first request.
+- The reminder reaches the agent with the next turn's message or at the head of
+  the next result from `terminal`, `process`, `self_compact`, `skill_view`,
+  `skills_list`, `memory`, or `todo`. Hermes marks web, browser, and MCP results
+  as untrusted, so they carry no reminder. A loop of only those tools,
+  including bb's own MCP tools, gets the reminder at its next turn.
+- The `self_compact` tool is the only way the operator writes its handoff
+  note. Action `compact` saves the note and starts the skill's bb helper for
+  the calling session's thread, `read` returns the note and the last helper's
+  result, and `clear` deletes the note. The thread id comes from the
+  `bb-thread-env` plugin's resolver for the calling session, never from the
+  gateway's environment.
+- After each compaction that Hermes commits while that thread's helper runs,
+  the plugin appends a line to the helper's ledger. The helper needs exactly
+  one manual summary there, because bb reports a `/compact` that Hermes
+  refused or found nothing to compact as finished too.
+- When compaction fails, the helper tells the thread once if it is idle with
+  nothing queued or pending. Otherwise the plugin tells the agent at its next
+  turn or trusted tool result. Neither retries, and the note stays.
+
+The plugin keeps its state in
+`~/.hermes/profiles/operator/plugin-data/self-compact/`, which reinstalling
+leaves alone: `sessions/` holds each session's last size and reminded band,
+`notes/<thread id>.md` holds each thread's note, and `launches/<thread id>/`
+holds the latest helper run with its ledger and output. A note stays until the
+agent clears it. A helper that stopped without writing a result, for example
+at a reboot, blocks `compact` for its thread until the agent calls `clear`,
+because whether it compacted is unknown. The helper has no atomic send-if-idle
+operation, so a prompt that arrives after its last idle check can still race
+the resume.
 
 ## How mise applies each entry
 

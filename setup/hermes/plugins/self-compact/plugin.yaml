@@ -1,0 +1,10 @@
+name: self-compact
+version: "0.1.0"
+description: "Reminds a Hermes session on bb to compact itself from 75% of its compaction window, saves its handoff note, and runs the shared self-compact helper that compacts and resumes the bb thread."
+provides_tools:
+  - self_compact
+provides_hooks:
+  - post_api_request
+  - pre_llm_call
+  - transform_tool_result
+  - post_compaction

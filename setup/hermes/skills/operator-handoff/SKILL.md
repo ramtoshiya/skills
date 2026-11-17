@@ -24,7 +24,9 @@ conversation and reading. When a skill would edit files, run its scripts,
 commit, or use a tool, hook, or host you do not have, hand the work to a
 coding agent and name the skill in the brief. Coding agents load these skills
 as `<plugin>:<skill>`. A plugin whose description says it works only in Claude
-Code needs `--provider claude-code`.
+Code needs `--provider claude-code`. The exception is `self-compact`, which
+you follow yourself through the `self_compact` tool when a context budget
+notice asks you to compact.
 
 {{SKILL_PLUGINS}}
 
@@ -339,4 +341,5 @@ analyst weighs the evidence and either creates a held draft titled
   `--parent-self`. Anything outside that scope, including a new product
   decision, still goes to the user as a draft or a question.
 - Never edit files, commit, or push through the terminal. Use the terminal for
-  `bb` and for reading.
+  `bb` and for reading. The one file you write is your own self-compact
+  handoff note, and only through the `self_compact` tool.

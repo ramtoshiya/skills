@@ -625,8 +625,9 @@ class OperatorProfileSetupTests(unittest.TestCase):
         commit_repo(self.repo, {
             **setup_files,
             ".claude-plugin/marketplace.json": json.dumps(self.marketplace),
-            **under("plugins/ramtoshiya/skills", skill("read-x")),
-            **under("plugins/ramtoshiya-cc/skills", {**skill("self-compact"), "self-compact/scripts/compact.mjs": "//\n"}),
+            **under("plugins/ramtoshiya/skills", {**skill("read-x"), **skill("self-compact"),
+                                                   "self-compact/scripts/bb-compact.mjs": "//\n"}),
+            **under("plugins/ramtoshiya-cc/skills", skill("claude-design-direct")),
         })
         self.operator = self.home / ".hermes/profiles/operator"
         self.default = self.home / ".hermes"
@@ -658,7 +659,7 @@ class OperatorProfileSetupTests(unittest.TestCase):
             self.hermes("-p", profile, "sync")
 
     def expected(self):
-        return {"read-x", "self-compact", "grilling", "operator-handoff", *PSTACK_ALLOWED, "korean-pack:korean"}
+        return {"read-x", "self-compact", "claude-design-direct", "grilling", "operator-handoff", *PSTACK_ALLOWED, "korean-pack:korean"}
 
     def test_operator_knows_every_repository_skill_without_bundled_ones(self):
         self.setup_profile()
@@ -666,13 +667,16 @@ class OperatorProfileSetupTests(unittest.TestCase):
 
         skills = runtime_skills(self.operator)
         self.assertEqual(set(skills), self.expected())
-        self.assertTrue((skills["self-compact"][0] / "scripts/compact.mjs").is_file())
+        self.assertTrue((skills["self-compact"][0] / "scripts/bb-compact.mjs").is_file())
         self.assertTrue((skills["grilling"][0] / "references/rounds.md").is_file())
         self.assertTrue((self.operator / "plugins/korean-pack/scripts/check.py").is_file())
         settings = config(self.operator)
         self.assertEqual(settings["skills.auto_load"], ["operator-handoff"])
         self.assertEqual(settings["agent.disabled_toolsets"], ["file", "code_execution", "delegation"])
         self.assertFalse(settings["memory.write_approval"])
+        self.assertEqual(settings["compression.threshold_tokens"], 300000)
+        self.assertEqual(settings["plugins.enabled"], ["skill-drafts", "bb-thread-env", "self-compact", "korean-pack"])
+        self.assertTrue((self.operator / "plugins/self-compact/plugin.yaml").is_file())
         handoff = (skills["operator-handoff"][0] / "SKILL.md").read_text()
         self.assertIn(CC_DESCRIPTION, handoff)
         self.assertIn("`self-compact`", handoff)
@@ -713,6 +717,7 @@ class OperatorProfileSetupTests(unittest.TestCase):
         agents = json.loads(json.loads((self.home / "bb-provider-acp.json").read_text())["customAgents"])
         self.assertEqual(agents[0], OTHER_AGENT)
         self.assertEqual([a["args"] for a in agents if a["id"] == "hermes-agent"], [["-p", "operator", "acp"]])
+        self.assertEqual([a["supportsManualCompaction"] for a in agents if a["id"] == "hermes-agent"], [True])
 
     def test_pstack_skills_stay_where_and_what_they_were(self):
         native = self.operator / "plugins/pstack-mode/plugin.yaml"
