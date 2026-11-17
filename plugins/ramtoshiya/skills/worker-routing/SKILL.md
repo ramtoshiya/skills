@@ -24,17 +24,16 @@ a BB worker runs on your own model and effort.
 | `model` `effort` | Work |
 | --- | --- |
 | `haiku` `low` | Nothing to decide: an edit the brief spells out, a rename or one pattern across files, a search with a fixed source and scope, a direct lookup |
-| `haiku` `max` | Reading a large file or log closely and reporting what it says. Split input over about 100K tokens across several workers |
-| `sonnet` `max` | The default for implementation: the brief states the behavior and acceptance criteria, the change stays inside one component, and no design decision is open. Also sorting and summarizing results against fixed criteria |
-| `opus` `high` | Top-tier work expected to finish within about 30 minutes: one design question, a short judgement, the review of a small or medium diff |
-| `opus` `xhigh` | Longer top-tier work: a design memo, a change across components or across a boundary such as a file format or persisted state, concurrency, recovery, security, debugging an unknown cause, a consequential review |
+| `haiku` `high` | Reading a large file or log closely and reporting what it says. Split input over about 100K tokens across several workers |
+| `sonnet` `high` | The default for implementation: the brief states the behavior and acceptance criteria, the change stays inside one component, and no design decision is open. Also sorting and summarizing results against fixed criteria |
+| `opus` `high` | Top-tier work: design questions and memos, reviews, changes across components or boundaries such as a file format or persisted state, concurrency, recovery, security, and debugging an unknown cause |
 
 Use `fable` in place of `opus` only when the user asks for it. Under claudex these aliases select
 its GPT tiers, so the same table applies.
 
 When a piece of work fits no row, split it instead of picking a combination in between. Work that
-mixes design decisions with many mechanical edits becomes an `opus` `xhigh` design unit and a
-`sonnet` `max` or `haiku` `low` implementation unit.
+mixes design decisions with many mechanical edits becomes an `opus` `high` design unit and a
+`sonnet` `high` or `haiku` `low` implementation unit.
 
 A worker that stopped or failed reruns on the same row by default. Read its thread first, with
 `t3_thread_read` for a `delegate_task` worker or `bb thread log <id>` for a BB worker, not only the
@@ -43,8 +42,9 @@ reply it returned. Fix what stopped it, or say in the new brief how to get past 
 Step up one row only when the worker's own work shows that the task outgrew its row: it produced a
 design that misses the requirement, or its checks kept failing while it kept changing the code. Say
 which one you saw. A worker that stopped before either happened has shown nothing about its row,
-whatever its reason. `haiku` moves to `sonnet` `max`. `sonnet` `max` and `opus` `high` move to
-`opus` `xhigh`. Never step up to `fable`.
+whatever its reason. `haiku` moves to `sonnet` `high`, and `sonnet` `high` moves to `opus`
+`high`. If `opus` `high` outgrows its row, split the work or change the approach. Never step up to
+`fable`.
 
 After two materially identical failures without progress, change the approach or name the missing
 capability.
@@ -89,11 +89,11 @@ On the `codex` or `claudex` route, start these workers with the thread tool on t
 | Row | GPT model and effort |
 | --- | --- |
 | `haiku` `low` | The newest Luna model, `low` |
-| `haiku` `max` | The newest Luna model, `max` |
-| `sonnet` `max` | The newest Terra model, `max` |
+| `haiku` `high` | The newest Luna model, `high` |
+| `sonnet` `high` | The newest Terra model, `high` |
 
-On both GPT routes, Luna workers use only `low` or `max` effort as the table specifies, and
-Terra workers use only `max`.
+On both GPT routes, Luna workers use only `low` or `high` effort as the table specifies, and
+Terra workers use only `high`.
 
 The `opus` rows, child leads, and your own judgement stay on Claude. Step-ups follow the rows,
 except that a Terra worker that outgrew its row reruns on the same provider with the newest Sol

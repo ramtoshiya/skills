@@ -104,14 +104,13 @@ Then start the review as a separate T3 task and do not wait for it:
 
 - On the `codex` or `claudex` route from [Worker route](#worker-route), or when the user asks for a
   Sol review, run it through the Codex instance for workers from [Worker route](#worker-route), or
-  `codex` when there is none, on the newest Sol model at effort `high`, or `xhigh` for a
-  consequential change. A memory plugin can hand the reviewer your conclusions, which the brief
-  below leaves out. Do not use `claudex` for it, because its `opus` alias selects GPT, so a child
-  lead the review starts there would not run on Claude.
+  `codex` when there is none, on the newest Sol model at effort `high`. A memory plugin can hand
+  the reviewer your conclusions, which the brief below leaves out. Do not use `claudex` for it,
+  because its `opus` alias selects GPT, so a child lead the review starts there would not run on
+  Claude.
 - On the `claude` route, call `orchestrator_capabilities` once and use a provider instance meant
-  for review if it lists one, such as one named for review. Otherwise run it on `opus` `high`, or
-  `opus` `xhigh` for a consequential change, on the Claude instance for workers from
-  [Worker route](#worker-route).
+  for review if it lists one, such as one named for review. Otherwise run it on `opus` `high` on
+  the Claude instance for workers from [Worker route](#worker-route).
 - Start it with `delegate_task`, `mode: "async"` and `isolation: "worktree"` after the merge, so
   its checkout starts from the merged commit. Leave `runtimeMode` unset, because narrower modes
   pause for approval.

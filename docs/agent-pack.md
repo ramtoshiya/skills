@@ -74,8 +74,8 @@ instructions, not automatic hook enforcement.
   `{"workers": "codex"}` or `{"workers": "claudex"}` they run on GPT Luna and
   Terra models through that provider. In T3 Code the review runs on GPT Sol
   through the Codex provider. On both GPT routes, Luna workers use `low` for
-  the Haiku low row and `max` for the Haiku max row. Terra workers use only
-  `max`. When T3 Code lists a Codex provider instance named for workers, the
+  the Haiku low row and `high` for the Haiku high row. Terra workers use only
+  `high`. When T3 Code lists a Codex provider instance named for workers, the
   `codex` route's workers and the review use it. Point
   that instance at a launcher that turns off what only your own sessions need,
   such as a memory plugin that injects summaries of earlier sessions. Without
