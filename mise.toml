@@ -68,12 +68,12 @@ description = "Reconcile managed packages across installed agents"
 run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/sync.py sync"
 
 [tasks."agents:settings:status"]
-description = "Compare registered Claude settings and instructions with this checkout"
-run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/sync.py status --host claude --settings-only"
+description = "Compare registered Claude settings and Claude and Hermes instructions with this checkout"
+run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/sync.py status --settings-only"
 
 [tasks."agents:settings:sync"]
-description = "Reconcile registered Claude settings and instructions"
-run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/sync.py sync --host claude --settings-only"
+description = "Reconcile registered Claude settings and Claude and Hermes instructions"
+run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/sync.py sync --settings-only"
 
 [tasks."hermes:operator"]
 description = "Install or update the Hermes operator profile from this checkout"

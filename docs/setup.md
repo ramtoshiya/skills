@@ -156,6 +156,7 @@ Agents:
 | --- | --- |
 | Registered Claude profiles' `CLAUDE.md` | A managed block from `setup/agents/preferences.md`, preserving text outside the block |
 | `~/.codex/AGENTS.md` | A copy of `setup/agents/preferences.md` |
+| `SOUL.md` in `~/.hermes` and in each profile under `~/.hermes/profiles/` | A managed block from `setup/agents/preferences.md`, preserving text outside the block |
 | Registered Claude profiles' `settings.json` | Common keys from `setup/agents/claude-settings.json`, with terminal defaults from `setup/agents/claude-terminal-settings.json` only for `~/.claude` |
 | `~/.claude/status-line.sh` | Copy of `setup/agents/claude-statusline.sh` |
 | `~/.local/bin/claude-review` | Copy of `setup/agents/claude-review`, an executable shell script that starts the review launcher |
@@ -266,7 +267,10 @@ mise run agents:settings:status
 
 These tasks check or apply settings and common instructions without running
 plugin commands or model requests. They always include `~/.claude`, regardless
-of the caller's `CLAUDE_CONFIG_DIR`. The ordinary `agents:status` and
+of the caller's `CLAUDE_CONFIG_DIR`. They also check or apply the common
+instructions in every Hermes profile, as the Hermes operator profile section
+describes. Add `-- --host claude` or `-- --host hermes` to either task to check only
+one of them. The ordinary `agents:status` and
 `agents:sync` tasks also include these checks when Claude is selected, unless
 `--plugin` limits the command to packages. Use `--json` for machine-readable
 results. Each profile has separate settings and instructions results.
@@ -449,7 +453,7 @@ Then it changes these files under `~/.hermes/profiles/operator/`:
 
 | Target | Change |
 | --- | --- |
-| `SOUL.md` | A block from `setup/hermes/soul-operator.md` between `<!-- BEGIN ramtoshiya:operator -->` and `<!-- END ramtoshiya:operator -->`, after the Hermes default text |
+| `SOUL.md` | A block from `setup/hermes/soul-operator.md` between `<!-- BEGIN ramtoshiya:operator -->` and `<!-- END ramtoshiya:operator -->`, after the Hermes default text. The shared preferences block next to it comes from `mise run agents:settings:sync`, described below |
 | `skills/<skill>/` | A copy of the files Git tracks in each skill, and of `setup/hermes/skills/operator-handoff` with this machine's paths and the list of plugins filled in. The task replaces these folders on every run |
 | `skills/` | Hermes's bundled skills deleted. Other skills stay |
 | `plugins/<entry>/` | The files Git tracks in each marketplace entry that is a native Hermes plugin |
@@ -479,6 +483,18 @@ keep running. When no gateway runs, the next one to start loads the new files.
 When the gateway refuses, the task fails and prints the gateway's reason, and
 the profile's sessions keep the previous plugin code until that gateway
 restarts. Run the same command after copying plugin files by hand.
+
+The operator and every other Hermes profile get the shared preferences from
+`setup/agents/preferences.md`, the same text Claude Code and Codex get. Hermes
+loads a profile's `SOUL.md` into every session of that profile, so
+`mise run agents:settings:sync` keeps a block between
+`<!-- BEGIN ramtoshiya:preferences -->` and `<!-- END ramtoshiya:preferences -->`
+in the `SOUL.md` of `~/.hermes` and of each profile under `~/.hermes/profiles/`.
+It changes nothing else in those homes. `mise run agents:settings:status`
+reports a missing or outdated block as drift. A profile without a `SOUL.md`
+is a conflict and is left alone, because Hermes writes its default `SOUL.md`
+only when the file is missing. Start Hermes once with that profile, then sync
+again. Run the sync after `hermes:operator` creates the profile.
 
 ### Bundled skills
 

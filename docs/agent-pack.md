@@ -221,8 +221,9 @@ mise run agents:sync
 commands may refresh their own metadata caches. The task exits nonzero for
 missing packages, outdated contents, settings drift, or conflicts. `sync`
 reconciles packages for supported agent executables on `PATH`, skipping agents
-that are not installed. Use `--host claude` or `--host codex`
-to restrict either task. Repeat `--plugin NAME` to limit installation and
+that are not installed. Use `--host claude`, `--host codex`, or
+`--host hermes` to restrict either task. Hermes gets only the common
+instructions, as [Machine setup](setup.md) describes. Repeat `--plugin NAME` to limit installation and
 retirement to named packages, leaving other managed registrations and user
 settings alone. Unknown names are errors. `--json` prints the results as JSON.
 

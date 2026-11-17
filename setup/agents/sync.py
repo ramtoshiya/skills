@@ -1,4 +1,4 @@
-"""Reconcile agent packages and registered Claude profiles."""
+"""Reconcile agent packages, registered Claude profiles, and Hermes profiles' instructions."""
 
 import argparse
 from copy import deepcopy
@@ -22,7 +22,12 @@ ROOT = Path(__file__).resolve().parents[2]
 IGNORED = {".git", "__pycache__", ".DS_Store", ".in_use"}
 PREFERENCES_BEGIN = b"<!-- BEGIN ramtoshiya:preferences -->"
 PREFERENCES_END = b"<!-- END ramtoshiya:preferences -->"
-PREFERENCES_HINT = re.compile(rb"ramtoshiya:preferences|<!--\s*(?:BEGIN|END)\s+ramtoshiya\b", re.IGNORECASE)
+# The Hermes operator profile's SOUL.md also holds the ramtoshiya:operator block, which setup/hermes owns.
+PREFERENCES_HINT = re.compile(rb"ramtoshiya:preferences|<!--\s*(?:BEGIN|END)\s+ramtoshiya\b(?!:operator\b)", re.IGNORECASE)
+# Mirrors Hermes's hermes_constants: a directory under profiles/ is a profile only with a valid id and
+# one of these markers, and a profile deleted with `hermes profile delete` leaves a tombstone in .deleted/.
+HERMES_PROFILE_ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")
+HERMES_PROFILE_MARKERS = ("config.yaml", ".env", "SOUL.md", "profile.yaml", "auth.json", "state.db")
 
 
 class Conflict(Exception):
@@ -93,6 +98,32 @@ def reconcile_instructions(actual, source, path):
         raise Conflict(f"Malformed or duplicate managed instruction markers in {path}")
     body = b"\n" + source + (b"" if source.endswith(b"\n") else b"\n")
     return prefix + body + suffix
+
+
+def preferences_source(root):
+    path = root / "setup/agents/preferences.md"
+    try:
+        source = path.read_bytes()
+    except OSError as error:
+        raise Conflict(f"Cannot use instructions source: {path}") from error
+    if PREFERENCES_HINT.search(source):
+        raise Conflict(f"Cannot use instructions source: {path}")
+    return source
+
+
+def reconcile_instructions_file(path, source, apply):
+    """Check or write the managed block in path and return the result status."""
+    try:
+        actual = path.read_bytes() if path.exists() or path.is_symlink() else b""
+    except OSError as error:
+        raise Conflict(f"Cannot read instructions file: {path}") from error
+    merged = reconcile_instructions(actual, source, path)
+    if merged == actual:
+        return "ok"
+    if apply:
+        write_bytes(path, merged)
+        return "updated"
+    return "drift"
 
 
 def settings_json(path, missing=None):
@@ -235,15 +266,10 @@ class ClaudeSettings:
             except Conflict as error:
                 self.record("claude", f"settings:{label}", "conflict", str(error))
                 return
-        source_path = self.root / "setup/agents/preferences.md"
         try:
-            source = source_path.read_bytes()
-            if PREFERENCES_HINT.search(source):
-                raise Conflict(f"Managed instruction markers in source: {source_path}")
-            source_error = None
-        except (Conflict, OSError):
-            source = None
-            source_error = f"Cannot use instructions source: {source_path}"
+            source, source_error = preferences_source(self.root), None
+        except Conflict as error:
+            source, source_error = None, str(error)
         for directory, (label, overrides) in profiles.items():
             path = directory / "settings.json"
             try:
@@ -265,21 +291,51 @@ class ClaudeSettings:
             try:
                 if source_error:
                     raise Conflict(source_error)
-                try:
-                    actual = path.read_bytes() if path.exists() or path.is_symlink() else b""
-                except OSError as error:
-                    raise Conflict(f"Cannot read instructions file: {path}") from error
-                merged = reconcile_instructions(actual, source, path)
-                changed = merged != actual
-                if apply and changed:
-                    write_bytes(path, merged)
-                status = ("updated" if apply else "drift") if changed else "ok"
-                self.record("claude", f"instructions:{label}", status, str(path))
+                self.record("claude", f"instructions:{label}", reconcile_instructions_file(path, source, apply), str(path))
             except (Conflict, OSError) as error:
                 self.record("claude", f"instructions:{label}", "conflict", str(error))
         for path in unregistered:
             self.record("claude", "settings:unregistered", "drift",
                         f"{path}: register its configDir in {self.registry}")
+
+
+class HermesInstructions:
+    """The managed preferences block in the SOUL.md of every Hermes profile, which Hermes loads into
+    every session of that profile."""
+
+    def __init__(self, root, record):
+        self.root = root
+        self.record = record
+        self.home = Path.home() / ".hermes"
+
+    def profiles(self):
+        homes = {"default": self.home}
+        for path in sorted((self.home / "profiles").glob("*")):
+            if (path.is_dir() and path.name != "default" and HERMES_PROFILE_ID.fullmatch(path.name)
+                    and any((path / marker).is_file() or (path / marker).is_symlink() for marker in HERMES_PROFILE_MARKERS)
+                    and not (path.parent / ".deleted" / path.name).exists()):
+                homes[path.name] = path
+        return homes
+
+    def process(self, apply=False):
+        if not self.home.is_dir():
+            self.record("hermes", "host", "absent", f"{self.home} not found")
+            return
+        try:
+            source = preferences_source(self.root)
+        except Conflict as error:
+            self.record("hermes", "instructions", "conflict", str(error))
+            return
+        for label, home in self.profiles().items():
+            path = home / "SOUL.md"
+            try:
+                # A SOUL.md written here would stop Hermes from seeding its default identity text.
+                if not path.exists() and not path.is_symlink():
+                    raise Conflict(f"{path} is missing. Start Hermes once with this profile so it writes "
+                                   "its default SOUL.md, then sync again")
+                self.record("hermes", f"instructions:{label}", reconcile_instructions_file(path, source, apply), str(path))
+            except (Conflict, OSError) as error:
+                self.record("hermes", f"instructions:{label}", "conflict", str(error))
 
 
 def relative_path(value):
@@ -672,24 +728,28 @@ class Sync:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["status", "sync"])
-    parser.add_argument("--host", action="append", choices=["claude", "codex"])
+    parser.add_argument("--host", action="append", choices=["claude", "codex", "hermes"])
     parser.add_argument("--plugin", action="append", help="check or sync only this plugin (repeatable)")
-    parser.add_argument("--settings-only", action="store_true", help="check or sync registered Claude settings and instructions only")
+    parser.add_argument("--settings-only", action="store_true",
+                        help="check or sync registered Claude settings and Claude and Hermes instructions only")
     parser.add_argument("--json", action="store_true", help="print machine-readable results")
     args = parser.parse_args()
     if args.settings_only and args.plugin:
         parser.error("--settings-only cannot be combined with --plugin")
-    if args.settings_only and args.host and "claude" not in args.host:
-        parser.error("--settings-only requires --host claude, or omit --host")
+    if args.settings_only and args.host and not {"claude", "hermes"} & set(args.host):
+        parser.error("--settings-only requires --host claude or --host hermes, or omit --host")
     try:
         sync = Sync(settings_only=args.settings_only)
-        hosts = args.host or (["claude"] if args.settings_only else sync.policy["hosts"])
+        hosts = args.host or (["claude"] if args.settings_only else sync.policy["hosts"]) + ["hermes"]
 
         def process(apply=False):
             if not args.settings_only:
-                sync.process(hosts, apply=apply, selected=args.plugin)
-            if "claude" in hosts and args.plugin is None:
-                ClaudeSettings(sync.root, sync.record).process(apply=apply)
+                sync.process([host for host in hosts if host != "hermes"], apply=apply, selected=args.plugin)
+            if args.plugin is None:
+                if "claude" in hosts:
+                    ClaudeSettings(sync.root, sync.record).process(apply=apply)
+                if "hermes" in hosts:
+                    HermesInstructions(sync.root, sync.record).process(apply=apply)
             return sync.results
 
         if args.command == "sync":
