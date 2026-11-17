@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { compactAndResume } from '../../../plugins/ramtoshiya-cc/skills/self-compact/scripts/paseo-compact.mjs';
+import { compactAndResume } from '../../../plugins/ramtoshiya/skills/self-compact/scripts/paseo-compact.mjs';
 
 const completed = {
   seqStart: 12,

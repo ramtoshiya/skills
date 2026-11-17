@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const script = resolve(dirname(fileURLToPath(import.meta.url)), '../../../plugins/ramtoshiya-cc/skills/self-compact/scripts/bb-compact.mjs');
+const script = resolve(dirname(fileURLToPath(import.meta.url)), '../../../plugins/ramtoshiya/skills/self-compact/scripts/bb-compact.mjs');
 const thread = 'thr_self';
 const scope = turnId => turnId ? { kind: 'turn', turnId } : { kind: 'thread' };
 const event = (seq, type, turnId, data = {}) => ({ seq, type, threadId: thread, scope: scope(turnId), data });
