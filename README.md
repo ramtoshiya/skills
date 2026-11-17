@@ -15,6 +15,8 @@ preferences, so fork the repository and edit it before you run it.
 | Third-party skills | Skills from other repositories, listed in this repository's marketplace and pinned to exact commits | [Third-party skills](docs/upstream-skills.md) |
 | Machine setup | A `mise.toml` that installs a few Homebrew packages and writes shell, Git, package manager, and agent settings | [Machine setup](docs/setup.md) |
 | `held-drafts` bb plugin | Lets agents create [bb](https://getbb.app) threads whose first message waits until a person sends it | [README](bb-plugins/held-drafts/README.md) |
+| `draft-quick-actions` bb plugin | Sends an eligible Held Drafts message from a sidebar play button without opening its thread | [README](bb-plugins/draft-quick-actions/README.md) |
+| `sidebar-model-label` bb plugin | Shows each thread's model beside its title without adding a second row | [README](bb-plugins/sidebar-model-label/README.md) |
 | `sidecar` | A macOS command that connects an iPad as a Sidecar display, and an iPad shortcut that runs it over SSH | [README](tools/sidecar/README.md) |
 | `claudex` | Runs Claude Code with GPT models discovered from a [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) server | [README](tools/claudex/README.md) |
 | `plugin-update-review` | Prepares local plugin update candidates for human review, tests, and application | [README](tools/plugin-update-review/README.md) |
