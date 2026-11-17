@@ -329,13 +329,22 @@ rest belongs to the same worker:
 
 A missing command option, such as one that targets a single profile, is not
 a blocker. Building that option is new scope. Finishing the approved target
-with the existing tools is not. These need the user before any worker acts,
-and new implementation scope still starts as a draft:
+with the existing tools is not.
+
+A diverged branch or a push rejected as non-fast-forward is not a blocker
+either, even when the worker reports it as a failed safety check. Send the
+integration back to the worker and point it to the Diverged branches section
+of the shared preferences. When another thread is integrating the same branch,
+name that thread and tell the worker to wait for it, not to ask the user.
+
+These need the user before any worker acts, and new implementation scope
+still starts as a draft:
 
 - New scope, such as a feature, command, or change the brief did not ask for.
 - Authority the brief did not grant, such as publishing, a destructive or
   costly-to-undo action, or changing a target the brief protected.
-- A conflict over a shared resource that another task holds.
+- A conflict over a shared resource that waiting for the other task will not
+  resolve, such as two tasks that need different contents in the same file.
 - A failed safety check, such as malformed managed-block markers or failed
   validation. Report the check and its output. Never ask a worker to skip it.
 

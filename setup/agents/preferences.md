@@ -63,6 +63,33 @@ commit permission does not authorize pushing, publishing, destructive history
 changes, or changing repository policy. Report real blockers rather than
 silently narrowing the task.
 
+## Diverged branches {:#diverged-branches}
+
+A branch that moved while you worked is ordinary concurrent work, not a failed
+safety check. When your task authorizes a push and the remote branch has
+commits you lack, or the remote rejects your push as non-fast-forward, finish
+the integration yourself:
+
+1. Fetch and read both histories. Find which commits are yours and who owns
+   the rest.
+2. Leave alone a checkout that another session is using, including its
+   uncommitted changes, a rebase or merge in progress, and its branches. If
+   another session is integrating the same branch, wait until it finishes.
+3. Put only your commits on top of the current remote branch in your own
+   worktree, by rebase or cherry-pick. Resolve a conflict yourself when both
+   sides' intent is clear from their commits.
+4. Rerun the repository's checks, let its hooks run, and push without force.
+   If the remote moved again, start over at step 1.
+5. Fast-forward a local copy of the branch, such as a shared checkout's
+   `main`, only when it has no commits or changes of its own. Otherwise leave
+   it as it is and report its unpushed commits and their owners.
+
+Ask the user only when the conflict needs a decision that neither side's
+commits settle, or when finishing needs a force push or another rewrite of
+published history. Also ask when finishing would discard, overwrite, or
+publish someone else's commits or changes, or when a check or hook fails and
+fixing it is outside the task. Report the evidence with the question.
+
 ## Personal web tools {:#personal-web-access}
 
 A web UI or development preview that you build or start for the user's own

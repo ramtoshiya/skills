@@ -179,9 +179,14 @@ task-owned changes on the current branch, including the default branch. They
 protect unrelated changes and respect explicit no-commit requests. Tasks that
 need isolation use a separate worktree before implementation, not a branch
 switch in the shared checkout. Local commit permission does not authorize
-pushing, publishing, or destructive history changes. The instructions also require
-completing necessary authorized follow-up steps and removing task-owned experiments,
-including temporary files and test sessions, before reporting completion.
+pushing, publishing, or destructive history changes. When a task does authorize
+a push and the branch has diverged, the agent puts only its own commits on the
+current remote branch, reruns the checks, and pushes without force. It asks
+only for a decision the commits do not settle, a history rewrite, a change to
+someone else's work, or a check it cannot fix within the task. The
+instructions also require completing necessary authorized follow-up steps and
+removing task-owned experiments, including temporary files and test sessions,
+before reporting completion.
 
 They state that checks, hooks, and guards exist to catch mistakes, including an
 agent's habitual shortcuts such as suppressing a lint rule. Deliberate bypass,
@@ -536,9 +541,11 @@ are snapshots, and a requested worktree does not exist until the draft is sent.
 Separate worktrees allow parallel work even when both results target `main`.
 When an approved worker stops short, the operator checks the brief it sent,
 says whether its own brief imposed the stop, and sends the rest back to that
-worker. New scope, new authority, a shared-resource conflict, or a failed
-safety check still goes to you first, and new implementation scope still
-starts as a draft.
+worker. A diverged branch also goes back to the worker, which waits for any
+other thread that is integrating the same branch. New scope, new authority, a
+shared-resource conflict that waiting does not resolve, or a failed safety
+check still goes to you first, and new implementation scope still starts as a
+draft.
 Before drafting, the operator asks in conversation when an unresolved choice
 would change the requested outcome or consequential change targets. It decides
 incidental implementation choices itself and reports the target of each draft.
