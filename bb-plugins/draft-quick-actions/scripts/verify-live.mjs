@@ -61,7 +61,9 @@ try {
   await button.click();
   const response = await responsePromise;
   assert.equal(response.ok(), true, `Run draft returned HTTP ${response.status()}`);
-  const approval = rpcContract.runDraft.output.parse(await response.json());
+  const envelope = await response.json();
+  assert.equal(envelope.ok, true, "The RPC transport did not return a successful result.");
+  const approval = rpcContract.runDraft.output.parse(envelope.result);
   assert.equal(page.url(), startingUrl, "The sidebar action navigated away from the current page.");
   const after = bb(["thread", "queue", "list", threadId]);
   assert.equal(after.some((message) => message.id === originalMessageId && message.waitingOn?.pluginId === "held-drafts"), false);
