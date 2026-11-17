@@ -63,6 +63,37 @@ Decide small feature choices yourself, such as an input format, a default, or
 what the output keeps. Write them into the brief and list them for the user
 when you report the draft. Ask the user only about product decisions.
 
+## Choose the route {:#route}
+
+Every draft and research thread names its provider, model, and reasoning
+level. Without them bb falls back to remembered or default settings that are
+not a row of the routing policy. Load the `worker-routing` skill once per
+session and follow it as the session that delegates:
+
+- Pick the row from its model table by the work the thread owns. A draft's
+  worker runs the whole task under its mode, including design, checks, and
+  review, and routes its own workers. So pick the row for the hardest decision
+  the brief leaves to it, not for the edits it will delegate. A research
+  thread gets the row its question needs, from a direct lookup to a design
+  question or an unknown cause.
+- This profile has no Agent tool and starts every worker with `bb`, so read
+  the route file and the weekly quota as the policy's Worker route and Quota
+  lookup describe. On the `codex` or `claudex` route, a `haiku` or `sonnet`
+  row runs on that provider with the model the policy names, and an `opus`
+  row stays on `claude-code`.
+- For the model ID, run `bb provider models <provider> --json` once per
+  session for each provider you use and pick as its BB workers section
+  describes, and confirm that the model lists the row's effort in its
+  `supportedReasoningEfforts`.
+- When the user names a provider, model, or effort, use it and route the rest
+  by the row. A brief that needs a Claude Code-only plugin runs on
+  `claude-code` with the row's Claude model.
+- The commands below set the environment and the parent. The policy's Agent
+  tool, T3, and BB environment instructions do not apply here.
+
+When you report a draft or a research thread, name its row, provider, model,
+and effort, and say when the route switched.
+
 ## Create the draft {:#create}
 
 Find the project that owns the work with `bb project list --json`. Match the
@@ -74,15 +105,14 @@ read -r -d '' brief <<'EOF'
 <the complete brief>
 EOF
 bb draft create --json --project <project-id> --new-environment worktree \
-  --provider claude-code --title "<short title>" --prompt "$brief"
+  --provider <provider> --model <model-id> --reasoning-level <effort> \
+  --title "<short title>" --prompt "$brief"
 ```
 
 `bb draft create` has no `--prompt-file`. Keep the heredoc out of `$(...)`,
 because macOS `/bin/bash` 3.2 fails with "unexpected EOF" there when the brief
 contains an apostrophe.
 
-- Use `--provider codex` when the user asks for Codex. Omit `--model` unless
-  the user names one.
 - The output is `{"threadId": "...", "held": true|false}`. Tell the user
   `@thread:<threadId>` and that sending it is the approval. `held: false`
   means the draft setting is switched to direct execution and the worker has
@@ -103,7 +133,8 @@ another project's checkout:
 
 ```sh
 bb thread spawn --json --project proj_personal --new-environment personal \
-  --parent-self --provider claude-code --title "<short title>" --prompt-file - <<'EOF'
+  --parent-self --provider <provider> --model <model-id> \
+  --reasoning-level <effort> --title "<short title>" --prompt-file - <<'EOF'
 <the research brief>
 EOF
 ```

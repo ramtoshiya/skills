@@ -477,6 +477,19 @@ class OperatorProfileSetupTests(unittest.TestCase):
         self.assertEqual(results(installed), results(source))
         self.assertIn("bb thread archive <threadId>", results(installed))
 
+    def test_installed_handoff_routes_every_worker_it_starts(self):
+        self.setup_profile()
+        self.start_hermes()
+
+        installed = (runtime_skills(self.operator)["operator-handoff"][0] / "SKILL.md").read_text()
+        commands = [block.split("\n```", 1)[0].replace("\\\n", " ")
+                    for block in installed.split("```sh\n")[1:]]
+        starts = [c for c in commands if "bb draft create" in c or "bb thread spawn" in c]
+        self.assertEqual(len(starts), 2)
+        for command in starts:
+            for flag in ("--provider <provider>", "--model <model-id>", "--reasoning-level <effort>"):
+                self.assertIn(flag, command)
+
     def test_bb_lists_what_the_operator_loads(self):
         self.setup_profile()
         self.start_hermes()

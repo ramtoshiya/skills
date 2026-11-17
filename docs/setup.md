@@ -600,7 +600,9 @@ the plugin cannot create the draft, it still blocks the call and tells Hermes
 why.
 
 For other work, the `operator-handoff` skill tells Hermes how to write a brief
-and create the draft. Drafts are held while the held-drafts plugin's `mode`
+and create the draft. Hermes passes each draft and research thread a provider,
+model, and reasoning level chosen by the `worker-routing` policy, so bb does
+not fall back to its remembered or default settings. Drafts are held while the held-drafts plugin's `mode`
 setting is `draft`. Setting it to `direct` sends new drafts immediately.
 
 When a child thread reports back, the skill has Hermes read the full output
