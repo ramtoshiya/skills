@@ -124,6 +124,14 @@ habitual shortcuts, such as suppressing a lint rule to get a check green.
 Deliberate bypass, such as `git commit --no-verify` or editing a hook, is out
 of scope. Do not design rules or defenses against it.
 
+A check, guard, or defensive code answers a failure that has happened, or one
+of these first-occurrence exceptions: a design or type change that makes the
+failure unrepresentable, a habit known to repeat elsewhere, an
+irreversible failure, or a mechanically exact rule with a canary.
+Report any other risk as open, including a worker's open item or a reviewer's
+flag. Do not build against it or brief it as work until it happens. Such code
+adds failure modes of its own.
+
 ## Claims before feedback {:#claims}
 
 Record what you believe before anyone challenges it. A record written after a
