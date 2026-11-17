@@ -170,6 +170,15 @@ bb draft create --json --project <project-id> --new-environment worktree \
 because macOS `/bin/bash` 3.2 fails with "unexpected EOF" there when the brief
 contains an apostrophe.
 
+Maintain your own held drafts yourself. Before revising or replacing one,
+query its thread and queue as Current state describes to confirm its first
+message is still held. Update that message with `bb thread queue update` when
+practical. If you replace the draft, archive the superseded draft yourself and
+verify its archived state. Report the surviving draft and any archived
+predecessor. If the draft has already started, follow Current state and
+Complete approved work instead. Never send a held draft to approve new scope
+on the user's behalf.
+
 - The output is `{"threadId": "...", "held": true|false}`. Tell the user
   `@thread:<threadId>`, what will actually change, and that sending it is the
   approval. State any consequential difference from the original request.
@@ -304,8 +313,9 @@ Brief a fix at a layer every worker already reads, such as a bb setting,
 same turn. A per-brief workaround leaves every other worker exposed.
 
 Archive only children of this thread whose result you handled in this
-conversation. Leave other threads alone, even finished ones. To archive a
-kept child later, run these steps again. Never delete a thread.
+conversation, or your own superseded held drafts as Create the draft
+describes. Leave other threads alone, even finished ones. To archive a kept
+child later, run these steps again. Never delete a thread.
 
 ## Complete approved work {:#approved-work}
 
