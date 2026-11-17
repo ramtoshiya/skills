@@ -34,7 +34,7 @@ BB_AGENT = {"id": "hermes-agent", "displayName": "Hermes Agent", "command": "her
 SOUL_BEGIN = "<!-- BEGIN ramtoshiya:operator -->"
 SOUL_END = "<!-- END ramtoshiya:operator -->"
 CONFIG = {
-    "agent.disabled_toolsets": '["file", "code_execution"]',
+    "agent.disabled_toolsets": '["file", "code_execution", "delegation"]',
     "skills.auto_load": '["operator-handoff"]',
     "skills.project_discovery": "false",
     "curator.enabled": "false",

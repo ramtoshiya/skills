@@ -454,7 +454,7 @@ class OperatorProfileSetupTests(unittest.TestCase):
         self.assertTrue((self.operator / "plugins/korean-pack/scripts/check.py").is_file())
         settings = config(self.operator)
         self.assertEqual(settings["skills.auto_load"], ["operator-handoff"])
-        self.assertEqual(settings["agent.disabled_toolsets"], ["file", "code_execution"])
+        self.assertEqual(settings["agent.disabled_toolsets"], ["file", "code_execution", "delegation"])
         self.assertFalse(settings["memory.write_approval"])
         handoff = (skills["operator-handoff"][0] / "SKILL.md").read_text()
         self.assertIn(CC_DESCRIPTION, handoff)

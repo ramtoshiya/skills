@@ -455,7 +455,7 @@ Then it changes these files under `~/.hermes/profiles/operator/`:
 
 | Setting | Value | Effect |
 | --- | --- | --- |
-| `agent.disabled_toolsets` | `["file", "code_execution"]` | No file reading or writing tools and no code execution. The terminal stays on for `bb` |
+| `agent.disabled_toolsets` | `["file", "code_execution", "delegation"]` | No file reading or writing tools, no code execution, and no `delegate_task` subagents, which bb cannot show. The operator starts every worker as a bb thread instead. The terminal stays on for `bb` |
 | `skills.auto_load` | `["operator-handoff"]` | The handoff procedure is in every session |
 | `skills.project_discovery` | `false` | Skills in the thread's working directory are not loaded |
 | `curator.enabled` | `false` | Hermes does not archive or merge skills on its own |
