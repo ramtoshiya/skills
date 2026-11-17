@@ -59,6 +59,10 @@ Leave out what the worker's checks or mode already enforce. Leave out
 instructions for events that have not happened yet. They belong in the brief
 you write when the event happens.
 
+Decide small feature choices yourself, such as an input format, a default, or
+what the output keeps. Write them into the brief and list them for the user
+when you report the draft. Ask the user only about product decisions.
+
 ## Create the draft {:#create}
 
 Find the project that owns the work with `bb project list --json`. Match the
@@ -66,12 +70,16 @@ project's `sources[].path` to the repository. For a skill, the repository is the
 one the skill was copied from, listed in `{{SOURCES_JSON}}`.
 
 ```sh
-bb draft create --json --project <project-id> --new-environment worktree \
-  --provider claude-code --title "<short title>" --prompt "$(cat <<'EOF'
+read -r -d '' brief <<'EOF'
 <the complete brief>
 EOF
-)"
+bb draft create --json --project <project-id> --new-environment worktree \
+  --provider claude-code --title "<short title>" --prompt "$brief"
 ```
+
+`bb draft create` has no `--prompt-file`. Keep the heredoc out of `$(...)`,
+because macOS `/bin/bash` 3.2 fails with "unexpected EOF" there when the brief
+contains an apostrophe.
 
 - Use `--provider codex` when the user asks for Codex. Omit `--model` unless
   the user names one.
@@ -112,7 +120,10 @@ brief and states:
 ## Results {:#results}
 
 A child's completion notification is truncated. Before you report or act on a
-result, read it in full with `bb thread output <threadId>`.
+result, read it in full with `bb thread output <threadId>`. If that prints
+nothing, read the last turns with `bb thread log <threadId> --limit 2`. Read a
+linked message (`#msg=<seq>`) with
+`bb thread log <threadId> --message <seq> --context 2`.
 
 Handling a result includes archiving the child once it is finished, so
 finished workers do not pile up in the sidebar. Do this in the same turn,
