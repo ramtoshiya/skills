@@ -83,7 +83,7 @@ existing Chromium, because it never downloads one. Take a baseline with the
 plugin disabled, then check with it enabled:
 
 ```sh
-npm run verify:live -- --baseline > /tmp/sidebar-baseline.json
+npm run --silent verify:live -- --baseline > /tmp/sidebar-baseline.json
 npm run verify:live -- /tmp/sidebar-baseline.json
 npm run verify:live -- --cleanup    # reloads, then disables the plugin
 ```
