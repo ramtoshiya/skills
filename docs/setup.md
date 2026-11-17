@@ -156,6 +156,7 @@ Agents:
 | --- | --- |
 | Registered Claude profiles' `CLAUDE.md` | A managed block from `setup/agents/preferences.md`, preserving text outside the block |
 | `~/.codex/AGENTS.md` | A copy of `setup/agents/preferences.md` |
+| `~/.bb/AGENTS.md` | A copy of `setup/agents/bb-agents.md`, which the bb app adds to the instructions of every agent thread it starts |
 | `SOUL.md` in `~/.hermes` and in each profile under `~/.hermes/profiles/` | A managed block from `setup/agents/preferences.md`, preserving text outside the block |
 | Registered Claude profiles' `settings.json` | Common keys from `setup/agents/claude-settings.json`, with terminal defaults from `setup/agents/claude-terminal-settings.json` only for `~/.claude` |
 | `~/.claude/status-line.sh` | Copy of `setup/agents/claude-statusline.sh` |
@@ -193,6 +194,13 @@ only what the evidence shows is wrong. This follows the Thinking-in-Bets method
 in [arXiv:2610.34654](https://arxiv.org/abs/2610.34654), which found that a
 record written before feedback keeps agents from undoing correct work, while
 the same record written after feedback helps little.
+
+The bb instructions give agents in bb threads standing permission to start the
+worker threads their workflow calls for, such as reviewers, judges, and arena
+candidates, as visible child threads. bb's own introduction tells agents not to
+start threads unless the user asked, and without this file a worker either asks
+every time or runs those roles itself. Messages to unrelated threads are not
+covered.
 
 `claude-settings.json` sets these Claude Code preferences:
 

@@ -95,6 +95,8 @@ instructions, not automatic hook enforcement.
   `Agent`, `Task`, and `ListAgents` tools. The session then starts every
   worker with `bb thread spawn` as a child thread, waits for BB's
   notification that the child finished, and archives the child afterward.
+  The `~/.bb/AGENTS.md` file from [Machine setup](setup.md) lets it start
+  those workers without asking you each time.
   Claude workers and child leads started with `delegate_task`, for that or any
   other reason, run on a Claude provider instance named for workers when T3
   Code lists one, and on the session's own instance otherwise. Opus or Fable
