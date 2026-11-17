@@ -69,20 +69,16 @@ Claude, so follow the calling workflow's fallback.
 Without a thread tool, every worker runs on Claude, so skip the route file and the quota below.
 Otherwise, read `~/.config/ramtoshiya/lead-route.json` once at the start. Its `workers` value is
 `claude`, `codex` or `claudex`. A missing file or any other value means `claude`. Then read the
-weekly quota once with
-`quotio-cli usage --provider claude --provider codex --no-saved-accounts --format json`. Take the
-used percentage of the metric named `Weekly` and ignore accounts that report none. The command exits
-with an error when one account fails but still prints the others, so use any `Weekly` figure it
-prints. The `codex` and `claudex` routes share the Codex quota.
+weekly quota once as [Quota lookup](#quota-lookup) describes. The `codex` and `claudex` routes share
+the Codex quota.
 
 Switch to the other side when the current route's weekly use is 90% or more, or when a worker fails
 with a usage-limit error. `claude` moves to `codex`, and `codex` or `claudex` moves to `claude`. A
 side that returned a usage-limit error stays off for the rest of the session, whatever the file or
 the quota says. If both sides are at 90% or more, keep the file's route. Say in your report when you
-switch. If `quotio-cli` is missing or prints no `Weekly` figure, say so once, name the Quotio app
-that ships it and the `docs/setup.md` of this skill's repository that puts it on PATH, and route by
-the file and the usage-limit rule alone. When you compact, write the route you are on, the weekly
-figures, and any side that is off into the handoff note.
+switch. If quota lookup still returns no weekly figure, report the specific failure once and route
+by the file and the usage-limit rule alone. When you compact, write the route you are on, the weekly
+figures, their source, and any side that is off into the handoff note.
 
 On the `codex` or `claudex` route, start these workers with the thread tool on the route's provider.
 
@@ -104,6 +100,45 @@ it with the thread tool on the GPT route's provider, or on Codex when the route 
 the model the table above names for its row, or the newest Sol model at the row's effort for an
 `opus` row. Without a thread tool, or while a usage-limit error keeps the `codex` and `claudex` side
 off, the seat cannot run, so follow the calling workflow's fallback.
+
+### Quota lookup {:#quota-lookup}
+
+In BB, prefer the enabled Provider usage plugin. Its read-only RPC runs collection on the selected
+machine rather than inside the agent's command sandbox. Read `bb status --json` and use
+`thread.environment.hostId` as `<machine-id>` below:
+
+```sh
+bb plugin rpc call bb--provider-usage getUsage --input-file /dev/stdin --json <<'JSON'
+{"force":false,"machineIds":["<machine-id>"],"providerIds":["claude-code","codex"],"maxAgeMs":300000}
+JSON
+```
+
+In `machines[].providers[]`, use `usage.windows[]` only when `usage.status` is `ok`. The overall
+weekly window is labeled `Weekly limit`, and its `usedPercent` is the used percentage. Ignore
+model-specific windows such as `Weekly · Fable`. Map `claude-code` to the Claude side and `codex`
+to both GPT routes. Do not combine accounts from other machines. The RPC can be callable even when
+`bb plugin rpc list` does not advertise it. If it is unavailable or a side has no weekly figure,
+use Quotio for that side. Do not enable or install a plugin just for this lookup.
+
+Outside BB, or as that fallback, run
+`quotio-cli usage --provider claude --provider codex --no-saved-accounts --format json`. Keep stdout
+and stderr separate and preserve the exit status. Do not truncate the JSON or pipe it through a
+command that hides the lookup's failure. In schema version 2, join `usage[].account_id` to
+`accounts[].id` for the provider, then read `metrics[]` with `display_name` equal to `Weekly` and
+`quota.used_percent` present. Use valid figures even when another provider makes the command exit
+nonzero. Ignore accounts with no weekly metric. Do not print account identities or the full report.
+
+A failed lookup does not mean the CLI is missing. Check `command -v quotio-cli`, not `quotio`.
+On macOS, also check `~/.local/bin/quotio-cli` and the `Contents/Helpers/quotio-cli` executable in
+`/Applications/Quotio.app` and `/Applications/Quotio Beta.app`. Use an existing compatible helper by
+absolute path when PATH is the only problem. Name the Quotio app and this repository's
+`docs/setup.md` only when the launcher or app is actually missing.
+
+If the command ran but reported a cache, authentication, network, or provider error, report that
+category instead. For an explicit sandbox denial, use BB's host-side lookup first. If it cannot
+supply the figure, request the narrowly scoped access needed for one retry through the host's
+normal permission mechanism. Do not disable the sandbox globally or retry a denied permission.
+If access is unavailable, keep any valid figures and use the route-file fallback for the rest.
 
 ### T3 workers {:#t3-workers}
 

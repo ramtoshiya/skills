@@ -84,9 +84,13 @@ instructions, not automatic hook enforcement.
   such as a memory plugin that injects summaries of earlier sessions. Without
   the file they run on Claude. Opus-level work stays on Claude, except that a
   Terra worker whose task outgrew it reruns on GPT Sol through the same
-  provider. When the `quotio-cli` command from [Machine setup](setup.md) shows 90% or
-  more of the route's weekly quota used, the session moves workers to the other
-  side and says so. A worker that hits a usage limit moves workers the same
+  provider. BB reads weekly quota through its enabled Provider usage plugin's
+  read-only `getUsage` RPC on the thread's machine, with a five-minute cache
+  allowance. Other hosts, and BB when that lookup is unavailable, use the
+  `quotio-cli` command from [Machine setup](setup.md). A sandbox, cache, network,
+  or authentication failure is reported separately from a missing CLI. When
+  90% or more of the route's weekly quota is used, the session moves workers to
+  the other side and says so. A worker that hits a usage limit moves workers the same
   way, and the session does not return to that side. When a T3 Code provider
   instance bans Claude Code's own subagent tools, for example with the launch
   argument `--disallowedTools Agent,Task,Workflow,SendMessage,ListAgents`, the
