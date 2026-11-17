@@ -40,21 +40,29 @@ async function verifyBuild(baseline) {
     const serverBuild = await sameBytes(join(scratch, 'dist/server.js'), join(baseline, 'dist/server.js'), 'dist/server.js');
 
     const built = (await readFile(join(scratch, 'dist/host.js'))).toString('latin1');
+    exactlyOnce(built, PORTABLE_ASSIGNMENT, 'Built dist/host.js');
     const expected = await readFile(join(baseline, 'dist/host.js'));
     const literals = [...expected.toString('latin1').matchAll(LITERAL_ASSIGNMENT)];
-    if (literals.length !== 1) {
-      throw new Error(`Baseline dist/host.js has ${literals.length} literal executable assignments, expected 1`);
+    let comparable = built;
+    if (literals.length === 1) {
+      const [statement, literal] = literals[0];
+      if (JSON.parse(literal) !== join(homedir(), '.local', 'bin', 'claudex')) {
+        throw new Error('Baseline executable path is not ~/.local/bin/claudex for the current user');
+      }
+      comparable = built.replace(PORTABLE_ASSIGNMENT, () => statement);
+    } else if (literals.length > 1) {
+      throw new Error(`Baseline dist/host.js has ${literals.length} literal executable assignments, expected at most 1`);
     }
-    const [statement, literal] = literals[0];
-    if (JSON.parse(literal) !== join(homedir(), '.local', 'bin', 'claudex')) {
-      throw new Error('Baseline executable path is not ~/.local/bin/claudex for the current user');
+    if (!Buffer.from(comparable, 'latin1').equals(expected)) {
+      throw new Error('Built dist/host.js differs from the baseline');
     }
-    exactlyOnce(built, PORTABLE_ASSIGNMENT, 'Built dist/host.js');
-    const substituted = Buffer.from(built.replace(PORTABLE_ASSIGNMENT, () => statement), 'latin1');
-    if (!substituted.equals(expected)) {
-      throw new Error('Built dist/host.js differs from the baseline outside the executable assignment');
-    }
-    return { serverSource, serverBuild, hostBaseline: sha256(expected), hostBuilt: sha256(Buffer.from(built, 'latin1')) };
+    return {
+      serverSource,
+      serverBuild,
+      hostBaseline: sha256(expected),
+      hostBuilt: sha256(Buffer.from(built, 'latin1')),
+      literalBaseline: literals.length === 1,
+    };
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
@@ -72,7 +80,10 @@ try {
   const result = await verifyBuild(resolve(baseline));
   console.log(`verify-build: server.js source matches baseline (sha256 ${result.serverSource})`);
   console.log(`verify-build: dist/server.js matches baseline (sha256 ${result.serverBuild})`);
-  console.log(`verify-build: dist/host.js (sha256 ${result.hostBuilt}) equals baseline (sha256 ${result.hostBaseline}) once the portable executable assignment is replaced by the baseline's literal ~/.local/bin/claudex path`);
+  const how = result.literalBaseline
+    ? 'once the executable assignment is replaced by the baseline\'s literal ~/.local/bin/claudex path'
+    : 'byte for byte';
+  console.log(`verify-build: dist/host.js (sha256 ${result.hostBuilt}) equals baseline (sha256 ${result.hostBaseline}) ${how}`);
 } catch (error) {
   console.error(`verify-build: ${error.code ? `${error.code}: ` : ''}${error.message}`);
   process.exitCode = 1;

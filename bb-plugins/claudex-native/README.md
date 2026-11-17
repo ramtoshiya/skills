@@ -6,9 +6,10 @@ through bb's own Claude Code provider bridge. It supports checkpoint forks,
 plan mode, and the accept-edits, auto, and full permission modes.
 
 The plugin consists of `server.js`, which registers the `claudex` provider and
-its settings, and `host.js`. `host.js` sets `BB_CLAUDE_CODE_EXECUTABLE` to
-`~/.local/bin/claudex` for the current user and then loads the bridge from
-`vendor/claude-host.js`.
+its settings, and `host.js`. `host.js` loads the bridge from
+`vendor/claude-host.js`, then sets `BB_CLAUDE_CODE_EXECUTABLE` to
+`~/.local/bin/claudex` for the current user. This order works because the
+bridge reads the variable each time it starts a session, not when it loads.
 
 ## The bridge is generated on your machine
 
@@ -19,8 +20,8 @@ repository has not confirmed that the license terms of that code allow
 redistribution. So `npm run prepare-vendor` builds the file locally, and
 `.gitignore` keeps `vendor/`, `dist/`, and `node_modules/` out of Git.
 
-The script reads files only. It does not use the network, run an installer,
-or execute the bridge. It writes nothing until every check below passes:
+The script reads the bb app without changing it. It does not use the
+network, run an installer, or execute the bridge. It writes nothing until every check below passes:
 
 1. It finds the bb app. With `--app <path>`, it uses only that path. Without
    it, the script tries `/Applications/bb.app`, then `~/Applications/bb.app`,
@@ -88,8 +89,9 @@ reading the app again, run:
 npm run prepare-vendor -- --check
 ```
 
-A failure prints one line with a code and exits with status 1. A wrong
-option exits with status 2.
+A failed check prints one line with one of the codes below and exits with
+status 1. A wrong option exits with status 2. Other errors, such as a
+permission error, print Node's error message.
 
 | Code | Meaning |
 | --- | --- |
@@ -117,19 +119,20 @@ npm run verify-build -- --baseline <installed claudex-native plugin directory>
 each failure code, path selection, reruns, the command line, and `host.js`
 with a stub bridge. It also builds the bridge from the installed bb app into
 a temporary directory and checks the pinned hash. That test is skipped when no
-bb app is installed. The repository's root `npm test` does not run these
-tests.
+bb app is installed. It fails when the installed bb is a different version,
+which means the pins need an update. The repository's root `npm test` does not
+run these tests.
 
-`verify-build` compares this source with an existing installation that was
-built from the earlier `host.js`. That `host.js` held the executable path as
-a literal string. The command builds a temporary copy with `bb plugin build`
-and requires three results:
+`verify-build` compares this source with an installed copy of the plugin.
+Point `--baseline` at the directory the plugin was installed from, which holds
+its `dist/`. The command builds a temporary copy with `bb plugin build` and
+requires these results:
 
 - `server.js` and `dist/server.js` are byte-identical to the baseline.
-- The baseline's executable path equals `~/.local/bin/claudex` for the
-  current user.
-- After the new executable assignment in `dist/host.js` is replaced with the
-  baseline's literal assignment, the file is byte-identical to the baseline.
+- `dist/host.js` is byte-identical to the baseline. If the baseline's
+  `dist/host.js` sets the executable path as a literal string, that string
+  must equal `~/.local/bin/claudex` for the current user. The comparison then
+  puts that literal assignment in place of this build's assignment.
 
 `bb plugin build` needs no bb server and changes nothing outside the
 temporary copy. The command does not run the bridge.
