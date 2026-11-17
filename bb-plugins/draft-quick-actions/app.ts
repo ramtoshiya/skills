@@ -51,7 +51,7 @@ function useDraftActions({ threadIds }: { threadIds: readonly string[] }) {
       return;
     }
     const controller = new AbortController();
-    sdk.threads.queue.list({ waitHolder: "plugin:held-drafts", signal: controller.signal }).then(
+    sdk.threads.queue.list({ signal: controller.signal }).then(
       (messages) => {
         if (!controller.signal.aborted) setDrafts(indexDrafts(messages));
       },

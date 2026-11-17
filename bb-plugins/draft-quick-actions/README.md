@@ -53,8 +53,9 @@ The plugin uses BB's public Queue APIs and
 mode, or create replacement messages. Disabling this plugin leaves manual
 **Send now** available.
 
-The visible list comes from one filtered Queue read and updates on queue
-changes and reconnection. Requests and realtime subscriptions are disposed
+The visible list comes from one complete workspace Queue read and updates
+on queue changes and reconnection. Reading the complete queue also hides
+threads that have additional messages held by a different wait. Requests and realtime subscriptions are disposed
 when the action is no longer mounted.
 
 BB's send API has no atomic last-modified precondition. The version check
