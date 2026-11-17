@@ -89,11 +89,13 @@ Playwright. `BB_SERVER_URL` is provided inside a BB agent thread.
 BB_VERIFY_PROJECT=proj_example BB_VERIFY_CHROMIUM=/path/to/chromium npm run verify:live
 ```
 
-The check creates and pins its own temporary draft, clicks the real sidebar
-button, verifies that the original message leaves the Held Drafts wait
-without navigation, and deletes its test thread. It sends a short verification
-prompt to Claude Haiku 5.5. It does not approve existing drafts or download a
-browser.
+The check creates and pins its own temporary draft. An additional scheduled
+message must hide the button. Removing that message must restore it. The check
+clicks the real sidebar button and validates the approval response. It verifies
+that the original message leaves the Held Drafts wait without navigation or
+replacement messages, then waits for the expected Claude Haiku 5.5 reply.
+It deletes its test thread even on failure. It does not approve existing drafts
+or download a browser.
 
 BB 0.49's `bb plugin types --check` expects a caret range for the shimmed
 `sonner` package and rejects this repository's required exact pin. The SDK
