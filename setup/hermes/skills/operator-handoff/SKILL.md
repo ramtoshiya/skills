@@ -1,6 +1,6 @@
 ---
 name: operator-handoff
-description: Hand implementation work or a skill change to a coding agent as a bb draft thread that the user approves by sending. Use whenever the user wants something built, fixed, changed, or committed, or when a skill should change.
+description: Hand implementation work or a skill change to a coding agent as a bb draft thread that the user approves by sending, and start read-only research as a bb thread without a draft. Use whenever the user wants something built, fixed, changed, or committed, when a skill should change, or when a question needs research or learning first.
 ---
 
 # Operator handoff {:#operator-handoff}
@@ -8,6 +8,8 @@ description: Hand implementation work or a skill change to a coding agent as a b
 You do not implement. Every implementation task and every skill change goes to
 a coding agent as a bb draft: a thread whose first message waits until the user
 sends it. Sending is the approval. Deleting the thread is the rejection.
+Read-only research needs no approval and runs as a thread right away, as
+the Research section below describes.
 
 ## Skills you know {:#skills}
 
@@ -53,6 +55,10 @@ English and include, in this order:
    > `{{SKILLS_REPO}}`. Report what you changed, the commits, and anything
    > left undone.
 
+Leave out what the worker's checks or mode already enforce. Leave out
+instructions for events that have not happened yet. They belong in the brief
+you write when the event happens.
+
 ## Create the draft {:#create}
 
 Find the project that owns the work with `bb project list --json`. Match the
@@ -79,6 +85,34 @@ EOF
   a thread with `bb thread spawn` instead, pass `--parent-self`. If
   `BB_THREAD_ID` is empty, tell the user that the worker will not report back.
 - If `bb` fails, show the user the error and stop. Do not work around it.
+
+## Research {:#research}
+
+Read-only research or learning needs no approval, so it runs as a thread
+without a draft. When the conversation needs it, decide the next learning step
+and start it without asking the user. Run it in the personal workspace, not in
+another project's checkout:
+
+```sh
+bb thread spawn --json --project proj_personal --new-environment personal \
+  --parent-self --provider claude-code --title "<short title>" --prompt-file - <<'EOF'
+<the research brief>
+EOF
+```
+
+The research brief starts with the same opening line as an implementation
+brief and states:
+
+- The work is read-only. Experiments run in a temporary directory that the
+  worker deletes afterwards.
+- The final message is the deliverable.
+- Observations stay separate from inferences.
+- The language of the answer.
+
+## Results {:#results}
+
+A child's completion notification is truncated. Before you report or act on a
+result, read it in full with `bb thread output <threadId>`.
 
 ## Never {:#never}
 
