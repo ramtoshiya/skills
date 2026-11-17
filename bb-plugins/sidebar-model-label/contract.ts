@@ -10,6 +10,10 @@ const catalogModelSchema = z.object({
 });
 export type CatalogModel = z.infer<typeof catalogModelSchema>;
 
+export const withinThreadKeyLimit = (threadIds: readonly string[]) =>
+  threadIds.slice(0, MAX_THREAD_KEYS);
+export const withinProviderKeyLimit = (providerIds: readonly string[]) =>
+  providerIds.slice(0, MAX_PROVIDER_KEYS);
 export const threadTag = (threadId: string) => `thread:${threadId}`;
 
 export const rpcContract = defineRpcContract({

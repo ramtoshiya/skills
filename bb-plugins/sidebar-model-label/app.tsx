@@ -1,68 +1,87 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import {
   definePluginApp,
   experimental_useRpcKeyedQuery,
-  type ExperimentalThreadRowMetadataDataInput,
-  type ExperimentalThreadRowMetadataProps,
+  experimental_useSidebarThreads,
 } from "@get-bb/plugin-sdk/app";
-import { rpcContract, type CatalogModel } from "./contract";
+import {
+  rpcContract,
+  withinProviderKeyLimit,
+  withinThreadKeyLimit,
+  type CatalogModel,
+} from "./contract";
+import { createLabelBridge, type LabelBridge } from "./label-bridge";
 import { describeModel } from "./model-label";
+import { mountModelLabels } from "./sidebar-dom";
 
-interface ModelData {
-  models: Record<string, string | null> | undefined;
-  catalogs: Record<string, CatalogModel[]> | undefined;
+const UNKNOWN_PROVIDER_CATALOG: CatalogModel[] = [];
+
+export function buildLabels(
+  rowIds: readonly string[],
+  models: Readonly<Record<string, string | null>> | undefined,
+  catalogs: Readonly<Record<string, CatalogModel[]>> | undefined,
+  providerOf: ReadonlyMap<string, string>,
+): Map<string, string> {
+  const labels = new Map<string, string>();
+  for (const threadId of rowIds) {
+    const model = models?.[threadId];
+    if (model === undefined) continue;
+    const providerId = providerOf.get(threadId);
+    const catalog =
+      providerId === undefined ? UNKNOWN_PROVIDER_CATALOG : catalogs?.[providerId];
+    const catalogStillLoading = catalog === undefined;
+    if (catalogStillLoading) continue;
+    const text = describeModel(model, catalog);
+    if (text !== null) labels.set(threadId, text);
+  }
+  return labels;
 }
 
-function useModelData({
-  threads,
-}: ExperimentalThreadRowMetadataDataInput): ModelData {
-  const threadIds = useMemo(() => threads.map((thread) => thread.id), [threads]);
-  const providerIds = useMemo(
-    () => [...new Set(threads.map((thread) => thread.providerId))],
-    [threads],
-  );
-  const models = experimental_useRpcKeyedQuery({
-    contract: rpcContract,
-    method: "threadModels",
-    keys: threadIds,
-    enabled: threadIds.length > 0,
-  });
-  const catalogs = experimental_useRpcKeyedQuery({
-    contract: rpcContract,
-    method: "providerModels",
-    keys: providerIds,
-    enabled: providerIds.length > 0,
-  });
-  return useMemo(
-    () => ({ models: models.data, catalogs: catalogs.data }),
-    [models.data, catalogs.data],
-  );
-}
+function createLabelData(bridge: LabelBridge) {
+  return function ModelLabelData() {
+    const renderedRowIds = useSyncExternalStore(bridge.subscribeRowIds, bridge.getRowIds);
+    const rowIds = useMemo(() => withinThreadKeyLimit(renderedRowIds), [renderedRowIds]);
+    const { threads } = experimental_useSidebarThreads();
+    const providerOf = useMemo(
+      () => new Map(threads.map((thread) => [thread.id, thread.providerId])),
+      [threads],
+    );
+    const providerIds = useMemo(
+      () =>
+        withinProviderKeyLimit(
+          [...new Set(rowIds.flatMap((id) => providerOf.get(id) ?? []))].sort(),
+        ),
+      [rowIds, providerOf],
+    );
+    const models = experimental_useRpcKeyedQuery({
+      contract: rpcContract,
+      method: "threadModels",
+      keys: rowIds,
+      enabled: rowIds.length > 0,
+    });
+    const catalogs = experimental_useRpcKeyedQuery({
+      contract: rpcContract,
+      method: "providerModels",
+      keys: providerIds,
+      enabled: providerIds.length > 0,
+    });
 
-function ModelLabelItem({
-  thread,
-  data,
-}: ExperimentalThreadRowMetadataProps<ModelData>) {
-  const model = data.models?.[thread.id];
-  const catalog = data.catalogs?.[thread.providerId];
-  if (model === undefined || catalog === undefined) return null;
-  const label = describeModel(model, catalog);
-  if (label === null) return null;
-  return (
-    <span
-      title={label.title}
-      className="min-w-0 truncate text-xs leading-3.5 text-muted-foreground"
-    >
-      {label.text}
-    </span>
-  );
+    useEffect(() => {
+      bridge.setLabels(buildLabels(rowIds, models.data, catalogs.data, providerOf));
+    }, [rowIds, models.data, catalogs.data, providerOf]);
+    useEffect(() => () => bridge.setLabels(new Map()), []);
+    return null;
+  };
 }
 
 export default definePluginApp((app) => {
-  app.slots.experimental_threadRowMetadata<ModelData>({
-    id: "model",
-    order: 0,
-    useData: useModelData,
-    component: ModelLabelItem,
+  const bridge = createLabelBridge();
+  app.contentScripts.register({
+    id: "model-labels",
+    mount: ({ signal }) => mountModelLabels(document, bridge, signal),
+  });
+  app.slots.experimental_appOverlay({
+    id: "model-label-data",
+    component: createLabelData(bridge),
   });
 });

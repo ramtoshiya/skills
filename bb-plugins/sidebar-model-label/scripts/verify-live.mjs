@@ -1,19 +1,18 @@
-// Live check of the model label against the real bb sidebar in headless Chromium.
-//
-//   node scripts/verify-live.mjs --baseline > baseline.json   plugin disabled
-//   node scripts/verify-live.mjs [baseline.json]              plugin enabled
-//   node scripts/verify-live.mjs --cleanup                    reloads, then disables the plugin
-//
-// Needs BB_SERVER_URL and an existing Chromium in BB_VERIFY_CHROMIUM. It never
-// downloads a browser and changes no bb setting except in --cleanup mode.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { chromium } from "playwright-core";
+import { describeModel } from "../model-label.ts";
 
 const PLUGIN_ID = "sidebar-model-label";
 const LABEL = "[data-sidebar-model-label]";
 const NARROW_SIDEBAR_PX = 220;
+const KEEP_SAVED_SIDEBAR_WIDTH = null;
+const SCENARIOS = {
+  wide: { sidebarWidth: KEEP_SAVED_SIDEBAR_WIDTH, windowHeight: 1000 },
+  narrow: { sidebarWidth: NARROW_SIDEBAR_PX, windowHeight: 1000 },
+  scrollingStickyRows: { sidebarWidth: KEEP_SAVED_SIDEBAR_WIDTH, windowHeight: 360 },
+};
 
 const serverUrl = process.env.BB_SERVER_URL;
 if (!serverUrl) throw new Error("Set BB_SERVER_URL to the bb server.");
@@ -21,7 +20,12 @@ const executablePath = process.env.BB_VERIFY_CHROMIUM ?? chromium.executablePath
 if (!existsSync(executablePath)) {
   throw new Error("Set BB_VERIFY_CHROMIUM to an existing Chromium executable.");
 }
-const mode = process.argv[2] ?? "";
+function parseRun([argument]) {
+  if (argument === "--baseline") return { kind: "baseline" };
+  if (argument === "--cleanup") return { kind: "cleanup" };
+  return { kind: "check", baselinePath: argument ?? null };
+}
+const run = parseRun(process.argv.slice(2));
 
 function pluginEnabled() {
   const plugins = JSON.parse(
@@ -32,12 +36,12 @@ function pluginEnabled() {
   );
 }
 
-// Geometry of every rendered sidebar row, keyed by thread id and row index.
 function measureRows() {
   const px = (value) => Math.round(value * 2) / 2;
+  const sidebarLeft = document.querySelector('[data-sidebar="content"]').getBoundingClientRect().left;
   const rect = (element) => {
     const box = element.getBoundingClientRect();
-    return { left: px(box.left), right: px(box.right), top: px(box.top), bottom: px(box.bottom) };
+    return { left: px(box.left - sidebarLeft), right: px(box.right - sidebarLeft), top: px(box.top), bottom: px(box.bottom) };
   };
   const probe = document.createElement("div");
   probe.style.height = "var(--bb-sidebar-row-height)";
@@ -57,6 +61,8 @@ function measureRows() {
     const trailing = row?.querySelector("[data-sidebar-thread-trailing]");
     return {
       key: `${id}#${occurrence}`,
+      threadId: id,
+      providerId: icon?.dataset.sidebarThreadProvider ?? null,
       stickyTier: row?.dataset.sidebarStickyTier ?? null,
       row: row && rect(row),
       rowPaddingLeft: row && getComputedStyle(row).paddingLeft,
@@ -73,6 +79,7 @@ function measureRows() {
       label: label && {
         ...rect(label),
         text: label.textContent,
+        textWidth: px(label.getBoundingClientRect().width - parseFloat(getComputedStyle(label).paddingLeft)),
         afterTitle: label.previousElementSibling === title,
         lines: Math.round(label.getBoundingClientRect().height / parseFloat(getComputedStyle(label).lineHeight)),
       },
@@ -108,14 +115,14 @@ function checkRows({ rowHeight, rows }, where) {
     }
     if (row.icon) assert.ok(row.icon.right <= title.left, `${at}: provider icon moved after the title`);
     assert.equal(row.titleTextOverflow, "ellipsis", `${at}: title lost its ellipsis`);
-    assert.ok(title.right - title.left > 0, `${at}: title has no width`);
+    assert.ok(title.right - title.left >= label.textWidth, `${at}: label text is wider than the title`);
   }
   return labeled.length;
 }
 
-// Rows bb has pinned at the top of the scroller must stack without overlap.
 async function checkStickyWhileScrolling(page, where) {
   let stuckChecks = 0;
+  let deepestStack = 0;
   const max = await page.evaluate(() => {
     const scroller = document.querySelector('[data-sidebar="content"]');
     return scroller ? scroller.scrollHeight - scroller.clientHeight : 0;
@@ -144,6 +151,7 @@ async function checkStickyWhileScrolling(page, where) {
         .filter((row) => row.stuck)
         .sort((a, b) => a.top - b.top);
     }, offset);
+    deepestStack = Math.max(deepestStack, stuck.length);
     for (let index = 0; index < stuck.length; index++) {
       const row = stuck[index];
       const at = `${where} scrollTop=${offset} stuck row ${index}`;
@@ -164,12 +172,10 @@ async function checkStickyWhileScrolling(page, where) {
   await page.evaluate(() => {
     document.querySelector('[data-sidebar="content"]').scrollTop = 0;
   });
-  return stuckChecks;
+  return { stuckChecks, deepestStack };
 }
 
-// Rows can move up or down between runs as threads change, so compare each
-// row's horizontal layout and height rather than its page position.
-const shape = (box) => box && { left: box.left, right: box.right, height: box.bottom - box.top };
+const withoutVerticalPosition = (box) => box && { left: box.left, right: box.right, height: box.bottom - box.top };
 
 function compareWithBaseline(baseline, current, where) {
   const before = new Map(baseline.rows.map((row) => [row.key, row]));
@@ -178,36 +184,74 @@ function compareWithBaseline(baseline, current, where) {
     const old = before.get(row.key);
     if (!old || !old.row || !row.row) continue;
     const at = `${where} ${row.key}`;
-    assert.deepEqual(shape(row.row), shape(old.row), `${at}: row box changed`);
+    assert.deepEqual(withoutVerticalPosition(row.row), withoutVerticalPosition(old.row), `${at}: row box changed`);
     assert.equal(row.rowPaddingLeft, old.rowPaddingLeft, `${at}: indentation changed`);
-    assert.deepEqual(shape(row.anchor), shape(old.anchor), `${at}: click target changed`);
-    assert.deepEqual(shape(row.icon), shape(old.icon), `${at}: provider icon moved`);
-    assert.deepEqual(shape(row.trailing), shape(old.trailing), `${at}: row actions moved`);
+    assert.deepEqual(withoutVerticalPosition(row.anchor), withoutVerticalPosition(old.anchor), `${at}: click target changed`);
+    assert.deepEqual(withoutVerticalPosition(row.icon), withoutVerticalPosition(old.icon), `${at}: provider icon moved`);
+    assert.deepEqual(withoutVerticalPosition(row.trailing), withoutVerticalPosition(old.trailing), `${at}: row actions moved`);
     assert.equal(row.title?.left, old.title?.left, `${at}: title moved`);
     compared++;
   }
   return compared;
 }
 
-async function openSidebar(browser, sidebarWidth) {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+const catalogs = new Map();
+function catalogOf(providerId) {
+  if (!catalogs.has(providerId)) {
+    const listed = JSON.parse(
+      execFileSync("bb", ["provider", "models", providerId, "--json"], { encoding: "utf8" }),
+    );
+    const models = Array.isArray(listed) ? listed : listed.models;
+    catalogs.set(
+      providerId,
+      models.flatMap(({ id, model, displayName }) => [
+        { model, displayName },
+        ...(id && id !== model ? [{ model: id, displayName }] : []),
+      ]),
+    );
+  }
+  return catalogs.get(providerId);
+}
+
+async function checkLabelText({ rows }, where) {
+  let checked = 0;
+  for (const row of rows) {
+    if (!row.label || !row.providerId) continue;
+    const response = await fetch(`${serverUrl}/api/v1/threads/${row.threadId}/default-execution-options`);
+    assert.ok(response.ok, `${where} ${row.key}: model lookup returned HTTP ${response.status}`);
+    const options = await response.json();
+    const expected = describeModel(options?.model ?? null, catalogOf(row.providerId));
+    assert.equal(row.label.text, expected, `${where} ${row.key}: label shows the wrong model`);
+    checked++;
+  }
+  return checked;
+}
+
+async function narrowSidebarInPageOnly(page, sidebarWidth) {
+  await page.evaluate((width) => {
+    for (const element of document.querySelectorAll('[data-sidebar="panel"], [data-sidebar="gap"]')) {
+      element.style.setProperty("--sidebar-width", `${width}px`);
+    }
+    const body = document.querySelector('[data-testid="app-sidebar-body"]').parentElement;
+    body.style.width = `calc(${width}px - var(--sidebar-rail-width))`;
+  }, sidebarWidth);
+  await page.waitForTimeout(500);
+  const widths = await page.evaluate(() => ({
+    panel: document.querySelector('[data-sidebar="panel"]').getBoundingClientRect().width,
+    content: document.querySelector('[data-sidebar="content"]').getBoundingClientRect().width,
+  }));
+  assert.equal(widths.panel, sidebarWidth, "The sidebar panel did not narrow.");
+  assert.ok(widths.content < sidebarWidth, `The sidebar body did not narrow (${widths.content}px).`);
+}
+
+async function openSidebar(browser, { sidebarWidth, windowHeight } = SCENARIOS.wide) {
+  const page = await browser.newPage({ viewport: { width: 1440, height: windowHeight } });
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(serverUrl);
   await page.locator("a[data-sidebar-thread-id]").first().waitFor({ timeout: 30_000 });
-  if (sidebarWidth) {
-    // Page-local styles only. The saved sidebar width is not touched. bb sets
-    // the width on the panel, its gap, and the absolutely placed sidebar body.
-    await page.evaluate((width) => {
-      for (const element of document.querySelectorAll('[data-sidebar="panel"], [data-sidebar="gap"]')) {
-        element.style.setProperty("--sidebar-width", `${width}px`);
-      }
-      const body = document.querySelector('[data-testid="app-sidebar-body"]').parentElement;
-      body.style.width = `calc(${width}px - var(--sidebar-rail-width))`;
-    }, sidebarWidth);
-    const contentWidth = await page.evaluate(() => document.querySelector('[data-sidebar="content"]').getBoundingClientRect().width);
-    assert.ok(contentWidth < sidebarWidth, `The sidebar did not narrow (content is ${contentWidth}px wide).`);
-  }
+  await page.waitForTimeout(1_000);
+  if (sidebarWidth !== KEEP_SAVED_SIDEBAR_WIDTH) await narrowSidebarInPageOnly(page, sidebarWidth);
   return { page, errors };
 }
 
@@ -218,12 +262,16 @@ async function waitForLabels(page) {
 
 const browser = await chromium.launch({ executablePath, headless: true });
 try {
-  if (mode === "--baseline") {
+  if (run.kind === "baseline") {
     assert.equal(pluginEnabled(), false, `Disable ${PLUGIN_ID} before taking a baseline.`);
-    const wide = await openSidebar(browser);
-    const narrow = await openSidebar(browser, NARROW_SIDEBAR_PX);
-    console.log(JSON.stringify({ wide: await wide.page.evaluate(measureRows), narrow: await narrow.page.evaluate(measureRows) }));
-  } else if (mode === "--cleanup") {
+    const baseline = {};
+    for (const [where, scenario] of Object.entries(SCENARIOS)) {
+      const { page } = await openSidebar(browser, scenario);
+      baseline[where] = await page.evaluate(measureRows);
+      await page.close();
+    }
+    console.log(JSON.stringify(baseline));
+  } else if (run.kind === "cleanup") {
     assert.equal(pluginEnabled(), true, `Enable ${PLUGIN_ID} before the cleanup check.`);
     const { page, errors } = await openSidebar(browser);
     await waitForLabels(page);
@@ -240,16 +288,21 @@ try {
     console.log(`PASS cleanup: ${labeled} labels survived a reload without duplicates and disappeared on disable without a page reload.`);
   } else {
     assert.equal(pluginEnabled(), true, `Enable ${PLUGIN_ID} before the layout check.`);
-    const baseline = mode ? JSON.parse(readFileSync(mode, "utf8")) : null;
-    for (const [where, width] of [["wide", 0], ["narrow", NARROW_SIDEBAR_PX]]) {
-      const { page, errors } = await openSidebar(browser, width);
+    const baseline = run.baselinePath ? JSON.parse(readFileSync(run.baselinePath, "utf8")) : null;
+    for (const [where, scenario] of Object.entries(SCENARIOS)) {
+      const { page, errors } = await openSidebar(browser, scenario);
       await waitForLabels(page);
       const current = await page.evaluate(measureRows);
       const labeled = checkRows(current, where);
+      const texts = await checkLabelText(current, where);
       const compared = baseline ? compareWithBaseline(baseline[where], current, where) : 0;
-      const stuck = await checkStickyWhileScrolling(page, where);
+      const { stuckChecks, deepestStack } = await checkStickyWhileScrolling(page, where);
+      if (where === "scrollingStickyRows") {
+        assert.ok(deepestStack >= 2, `${where}: sticky rows never stacked while scrolling`);
+      }
       assert.deepEqual(errors, [], `${where}: page errors`);
-      console.log(`PASS ${where}: ${labeled} labeled rows at ${current.rowHeight}px, ${compared} rows match the baseline, ${stuck} sticky row positions checked.`);
+      await page.close();
+      console.log(`PASS ${where}: ${labeled} labeled rows at ${current.rowHeight}px, ${texts} label texts match the thread's model, ${compared} rows match the baseline, ${stuckChecks} stuck row positions checked, up to ${deepestStack} stacked.`);
     }
   }
 } finally {
