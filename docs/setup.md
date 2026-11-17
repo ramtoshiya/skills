@@ -539,6 +539,10 @@ says whether its own brief imposed the stop, and sends the rest back to that
 worker. New scope, new authority, a shared-resource conflict, or a failed
 safety check still goes to you first, and new implementation scope still
 starts as a draft.
+Before drafting, the operator asks in conversation when an unresolved choice
+would change the requested outcome or consequential change targets. It decides
+incidental implementation choices itself and reports the target of each draft.
+Finding a different owner does not by itself authorize changing that target.
 The [operator verification cases](../dev/evals/hermes-operator/cases.json)
 exercise these distinctions in live Hermes sessions. These are behavioral
 checks, separate from the installer's deterministic prompt-refresh tests.

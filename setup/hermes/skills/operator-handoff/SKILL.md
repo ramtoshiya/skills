@@ -30,6 +30,32 @@ notice asks you to compact.
 
 {{SKILL_PLUGINS}}
 
+## Clarify the outcome {:#clarify-outcome}
+
+Before creating a draft, separate the user's requested outcome and constraints
+from facts you can investigate and conditions you are adding. Consider whether
+plausible interpretations change the result, change targets, authority, or a
+meaningful tradeoff. Do not turn an unresolved outcome-changing interpretation
+into an acceptance criterion without resolving it with the user.
+
+When such an ambiguity remains, ask the question most likely to resolve it in
+ordinary chat and wait for the answer. Resolve prerequisite decisions first and
+build any later question on the answer. Investigate factual questions yourself.
+Use these decision-dependency and consequential-ambiguity principles without
+requiring a full interview. When the user explicitly requests a grilling or
+interview workflow, follow that skill.
+
+Stop asking when the goal, consequential scope, and exclusions are clear enough
+to brief another person. Reflect material interpretations concisely. Do not
+repeat answered questions, ask about incidental implementation details, or use
+the draft as a substitute for this conversation.
+
+Finding the repository that owns a cause or including generic fork and
+integration authority does not expand the agreed change targets. If new
+evidence changes the intended outcome or target, return that decision to the
+user before implementation at the new target. Continue authorized in-scope work
+and split off work only when it is genuinely independent and unblocked.
+
 ## Write the brief {:#brief}
 
 The worker sees only the brief, so it must stand on its own. Write it in
@@ -71,13 +97,12 @@ Leave out what the worker's checks or mode already enforce. Leave out
 instructions for events that have not happened yet. They belong in the brief
 you write when the event happens.
 
-Decide small feature choices yourself, such as an input format, a default, or
-what the output keeps. Write them into the brief and list them for the user
-when you report the draft. Ask the user only about product decisions.
-Before you send questions, drop each one that is a feature choice or that the
-domain already answers. A worker's note about an unconfirmed assumption is a
-question for the user only when its answer could change the product. Relaying
-an obvious one costs the user a round trip to work out what you meant.
+Decide small implementation choices within the agreed outcome yourself, such
+as an input format or a default. Write them into the brief and list them for
+the user when you report the draft. Historical backfill, compatibility
+promises, and a different change target can change the outcome and are not
+automatically minor choices. Investigate questions the domain answers and ask
+the user about decisions that change the outcome or consequential scope.
 
 When a pending product decision blocks part of the work, split off the part
 that does not depend on it and hand it over now. Ask only about the blocked
@@ -146,9 +171,10 @@ because macOS `/bin/bash` 3.2 fails with "unexpected EOF" there when the brief
 contains an apostrophe.
 
 - The output is `{"threadId": "...", "held": true|false}`. Tell the user
-  `@thread:<threadId>` and that sending it is the approval. `held: false`
-  means the draft setting is switched to direct execution and the worker has
-  already started.
+  `@thread:<threadId>`, what will actually change, and that sending it is the
+  approval. State any consequential difference from the original request.
+  `held: false` means the draft setting is switched to direct execution and the
+  worker has already started.
 - Right after creating the draft, make it a child of this thread, so its
   completion is reported here:
   `bb thread update <threadId> --parent-thread "$BB_THREAD_ID"`. If you start

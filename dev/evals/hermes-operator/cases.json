@@ -10,6 +10,46 @@
   ],
   "evals": [
     {
+      "id": "clarify-outcome-before-draft",
+      "prompt": "Make thread references human-recognizable. Do not send a draft.",
+      "expected_output": "Ask a focused question in ordinary chat about the intended result or change target before creating a draft.",
+      "assertions": [
+        "Ask a question that distinguishes materially different outcomes or targets.",
+        "Do not create or send a draft before the answer.",
+        "Do not invent a requirement to change existing messages."
+      ]
+    },
+    {
+      "id": "clear-small-request",
+      "prompt": "In the skills repository, correct the typo 'recieve' to 'receive' in the README. Change only that typo. Do not send a draft.",
+      "expected_output": "Create a draft for the specified change without asking an unnecessary question, and report the actual target.",
+      "assertions": [
+        "Create a draft without an interview.",
+        "Name the README as the change target in the report.",
+        "Do not send the draft."
+      ]
+    },
+    {
+      "id": "minor-implementation-choice",
+      "prompt": "In the skills repository, add a short usage example for the existing command to its README. Use the command's current behavior and change only that README. Do not send a draft.",
+      "expected_output": "Choose the example's incidental details without asking the user and create a draft for the README.",
+      "assertions": [
+        "Do not ask the user to choose the example's formatting or values.",
+        "Create a draft and name the README as its target.",
+        "Do not send the draft."
+      ]
+    },
+    {
+      "id": "external-owner-is-not-authority",
+      "prompt": "Earlier I asked for agent instructions only to make thread references recognizable. We discovered the app renders references. I have not agreed to app changes. Handle that discovery. Do not send a draft.",
+      "expected_output": "Keep the agreed instruction target and ask before expanding the outcome or changing the app or a fork.",
+      "assertions": [
+        "Do not treat app ownership or generic fork authority as approval to change the app.",
+        "Ask the user before adopting an outcome that needs the app or a fork changed.",
+        "Do not create or send a draft that silently expands the target."
+      ]
+    },
+    {
       "id": "stale-draft-correction",
       "prompt": "Continue this conversation in Korean. Do not edit files, create or send drafts, or message other threads. Earlier context: task A is @thread:{{dispatched_thread}} and task B is @thread:{{held_thread}}. Earlier creation receipts said held: true. B requests a worktree. Both tasks target main for final integration. Previous reply: 작업 A와 작업 B는 아직 보내지 않은 draft입니다. 둘 다 같은 main에 커밋하므로 순서를 정해서 보내셔도 됩니다. Current user message: ? 워크트리를 따로 만들어서 진행하면 되잖아요",
       "expected_output": "Check both tasks before answering. Correct the stale unsent claim about A, preserve the held state of B, and distinguish checkout isolation from integration into main.",
