@@ -39,7 +39,7 @@ SOUL_END = "<!-- END ramtoshiya:operator -->"
 CONFIG = {
     "agent.disabled_toolsets": '["file", "code_execution", "delegation"]',
     "skills.auto_load": '["operator-handoff"]',
-    "skills.project_discovery": "false",
+    "skills.project_discovery": "true",
     "curator.enabled": "false",
     "memory.write_approval": "false",
     "compression.threshold_tokens": "300000",

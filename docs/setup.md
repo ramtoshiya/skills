@@ -506,7 +506,7 @@ Then it changes these files under `~/.hermes/profiles/operator/`:
 | --- | --- | --- |
 | `agent.disabled_toolsets` | `["file", "code_execution", "delegation"]` | No file reading or writing tools, no code execution, and no `delegate_task` subagents, which bb cannot show. The operator starts every worker as a bb thread instead. The terminal stays on for `bb` |
 | `skills.auto_load` | `["operator-handoff"]` | The handoff procedure is in every session |
-| `skills.project_discovery` | `false` | Skills in the thread's working directory are not loaded |
+| `skills.project_discovery` | `true` | Project skills load only from trusted repositories |
 | `curator.enabled` | `false` | Hermes does not archive or merge skills on its own |
 | `memory.write_approval` | `false` | Hermes writes its built-in memory without asking. Memory limits stay at the defaults |
 | `compression.threshold_tokens` | `300000` | Hermes compresses a session on its own when a request reaches 300,000 tokens. The self-compact plugin reminds the agent to compact from 75% of this number |
