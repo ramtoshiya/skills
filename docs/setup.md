@@ -500,6 +500,23 @@ When the gateway refuses, the task fails and prints the gateway's reason, and
 the profile's sessions keep the previous plugin code until that gateway
 restarts. Run the same command after copying plugin files by hand.
 
+After installation, the task runs `hermes -p operator sessions refresh-prompts`.
+Continuing sessions otherwise reuse their stored system prompts, even after
+SOUL.md or skill files change. Each session adopts the installed instructions
+on its next turn and keeps its history and session id. The refresh costs one
+prompt-cache miss per session, including after an unchanged install. A failed
+refresh fails the task rather than reporting that existing sessions are up to
+date. Run the same refresh command after changing prompt files by hand.
+
+The auto-loaded `operator-handoff` skill requires a current thread query before
+reporting task status, execution environments, or work order. Corrections also
+recheck the factual premises of the earlier advice. Draft creation receipts
+are snapshots, and a requested worktree does not exist until the draft is sent.
+Separate worktrees allow parallel work even when both results target `main`.
+The [operator verification cases](../dev/evals/hermes-operator/cases.json)
+exercise these distinctions in live Hermes sessions. These are behavioral
+checks, separate from the installer's deterministic prompt-refresh tests.
+
 The operator and every other Hermes profile get the shared preferences from
 `setup/agents/preferences.md`, the same text Claude Code and Codex get. Hermes
 loads a profile's `SOUL.md` into every session of that profile, so

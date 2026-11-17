@@ -324,6 +324,7 @@ def main() -> None:
     drop_bundled(profile, home, {skills_dir / name for name in managed})
     drop_bundled("default", default_home, set())
     bb_catalog_agent(profile, home, packages)
+    print(run("hermes", "-p", profile, "sessions", "refresh-prompts").strip())
 
     others = sorted(p.parent.name for p in skills_dir.rglob("SKILL.md")
                     if p.relative_to(skills_dir).parts[0] not in managed

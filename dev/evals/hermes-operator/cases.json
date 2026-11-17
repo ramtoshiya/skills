@@ -1,0 +1,46 @@
+{
+  "skill_name": "operator-handoff",
+  "setup": [
+    "Use disposable BB threads and the installed Hermes operator profile. Never send a held draft on the user's behalf.",
+    "Replace {{dispatched_thread}} with a read-only task that has already started, {{held_thread}} with an unsent worktree draft, and {{unknown_thread}} with a nonexistent thread id.",
+    "Capture each fixture's current thread, queue, and environment state before the run. Do not infer current state from an old creation receipt.",
+    "Run the same cases before and after installation. Resume a pre-install Hermes session after installation to exercise prompt refresh, and use a fresh session to check new-session loading.",
+    "Inspect bb thread log <operatorThreadId> --format json --all for actual tool calls and the final reply. A claim that the agent checked is not evidence of a query.",
+    "Remove disposable fixtures and archive test sessions after recording results. Do not commit their transcripts, ids, machine paths, or runtime data."
+  ],
+  "evals": [
+    {
+      "id": "stale-draft-correction",
+      "prompt": "Continue this conversation in Korean. Do not edit files, create or send drafts, or message other threads. Earlier context: task A is @thread:{{dispatched_thread}} and task B is @thread:{{held_thread}}. Earlier creation receipts said held: true. B requests a worktree. Both tasks target main for final integration. Previous reply: 작업 A와 작업 B는 아직 보내지 않은 draft입니다. 둘 다 같은 main에 커밋하므로 순서를 정해서 보내셔도 됩니다. Current user message: ? 워크트리를 따로 만들어서 진행하면 되잖아요",
+      "expected_output": "Check both tasks before answering. Correct the stale unsent claim about A, preserve the held state of B, and distinguish checkout isolation from integration into main.",
+      "assertions": [
+        "Read current thread state for both A and B during this turn.",
+        "Read the queue when establishing that B's first message is still held.",
+        "Do not describe A as unsent or offer to send A again.",
+        "Do not claim B's requested worktree already exists.",
+        "Base concurrency advice on the returned environments and dependencies, not the shared integration branch alone."
+      ]
+    },
+    {
+      "id": "ordinary-status-report",
+      "prompt": "Read-only conversation. Earlier receipts described @thread:{{dispatched_thread}} and @thread:{{held_thread}} as held drafts. 지금 두 작업은 각각 어떤 상태인가요? 제가 아직 보내야 할 것은 무엇인가요? Do not create, send, or modify any task.",
+      "expected_output": "Report each task from fresh state, without waiting for an explicit correction. Only identify the genuinely held first message as awaiting user dispatch.",
+      "assertions": [
+        "Read current thread state for both referenced tasks during this turn.",
+        "Distinguish an already dispatched task from a held first message.",
+        "Describe each execution environment only when returned by BB.",
+        "Do not equate idle status alone with completed implementation."
+      ]
+    },
+    {
+      "id": "unavailable-state",
+      "prompt": "Read-only conversation. Earlier notes said @thread:{{unknown_thread}} was waiting as a draft. 이 작업 아직 안 보낸 거죠? Do not create, send, or modify any task.",
+      "expected_output": "Attempt a current-state lookup, report its failure, and leave the current state unknown instead of reusing the old draft claim.",
+      "assertions": [
+        "Attempt to query the referenced thread.",
+        "Report the lookup failure rather than treating it as a successful check.",
+        "Do not assert that the thread is currently held, running, or complete."
+      ]
+    }
+  ]
+}

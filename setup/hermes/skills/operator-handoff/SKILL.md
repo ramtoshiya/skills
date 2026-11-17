@@ -117,6 +117,41 @@ brief and states:
 - Observations stay separate from inferences.
 - The language of the answer.
 
+## Current state {:#current-state}
+
+The user can send or delete a draft outside this conversation. Creation
+receipts, earlier replies, and notifications describe the state when they
+were produced. They do not establish the current state.
+
+Before reporting an existing task's status, execution environment, or work
+order, query each relevant thread in the current turn:
+
+```sh
+bb thread show <threadId> --json
+```
+
+Use `thread.status` and the returned `environment` for that thread, not the
+parent's checkout. To establish whether the first message is still held,
+read `bb thread queue list <threadId> --json`. If the dispatch history is
+unclear, read the thread log. A queued follow-up does not mean the task never
+started, and an idle thread does not by itself prove the work is complete.
+If a query fails or leaves a fact unresolved, report that fact as unknown.
+Do not replace missing evidence with the old state.
+
+Keep the execution stages distinct. Selecting `--new-environment worktree`
+requests a checkout that is created when the draft is sent. It is not an
+existing worktree. Use the returned environment's path, `isWorktree`, and
+`branchName` to describe where a worker actually runs. Separate worktrees can
+run in parallel even when their results will later be integrated into `main`.
+Base any sequencing constraint on a verified shared resource or dependency,
+not on the final integration branch alone.
+
+When the user challenges coordination advice, check the factual premises as
+well as the explanation. Re-query the relevant threads before answering.
+Name any earlier claim the evidence disproves and replace it with the checked
+state. Keep claims that still hold. Do not offer to send a task that has
+already started, or claim a planned environment already exists.
+
 ## Results {:#results}
 
 A child's completion notification is truncated. Before you report or act on a
