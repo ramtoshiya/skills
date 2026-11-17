@@ -14,7 +14,9 @@ PLUGIN = ROOT / "setup/hermes/plugins/skill-drafts/__init__.py"
 SETUP = ROOT / "setup/hermes/operator_profile.py"
 THREAD_ENV = ROOT / "setup/hermes/plugins/bb-thread-env/__init__.py"
 # Stands in for the bb CLI: lists one project, records the draft it was asked to create, and
-# keeps the provider-acp plugin settings in $HOME/bb-provider-acp.json.
+# keeps the provider-acp plugin settings in $HOME/bb-provider-acp.json. Like the real CLI with
+# the tracker plugin installed, the plural `projects` group has no `list`, and any command the
+# fake does not know fails.
 FAKE_BB = f"""#!{sys.executable}
 import json, os, sys
 from pathlib import Path
@@ -27,7 +29,7 @@ if args[:3] == ["plugin", "config", "provider-acp"]:
         store.write_text(json.dumps(values))
     else:
         print(json.dumps({{"ok": True, "values": values}}))
-elif args[:2] == ["projects", "list"]:
+elif args[:2] == ["project", "list"]:
     print(json.dumps([{{"id": "proj_skills", "sources": [{{"path": os.environ["REPO"]}}]}}]))
 elif args[:2] == ["draft", "create"]:
     if os.environ.get("FAIL"):
@@ -35,6 +37,9 @@ elif args[:2] == ["draft", "create"]:
     with open(os.environ["CAPTURE"], "w") as file:
         json.dump(args, file)
     print(json.dumps({{"threadId": "thr_new", "held": True}}))
+else:
+    print(json.dumps({{"ok": False, "error": {{"code": "unknown_command", "message": "unknown command"}}}}))
+    sys.exit(1)
 """
 
 
