@@ -4,6 +4,7 @@ import {
   experimental_THREAD_ACTION_GROUPS,
   useRpc,
   useSdk,
+  type PluginThreadActionRegistration,
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import { indexDrafts } from "./drafts.ts";
@@ -85,24 +86,26 @@ function useDraftActions({ threadIds }: { threadIds: readonly string[] }) {
   return { drafts, sending, run };
 }
 
+const runDraft = {
+  title: "Run draft",
+  icon: "Play",
+  group: experimental_THREAD_ACTION_GROUPS.open,
+  order: 5,
+  useData: useDraftActions,
+  item: ({ thread, data }) => {
+    const target = data.drafts.get(thread.id);
+    if (thread.status !== "pending" || thread.archivedAt !== null || target === undefined) return null;
+    const sending = data.sending.has(thread.id);
+    return {
+      label: sending ? "Sending draft…" : "Run draft",
+      icon: "Play",
+      disabled: sending,
+      run: () => data.run(target),
+    };
+  },
+} satisfies Omit<PluginThreadActionRegistration<ReturnType<typeof useDraftActions>>, "id">;
+
 export default definePluginApp((app) => {
-  app.slots.experimental_threadAction({
-    id: "run-draft",
-    title: "Run draft",
-    icon: "Play",
-    group: experimental_THREAD_ACTION_GROUPS.open,
-    order: 5,
-    useData: useDraftActions,
-    item: ({ thread, data }) => {
-      const target = data.drafts.get(thread.id);
-      if (thread.status !== "pending" || thread.archivedAt !== null || target === undefined) return null;
-      const sending = data.sending.has(thread.id);
-      return {
-        label: sending ? "Sending draft…" : "Run draft",
-        icon: "Play",
-        disabled: sending,
-        run: () => data.run(target),
-      };
-    },
-  });
+  app.slots.experimental_threadAction({ id: "run-draft", ...runDraft });
+  app.slots.experimental_threadAction({ id: "run-draft-header", placement: "header", ...runDraft });
 });

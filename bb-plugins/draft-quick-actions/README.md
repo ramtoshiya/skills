@@ -1,10 +1,10 @@
 # Draft quick actions
 
-Send a Held Drafts message from the sidebar without opening its thread.
-The plugin adds **Run draft** to BB's thread menus and quick-action picker.
-Held Drafts and BB's sidebar stay unchanged.
+Send a Held Drafts message with one click or tap. The plugin adds
+**Run draft** to the open draft's thread header, BB's thread menus, and the
+sidebar quick-action picker. Held Drafts and BB's sidebar stay unchanged.
 
-## Install and show the button
+## Install
 
 From this repository:
 
@@ -14,6 +14,28 @@ npm ci
 bb plugin build .
 bb plugin install . --yes
 ```
+
+## Approve from the thread header
+
+Open the draft's thread. On a window or pane 768 CSS pixels wide or wider,
+**Run draft** is a button in the thread header, after the workspace's
+**Open** button. It needs no hover, so it works with a mouse and on touch
+screens such as an iPad.
+
+On narrower screens, such as a phone, and in narrow split panes, BB moves
+header buttons into the header's **Thread actions** menu (`···`). Tap `···`
+and choose **Run draft** at the top of the menu. In BB 0.49 that menu also
+lists the menu-entry version of **Run draft**, so the label appears twice.
+Both entries approve the same message. The plugin cannot hide either copy,
+because BB does not tell a thread action which menu shows it. The 768-pixel
+width is BB 0.49's phone breakpoint. The plugin does not set it.
+
+## Show the button on sidebar rows
+
+Sidebar quick-action buttons appear only when you point at a row with a
+mouse or trackpad. Touch screens hide them. On an iPad, touching and holding
+a sidebar row can start a drag instead of opening the row's menu. Use the
+header button on touch screens.
 
 Open a thread row's menu, choose **Customize actions**, and put **Run draft**
 in an empty slot. Keep any existing actions you want. The choice applies to
@@ -28,8 +50,11 @@ For a list that currently contains only Archive:
 bb thread-list prefs set rowActions '["draft-quick-actions/run-draft","bb--core/archive"]'
 ```
 
-Hover a draft's row and click the play button to approve its queued message.
-There is no confirmation dialog and no navigation. A toast distinguishes a
+Point at a draft's row and click the play button to approve its queued
+message.
+
+Every **Run draft** control sends the message without a confirmation dialog
+and without navigation. A toast distinguishes a
 sent message from an approved message that still waits for its workspace or
 another BB prerequisite.
 
@@ -40,7 +65,8 @@ Drafts. It must have one editable inline message held by `held-drafts` in the
 `waiting` state. Scheduled messages, retries, grouped messages, and other
 plugins' waits are not quick-action targets. Use BB's Queue for those cases.
 
-The server checks the thread and its complete queue again when you click.
+The server checks the thread and its complete queue again when you click or
+tap.
 If the message was removed, replaced, edited, or joined by another message,
 the request fails without choosing a different message. The list refreshes
 so you can review the new state. Requests through this plugin are serialized
@@ -77,8 +103,8 @@ bb plugin build .
 ```
 
 The tests run BB's backend and frontend harnesses. They cover changed targets,
-concurrent requests, retry after a failed send, queued approval, row updates,
-and subscription cleanup.
+concurrent requests, retry after a failed send, queued approval, the header
+and menu registrations, row updates, and subscription cleanup.
 
 Run the live check against an installed plugin with **Run draft** already
 selected. Set `BB_VERIFY_PROJECT` to a test project id and
@@ -89,13 +115,22 @@ Playwright. `BB_SERVER_URL` is provided inside a BB agent thread.
 BB_VERIFY_PROJECT=proj_example BB_VERIFY_CHROMIUM=/path/to/chromium npm run verify:live
 ```
 
-The check creates and pins its own temporary draft. An additional scheduled
-message must hide the button. Removing that message must restore it. The check
-clicks the real sidebar button and validates the approval response. It verifies
-that the original message leaves the Held Drafts wait without navigation or
-replacement messages, then waits for the expected Claude Haiku 5.5 reply.
-It deletes its test thread even on failure. It does not approve existing drafts
-or download a browser.
+The check creates one temporary draft for each of four cases:
+
+- A desktop sidebar row. An additional scheduled message must hide the button,
+  and removing that message must restore it before the click.
+- The desktop thread header.
+- The thread header on an 834 by 1194 touch screen without hover.
+- The **Thread actions** menu on a 390 by 844 touch screen. The check reports
+  how many **Run draft** entries the menu lists and taps the first.
+
+Each case holds the request until the control shows its pending state where
+the control stays on screen. It then checks that exactly one request carries
+the displayed target, and that the original message leaves the Held Drafts
+wait without navigation or replacement messages. It waits for the expected
+Claude Haiku 5.5 reply and for the control to disappear. The check deletes its
+test threads even on failure. It does not approve existing drafts or download
+a browser. Touch emulation in Chromium is not a physical iPad.
 
 BB 0.49's `bb plugin types --check` expects a caret range for the shimmed
 `sonner` package and rejects this repository's required exact pin. The SDK

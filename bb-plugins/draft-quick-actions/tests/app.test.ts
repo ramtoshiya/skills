@@ -19,7 +19,8 @@ const { loadPluginApp, renderSlot } = await import("@get-bb/plugin-sdk/testing/a
 const { useSdk, useBbNavigate } = await import("@get-bb/plugin-sdk/app");
 const { act } = await import("@testing-library/react");
 const app = await loadPluginApp(() => import("../app.ts"));
-const action = app.threadActions[0];
+const actions = new Map(app.threadActions.map((registration) => [registration.id, registration]));
+const action = actions.get("run-draft");
 const target = { threadId: "draft-thread", queuedMessageId: "draft-message", updatedAt: 10 };
 const draft = () => makeQueueEntry({
   id: target.queuedMessageId,
@@ -29,11 +30,11 @@ const draft = () => makeQueueEntry({
   waitingOn: { kind: "plugin", pluginId: "held-drafts", reason: "Draft" },
 });
 
-function Row() {
+function Row({ registration = action }) {
   const sdk = useSdk();
   const navigate = useBbNavigate();
-  const data = action.useData({ threadIds: [target.threadId, "another-thread"] });
-  const item = action.item({
+  const data = registration.useData({ threadIds: [target.threadId, "another-thread"] });
+  const item = registration.item({
     thread: { id: target.threadId, projectId: "project", status: "pending", archivedAt: null },
     data, sdk, navigate,
   });
@@ -43,25 +44,33 @@ function Row() {
   }, item.label);
 }
 
-test("one sidebar action click sends the displayed target and blocks a second click", async (t) => {
-  let release;
-  const completed = new Promise((resolve) => { release = resolve; });
-  const calls = [];
-  const slot = renderSlot({ component: Row }, {}, {
-    sdk: { subscribe: () => () => {}, threads: { queue: { list: async () => [draft()] } } },
-    rpc: { runDraft: async (input) => { calls.push(input); await completed; return { kind: "sent" }; } },
-  });
-  t.after(() => slot.lifecycle.unmount());
-  const button = await slot.findByRole("button", { name: "Run draft" });
-  await act(async () => button.click());
-  assert.equal(button.disabled, true);
-  assert.equal(button.textContent, "Sending draft…");
-  await act(async () => button.click());
-  assert.deepEqual(calls, [target]);
-  await act(async () => { release(); await completed; });
-  assert.equal(button.disabled, false);
-  assert.equal(slot.inspection.navigateCalls.length, 0);
+test("Run draft keeps its menu key and adds a header button that needs no hover", () => {
+  assert.equal(action.placement ?? "menu", "menu", "draft-quick-actions/run-draft is the sidebar quick-action key and must stay a menu action.");
+  assert.equal(actions.get("run-draft-header")?.placement, "header");
 });
+
+for (const id of ["run-draft", "run-draft-header"]) {
+  test(`one ${id} click sends the displayed target and blocks a second click`, async (t) => {
+    let release;
+    const completed = new Promise((resolve) => { release = resolve; });
+    const calls = [];
+    const registration = actions.get(id);
+    const slot = renderSlot({ component: () => createElement(Row, { registration }) }, {}, {
+      sdk: { subscribe: () => () => {}, threads: { queue: { list: async () => [draft()] } } },
+      rpc: { runDraft: async (input) => { calls.push(input); await completed; return { kind: "sent" }; } },
+    });
+    t.after(() => slot.lifecycle.unmount());
+    const button = await slot.findByRole("button", { name: "Run draft" });
+    await act(async () => button.click());
+    assert.equal(button.disabled, true);
+    assert.equal(button.textContent, "Sending draft…");
+    await act(async () => button.click());
+    assert.deepEqual(calls, [target]);
+    await act(async () => { release(); await completed; });
+    assert.equal(button.disabled, false);
+    assert.equal(slot.inspection.navigateCalls.length, 0);
+  });
+}
 
 test("a draft with an additional scheduled message has no unusable Run draft button", async (t) => {
   const held = draft();

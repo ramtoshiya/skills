@@ -1,11 +1,14 @@
-Approve a held draft from the sidebar without opening its thread or finding
-its Queue card.
+Approve a held draft with one click or tap, from its thread header or the
+sidebar, without finding its Queue card.
 
 ## What you get
 
-Run draft appears in BB's thread menus and in Customize actions. Add it to a
-quick-action slot to show a play button on eligible draft rows. Clicking it
-sends the existing message and keeps you on the current page.
+An open draft shows a Run draft button in its thread header. The button
+needs no hover, so it works on an iPad. On a phone, it moves into the
+header's ··· menu. Run draft also appears in BB's thread menus and in
+Customize actions. Add it to a quick-action slot to show a play button on
+eligible draft rows when you point at them with a mouse. Each control sends
+the existing message and keeps you on the current page.
 
 ## Approval stays manual
 

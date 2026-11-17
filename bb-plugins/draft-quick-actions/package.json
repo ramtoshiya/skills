@@ -3,14 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Send an approved Held Drafts message from a sidebar quick action.",
+  "description": "Send an approved Held Drafts message from the thread header or a sidebar quick action.",
   "engines": {
     "bb": ">=0.49",
     "bbPluginSdk": ">=0.6.132"
   },
   "bb": {
     "name": "Draft Quick Actions",
-    "description": "Send an approved Held Drafts message from a sidebar quick action.",
+    "description": "Send an approved Held Drafts message from the thread header or a sidebar quick action.",
     "branding": { "icon": "Play" },
     "server": "./server.ts",
     "app": "./app.ts"
