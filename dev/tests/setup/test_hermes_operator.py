@@ -201,7 +201,7 @@ elif command[:2] == ["config", "set"]:
         values[command[2]] = json.loads(command[3])
     except ValueError:
         values[command[2]] = command[3]
-elif command[:2] == ["plugins", "enable"]:
+elif command[:2] == ["plugins", "enable"] and command[2] not in values.get("plugins.enabled", []):
     values.setdefault("plugins.enabled", []).append(command[2])
 elif command[:2] == ["skills", "opt-out"]:
     (h / ".no-bundled-skills").touch()

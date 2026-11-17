@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -23,7 +24,13 @@ PSTACK_SKILLS = ("in-your-own-words", "why", "how", "interrogate", "statechart",
 PSTACK_SKILL_DIR = "plugins/pstack-mode/skills"
 LOCAL_SKILLS = ("operator-handoff",)
 PLUGINS = ("skill-drafts", "bb-thread-env")
-MANAGED_SKILLS = "ramtoshiya-skills"
+# Hermes seeds these into every home, opted out or not, until the home's .bundled_manifest tracks
+# them as deleted. Mirrors ESSENTIAL_SKILLS in Hermes's agent/skill_utils.py.
+ESSENTIAL_SKILLS = ("hermes-agent",)
+# bb's shipped Hermes entry, minus the launch and skill roots that bb_catalog_agent sets.
+BB_AGENT = {"id": "hermes-agent", "displayName": "Hermes Agent", "command": "hermes",
+            "nativeReasoning": {"configId": "reasoning_effort", "defaultLevel": "medium",
+                                "supportedLevels": ["none", "low", "medium", "high", "xhigh", "max"]}}
 SOUL_BEGIN = "<!-- BEGIN ramtoshiya:operator -->"
 SOUL_END = "<!-- END ramtoshiya:operator -->"
 CONFIG = {
@@ -108,7 +115,12 @@ def marketplace(skills_repo: Path) -> tuple[dict[str, str], dict[str, Source], d
             if isinstance(entry["source"], dict):
                 package.check()
                 pinned = {"upstream": f"https://github.com/{entry['source']['url']}", "commit": package.ref}
-            if (package.root / "plugin.yaml").is_file():
+            manifest = package.root / "plugin.yaml"
+            if manifest.is_file():
+                declared = re.search(r"^name:\s*[\"']?([^\"'\s]+)", manifest.read_text(encoding="utf-8"), re.M)
+                if declared is None or declared[1] != name:
+                    sys.exit(f"hermes-operator: {manifest} must declare `name: {name}`, its marketplace entry, "
+                             "because Hermes enables the plugin and namespaces its skills by that name")
                 packages[name] = Source(name, package.repository, package.prefix, skills_repo, **pinned)
                 continue
             for path in package.skills():
@@ -138,27 +150,65 @@ def plugin_list(descriptions: dict[str, str], skills: dict[str, Source]) -> str:
                      for plugin, names in by_plugin.items())
 
 
-def install_skills(target: Path, sources: dict[str, Source], local_values: dict[str, str]) -> None:
-    """Build every managed skill in a staging directory, then swap it in for target."""
-    staging = target.with_name(f".{target.name}.new")
-    shutil.rmtree(staging, ignore_errors=True)
-    for name, source in sources.items():
-        copy_tracked(source, staging / name)
-        if name in LOCAL_SKILLS:
-            skill = staging / name / "SKILL.md"
-            text = skill.read_text(encoding="utf-8")
-            for key, value in local_values.items():
-                text = text.replace("{{" + key + "}}", value)
-            skill.write_text(text, encoding="utf-8")
+def install_skill(target: Path, source: Source, local_values: dict[str, str]) -> None:
+    """Replace target with a fresh copy of the skill, filling the placeholders of this repository's own skills."""
     shutil.rmtree(target, ignore_errors=True)
-    staging.rename(target)
+    copy_tracked(source, target)
+    if target.name in LOCAL_SKILLS:
+        skill = target / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        for key, value in local_values.items():
+            text = text.replace("{{" + key + "}}", value)
+        skill.write_text(text, encoding="utf-8")
 
 
-def with_dirs(profile: str, dirs: list[Path]) -> str:
-    """The profile's skills.external_dirs with dirs added, as JSON for `hermes config set`."""
-    current = json.loads(run("hermes", "-p", profile, "config", "get", "skills.external_dirs", "--json") or "[]")
-    current = [current] if isinstance(current, str) else current or []
-    return json.dumps(current + [str(d) for d in dirs if str(d) not in current])
+def skill_name(skill_md: Path) -> str:
+    """The frontmatter name Hermes keys a skill by, or its directory name."""
+    text = skill_md.read_text(encoding="utf-8")
+    header = text.split("\n---", 1)[0] if text.startswith("---") else ""
+    found = re.search(r"^name:\s*[\"']?(.+?)[\"']?\s*$", header, re.M)
+    return found[1] if found else skill_md.parent.name
+
+
+def drop_bundled(profile: str, home: Path, keep: set[Path]) -> None:
+    """Delete every Hermes bundled skill in home and keep its manifest entry.
+
+    Every chat start, gateway start, and `hermes update` syncs bundled skills. With the opt-out
+    marker the sync seeds only ESSENTIAL_SKILLS, and it skips a skill the manifest tracks but the
+    disk lacks, because the user deleted it. `reset --restore` makes the essential skills tracked
+    first, so the deletion below covers them.
+    """
+    run("hermes", "-p", profile, "skills", "opt-out")
+    for name in ESSENTIAL_SKILLS:
+        run("hermes", "-p", profile, "skills", "reset", name, "--restore", "--yes")
+    skills_dir = home / "skills"
+    manifest = skills_dir / ".bundled_manifest"
+    tracked = ({line.split(":", 1)[0] for line in manifest.read_text(encoding="utf-8").split()}
+               if manifest.is_file() else set())
+    for skill_md in sorted(skills_dir.rglob("SKILL.md")):
+        top = skills_dir / skill_md.relative_to(skills_dir).parts[0]
+        if (skill_md.is_file() and not top.name.startswith(".") and top not in keep
+                and skill_name(skill_md) in tracked):
+            shutil.rmtree(skill_md.parent)
+
+
+def bb_catalog_agent(profile: str, home: Path, packages: dict[str, Source]) -> None:
+    """Point bb's Hermes provider at the profile: the process it launches and the skills its composer lists.
+
+    bb's shipped Hermes entry launches the sticky profile and lists only the default home's skills.
+    A customAgents entry with id hermes-agent replaces it. The other custom agents stay.
+    """
+    bb = os.environ.get("BB_CLI") or shutil.which("bb")
+    if bb is None:
+        print("hermes-operator: bb is not on PATH, so bb's Hermes provider was left as it was")
+        return
+    values = json.loads(run(bb, "plugin", "config", "provider-acp", "--json"))["values"]
+    agents = [agent for agent in json.loads(values.get("customAgents") or "[]") if agent.get("id") != BB_AGENT["id"]]
+    relative = home.relative_to(Path.home()).as_posix()
+    roots = [{"path": f"{relative}/skills", "recursive": True}]
+    roots += [{"path": f"{relative}/plugins/{name}/hermes/skills", "namePrefix": f"{name}:"} for name in sorted(packages)]
+    agents.append({**BB_AGENT, "args": ["-p", profile, "acp"], "nativeSkillRoots": {"user": roots}})
+    run(bb, "plugin", "config", "provider-acp", "set", "customAgents", json.dumps(agents))
 
 
 def main() -> None:
@@ -214,10 +264,10 @@ def main() -> None:
         old = Path(entry["installed"])
         if old.parent == skills_dir:
             shutil.rmtree(old, ignore_errors=True)
-    managed_dir = home / MANAGED_SKILLS
     values = {"MODE_MD": str(mode_md), "SOURCES_JSON": str(sources_json), "SKILLS_REPO": str(skills_repo),
               "SKILL_PLUGINS": plugin_list(descriptions, {**skills, **pstack_skills, **registered})}
-    install_skills(managed_dir, managed, values)
+    for name, source in managed.items():
+        install_skill(skills_dir / name, source, values)
 
     for plugin in PLUGINS:
         plugin_dir = home / "plugins" / plugin
@@ -231,7 +281,7 @@ def main() -> None:
         shutil.rmtree(plugin_dir, ignore_errors=True)
         copy_tracked(package, plugin_dir)
 
-    installed = {name: managed_dir / name for name in managed}
+    installed = {name: skills_dir / name for name in managed}
     installed |= {name: home / "plugins" / source.plugin / Path(source.path).relative_to(packages[source.plugin].path)
                   for name, source in registered.items()}
     owners = {name: {"plugin": source.plugin, "repo": str(source.repo),
@@ -250,19 +300,19 @@ def main() -> None:
     }
     sources_json.write_text(json.dumps(sources, indent=2) + "\n", encoding="utf-8")
 
-    config = {**CONFIG, "skills.external_dirs": with_dirs(profile, [managed_dir])}
-    for key, value in config.items():
+    for key, value in CONFIG.items():
         run("hermes", "-p", profile, "config", "set", key, value)
     for plugin in (*PLUGINS, *sorted(packages)):
         run("hermes", "-p", profile, "plugins", "enable", plugin, "--no-allow-tool-override")
-    # bb lists Hermes skills from the default home, not the sticky profile, so the default home
-    # shows the profile's skills and no bundled ones.
-    for name in (profile, "default"):
-        run("hermes", "-p", name, "skills", "opt-out", "--remove", "--yes")
-    run("hermes", "-p", "default", "config", "set", "skills.external_dirs", with_dirs("default", [skills_dir, managed_dir]))
+    # bb lists the default home's skills/ for Hermes even with its own skill roots, so that home
+    # loses its bundled skills too.
+    drop_bundled(profile, home, {skills_dir / name for name in managed})
+    drop_bundled("default", default_home, set())
+    bb_catalog_agent(profile, home, packages)
 
     others = sorted(p.parent.name for p in skills_dir.rglob("SKILL.md")
-                    if not any(part.startswith(".") for part in p.relative_to(skills_dir).parts))
+                    if p.relative_to(skills_dir).parts[0] not in managed
+                    and not any(part.startswith(".") for part in p.relative_to(skills_dir).parts))
     print(f"hermes-operator: profile {profile} at {home} is the default profile")
     print(f"hermes-operator: installed skills {', '.join(sorted({**managed, **registered}))}")
     print(f"hermes-operator: enabled plugins {', '.join((*PLUGINS, *sorted(packages)))}")

@@ -434,8 +434,10 @@ the seven skills above. Knowing a skill lets Hermes plan around it and name it
 in a brief. It does not let Hermes do the skill's work, because the
 operator-handoff skill sends anything beyond conversation and reading to a
 coding agent. An entry that ships a native Hermes plugin (a `plugin.yaml`,
-such as `humanize-korean`) is installed as that plugin. Hermes's own bundled
-skills are removed.
+such as `humanize-korean`) is installed as that plugin, and Hermes loads its
+skills as `<plugin>:<skill>`, such as `humanize-korean:humanize-korean`. The
+plugin's `name` must match its marketplace entry, or the task stops. Hermes's
+own bundled skills are deleted, as the next sections describe.
 
 The task creates the profile with `hermes profile create operator --no-skills`
 if it is missing and makes it the default with `hermes profile use operator`.
@@ -444,8 +446,8 @@ Then it changes these files under `~/.hermes/profiles/operator/`:
 | Target | Change |
 | --- | --- |
 | `SOUL.md` | A block from `setup/hermes/soul-operator.md` between `<!-- BEGIN ramtoshiya:operator -->` and `<!-- END ramtoshiya:operator -->`, after the Hermes default text |
-| `ramtoshiya-skills/` | Copies of the files Git tracks in each skill, and of `setup/hermes/skills/operator-handoff` with this machine's paths and the list of plugins filled in. The task rebuilds this folder on every run |
-| `skills/` | Hermes's bundled skills removed with `hermes skills opt-out --remove`, which also stops new ones from being added. Skills you installed or edited stay |
+| `skills/<skill>/` | A copy of the files Git tracks in each skill, and of `setup/hermes/skills/operator-handoff` with this machine's paths and the list of plugins filled in. The task replaces these folders on every run |
+| `skills/` | Hermes's bundled skills deleted. Other skills stay |
 | `plugins/<entry>/` | The files Git tracks in each marketplace entry that is a native Hermes plugin |
 | `plugins/skill-drafts/` | A copy of `setup/hermes/plugins/skill-drafts` and a `sources.json` that maps each skill to the checkout and, for a third-party skill, the fork and commit it came from |
 | `plugins/bb-thread-env/` | A copy of `setup/hermes/plugins/bb-thread-env` |
@@ -455,38 +457,70 @@ Then it changes these files under `~/.hermes/profiles/operator/`:
 | --- | --- | --- |
 | `agent.disabled_toolsets` | `["file", "code_execution"]` | No file reading or writing tools and no code execution. The terminal stays on for `bb` |
 | `skills.auto_load` | `["operator-handoff"]` | The handoff procedure is in every session |
-| `skills.external_dirs` | `ramtoshiya-skills/` added | Hermes loads the managed skills. It cannot change them, because they are outside its own `skills/` |
 | `skills.project_discovery` | `false` | Skills in the thread's working directory are not loaded |
 | `curator.enabled` | `false` | Hermes does not archive or merge skills on its own |
 | `memory.write_approval` | `false` | Hermes writes its built-in memory without asking. Memory limits stay at the defaults |
-
-Hermes adds its `hermes-agent` skill back after `hermes update`, or when a
-profile's `skills/` has no skill at startup. Hermes has no setting that
-excludes it.
 
 Running the task again replaces the copies it manages, removes skills that
 the marketplace no longer selects, and leaves memories, sessions,
 credentials, and other settings alone. It reports any other skill it finds in
 the profile's `skills/` and leaves it in place.
 
+### Bundled skills
+
+Hermes copies its bundled skills into a profile's `skills/` at every chat
+start, every gateway start, and every `hermes update`. After
+`hermes skills opt-out` it copies only `hermes-agent`, which it treats as
+essential. It never copies back a bundled skill that `skills/.bundled_manifest`
+lists but the disk lacks, because it treats that skill as deleted by the user.
+So the task does this in the operator profile and in the base `~/.hermes`:
+
+1. Runs `hermes skills opt-out`.
+2. Runs `hermes skills reset hermes-agent --restore --yes`, so the manifest
+   lists `hermes-agent`.
+3. Deletes every folder in `skills/` that holds a skill the manifest lists,
+   except the skills the task installs, and keeps the manifest.
+
+Hermes then adds no bundled skill back. Without `hermes-agent`, Hermes tells
+the model to use its online documentation for questions about Hermes itself.
+
+A Hermes release that adds another essential skill adds it once. Run
+`mise run hermes:operator` after `hermes update` to delete it. Do not run
+`hermes skills opt-out --remove` in these homes, because it empties the
+manifest and Hermes then adds `hermes-agent` back at the next start.
+`hermes skills reset <name> --restore --yes` restores one bundled skill, and
+`hermes skills opt-in --sync` restores all of them, in the profile they run in.
+
 ### What bb lists for Hermes
 
-bb starts `hermes acp` without `HERMES_HOME`, so the session runs in the
-default profile set by `hermes profile use`. bb's skill menu for the
-`acp-hermes-agent` provider reads a different place: `~/.hermes/skills/` and
-the `skills.external_dirs` in `~/.hermes/config.yaml`, whatever the default
-profile is. So the task also changes the base `~/.hermes`:
+bb's shipped `acp-hermes-agent` provider starts `hermes acp`, which runs in
+the profile that `hermes profile use` set. Its skill menu lists
+`~/.hermes/skills/` and the `skills.external_dirs` in `~/.hermes/config.yaml`,
+whatever profile the session runs in. So the task replaces that provider with
+an entry whose id is `hermes-agent` in the ACP providers plugin's
+`customAgents` setting:
 
-- `hermes -p default skills opt-out --remove` removes the bundled skills from
-  `~/.hermes/skills/` and stops new ones from being added. Skills you
-  installed or edited there stay.
-- `skills.external_dirs` in `~/.hermes/config.yaml` gets the operator
-  profile's `skills/` and `ramtoshiya-skills/`.
+- It starts `hermes -p operator acp`.
+- Its skill menu adds the operator's `skills/` and each native plugin's
+  `hermes/skills/` with the `<plugin>:` prefix. bb lists
+  `humanize-korean:humanize-korean`, the name Hermes loads it by.
+- It sets reasoning through Hermes's `reasoning_effort` option.
 
-bb then lists the operator's skills. It does not list skills that a Hermes
-plugin registers, such as `humanize-korean:humanize-korean`, but Hermes still
-loads them. `hermes skills opt-in --sync` restores the bundled skills in the
-profile it runs in.
+The task keeps every other custom agent and replaces only an earlier
+`hermes-agent` entry. When `bb` is not on `PATH`, it skips this step and says
+so. bb still lists `~/.hermes/skills/` for the entry, which is why the base
+`~/.hermes` loses its bundled skills too. Picking a skill in the menu sends
+`/<skill>` to Hermes as plain text, which the model reads as a request to
+load that skill.
+
+Adding the operator's skills to the base `skills.external_dirs` instead would
+make every session in the base profile load them, and `humanize-korean` would
+load a second time without its prefix.
+
+Unlike the shipped provider, the custom entry cannot fork a Hermes thread in
+bb, shows a generic icon and sign-in hint, and has no `none` level in the
+reasoning menu. To return to the shipped provider, remove the `hermes-agent`
+entry on the ACP providers plugin's settings page.
 
 ### How a change reaches a skill
 
@@ -511,7 +545,7 @@ The terminal can still edit files, so keeping Hermes to conversation relies on
 
 ### How a session knows its bb thread
 
-bb starts `hermes acp` with `BB_THREAD_ID` and the other `BB_*` variables,
+bb starts `hermes -p operator acp` with `BB_THREAD_ID` and the other `BB_*` variables,
 but that process only shows the session. Commands run in the shared Hermes
 gateway, which has no `BB_*` variables. The `bb-thread-env` plugin sets
 `BB_THREAD_ID` for each command a session runs. It reads the id from the env
