@@ -420,33 +420,73 @@ It needs:
   `plugins/pstack-mode/skills/`, at `~/workspaces/pstack-mode` by default. Pass
   another path with `mise run hermes:operator -- --pstack <path>`. Workers read
   its `mode.md`, and the profile gets seven of its skills.
+- The third-party sources at their pinned commits, which
+  `mise run agents:sync` fetches. The task stops and says so when one is
+  missing.
 - bb with the [held-drafts](../bb-plugins/held-drafts/README.md) plugin, which
   provides `bb draft create`.
 
+The profile gets every skill that Claude Code or Codex gets from
+`.claude-plugin/marketplace.json`: both of this repository's plugins,
+including the Claude Code-only `ramtoshiya-cc`, and the skills each
+third-party entry selects. pstack-mode is the exception and contributes only
+the seven skills above. Knowing a skill lets Hermes plan around it and name it
+in a brief. It does not let Hermes do the skill's work, because the
+operator-handoff skill sends anything beyond conversation and reading to a
+coding agent. An entry that ships a native Hermes plugin (a `plugin.yaml`,
+such as `humanize-korean`) is installed as that plugin. Hermes's own bundled
+skills are removed.
+
 The task creates the profile with `hermes profile create operator --no-skills`
 if it is missing and makes it the default with `hermes profile use operator`.
-bb starts Hermes without `HERMES_HOME`, so bb threads use the default profile.
 Then it changes these files under `~/.hermes/profiles/operator/`:
 
 | Target | Change |
 | --- | --- |
 | `SOUL.md` | A block from `setup/hermes/soul-operator.md` between `<!-- BEGIN ramtoshiya:operator -->` and `<!-- END ramtoshiya:operator -->`, after the Hermes default text |
-| `skills/` | Copies of the pstack skills `in-your-own-words`, `why`, `how`, `interrogate`, `statechart`, `technical-writing`, and `unslop` (files Git tracks only), and of `setup/hermes/skills/operator-handoff`, with this machine's paths filled in |
-| `plugins/skill-drafts/` | A copy of `setup/hermes/plugins/skill-drafts` and a `sources.json` that maps each skill to the checkout it came from |
+| `ramtoshiya-skills/` | Copies of the files Git tracks in each skill, and of `setup/hermes/skills/operator-handoff` with this machine's paths and the list of plugins filled in. The task rebuilds this folder on every run |
+| `skills/` | Hermes's bundled skills removed with `hermes skills opt-out --remove`, which also stops new ones from being added. Skills you installed or edited stay |
+| `plugins/<entry>/` | The files Git tracks in each marketplace entry that is a native Hermes plugin |
+| `plugins/skill-drafts/` | A copy of `setup/hermes/plugins/skill-drafts` and a `sources.json` that maps each skill to the checkout and, for a third-party skill, the fork and commit it came from |
 | `plugins/bb-thread-env/` | A copy of `setup/hermes/plugins/bb-thread-env` |
-| `config.yaml` | The settings below, and both plugins enabled |
+| `config.yaml` | The settings below, and the plugins enabled |
 
 | Setting | Value | Effect |
 | --- | --- | --- |
 | `agent.disabled_toolsets` | `["file", "code_execution"]` | No file reading or writing tools and no code execution. The terminal stays on for `bb` |
 | `skills.auto_load` | `["operator-handoff"]` | The handoff procedure is in every session |
+| `skills.external_dirs` | `ramtoshiya-skills/` added | Hermes loads the managed skills. It cannot change them, because they are outside its own `skills/` |
 | `skills.project_discovery` | `false` | Skills in the thread's working directory are not loaded |
 | `curator.enabled` | `false` | Hermes does not archive or merge skills on its own |
 | `memory.write_approval` | `false` | Hermes writes its built-in memory without asking. Memory limits stay at the defaults |
 
-Running the task again replaces the copies it manages and leaves memories,
-sessions, credentials, and other settings alone. It reports any other skill it
-finds in the profile and leaves it in place.
+Hermes adds its `hermes-agent` skill back after `hermes update`, or when a
+profile's `skills/` has no skill at startup. Hermes has no setting that
+excludes it.
+
+Running the task again replaces the copies it manages, removes skills that
+the marketplace no longer selects, and leaves memories, sessions,
+credentials, and other settings alone. It reports any other skill it finds in
+the profile's `skills/` and leaves it in place.
+
+### What bb lists for Hermes
+
+bb starts `hermes acp` without `HERMES_HOME`, so the session runs in the
+default profile set by `hermes profile use`. bb's skill menu for the
+`acp-hermes-agent` provider reads a different place: `~/.hermes/skills/` and
+the `skills.external_dirs` in `~/.hermes/config.yaml`, whatever the default
+profile is. So the task also changes the base `~/.hermes`:
+
+- `hermes -p default skills opt-out --remove` removes the bundled skills from
+  `~/.hermes/skills/` and stops new ones from being added. Skills you
+  installed or edited there stay.
+- `skills.external_dirs` in `~/.hermes/config.yaml` gets the operator
+  profile's `skills/` and `ramtoshiya-skills/`.
+
+bb then lists the operator's skills. It does not list skills that a Hermes
+plugin registers, such as `humanize-korean:humanize-korean`, but Hermes still
+loads them. `hermes skills opt-in --sync` restores the bundled skills in the
+profile it runs in.
 
 ### How a change reaches a skill
 
@@ -456,7 +496,9 @@ background self-review's, and creates a held draft instead. The draft's brief
 names the owning repository, the raw arguments, a diff against the installed
 copy, the Hermes session to read for the reason, and the authority to commit,
 push, and reinstall. A worker started by sending the draft makes the change at
-the source, then runs `mise run hermes:operator` to refresh the copies. When
+the source, then runs `mise run hermes:operator` to refresh the copies. A
+third-party skill is changed in its fork and the pin updated, as
+[Third-party skills](upstream-skills.md) describes. When
 the plugin cannot create the draft, it still blocks the call and tells Hermes
 why.
 

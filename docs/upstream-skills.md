@@ -193,6 +193,11 @@ Codex runs the `humanize` hook only after you trust it in `/hooks`.
 A loose copy of the same skill makes it load twice, as described in
 [Agent plugins](agent-pack.md).
 
+The Hermes operator profile gets the same skill selections, without the
+hooks, from the copies `mise run agents:sync` fetches. After a pin update, run
+`mise run agents:sync` and then `mise run hermes:operator`, as
+[Machine setup](setup.md) describes.
+
 ## Review updates locally
 
 [Plugin update review](../tools/plugin-update-review/README.md) can prepare local

@@ -67,11 +67,17 @@ def proposed_diff(sources: dict[str, Any], op: dict[str, Any]) -> str:
 
 
 def owner(sources: dict[str, Any], name: str) -> dict[str, str]:
-    """Repository and path that own a skill. Unknown names are new skills for the default repository."""
+    """Checkout a change starts in, and where the skill's files live. Unknown names are new skills
+    for the default repository."""
     skill = sources.get("skills", {}).get(name)
-    if skill is not None:
-        return {"repo": skill["repo"], "path": skill["path"]}
-    return {"repo": sources["defaultRepo"], "path": ""}
+    if skill is None:
+        return {"repo": sources["defaultRepo"], "location": ""}
+    if skill.get("upstream"):
+        return {"repo": skill["repo"], "location": (
+            f"`{skill['path']}` in {skill['upstream']} at `{skill['commit']}`, pinned in "
+            f"`.claude-plugin/marketplace.json` of `{skill['repo']}`. Change the fork, then update the "
+            f"pin as that repository's `docs/upstream-skills.md` describes")}
+    return {"repo": skill["repo"], "location": f"`{skill['path']}` in `{skill['repo']}`"}
 
 
 def build_brief(sources: dict[str, Any], args: dict[str, Any], origin: str, session_id: str) -> str:
@@ -80,8 +86,7 @@ def build_brief(sources: dict[str, Any], args: dict[str, Any], origin: str, sess
     owners = []
     for name in names:
         where = owner(sources, name)
-        location = (f"`{where['path']}` in `{where['repo']}`" if where["path"]
-                    else f"a new skill. Place it in `{where['repo']}` where that repository's docs say")
+        location = where["location"] or f"a new skill. Place it in `{where['repo']}` where that repository's docs say"
         owners.append(f"- `{name}`: {location}")
     diffs = [d for d in (proposed_diff(sources, op) for op in ops) if d]
     session = (f"`{session_id}`. Read it with `hermes -p {sources['profile']} sessions export "
@@ -138,7 +143,8 @@ def build_brief(sources: dict[str, Any], args: dict[str, Any], origin: str, sess
         "repository, create or use a fork as that repository's docs describe, and push there. "
         f"Then reinstall the operator profile's copies by running `mise run hermes:operator` in "
         f"`{sources['skillsRepo']}` once your commit is in the checkouts it copies from "
-        f"({', '.join(f'`{c}`' for c in sources['sourceCheckouts'])}). "
+        f"({', '.join(f'`{c}`' for c in sources['sourceCheckouts'])}). After a pin update, run "
+        f"`mise run agents:sync` there first. "
         "Report what you changed, the commits, and anything left undone.",
     ]
     return "\n".join(parts) + "\n"
