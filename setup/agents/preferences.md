@@ -63,6 +63,33 @@ commit permission does not authorize pushing, publishing, destructive history
 changes, or changing repository policy. Report real blockers rather than
 silently narrowing the task.
 
+## Personal web tools {:#personal-web-access}
+
+A web UI or development preview that you build or start for the user's own
+use must work on this machine and from the user's other devices on their
+Tailscale network. Set this up as part of delivering the tool, without waiting
+for a separate request.
+
+- Listen on loopback and on the addresses that `tailscale ip` reports. Do not
+  treat every address in 100.64.0.0/10 as Tailscale, because other software
+  uses that range too.
+- If the server cannot listen on those addresses, keep it on loopback and add
+  a tailnet-only `tailscale serve` mapping. Check `tailscale serve status`
+  first, never replace an existing mapping, and report the mapping you added.
+- Do not bind 0.0.0.0 or `[::]`, enable Funnel, open router or firewall ports,
+  change tailnet access rules, or add a login layer just to make a tool
+  reachable.
+- Keep test fixtures, databases, local IPC, OAuth callbacks, and services that
+  hold credentials on loopback. A project's or the user's explicit binding
+  instruction, and the app's own security requirements, take precedence over
+  this default.
+- If Tailscale is not running, or the prerequisite checks above do not find
+  it, serve on loopback only and tell the user that other devices cannot reach
+  the tool.
+- Report each URL the tool serves and check the addresses it actually listens
+  on. A request from this machine to its Tailscale address shows the binding,
+  not that another device can connect, so say which of the two you checked.
+
 ## Checks and guards {:#guards}
 
 Checks, hooks, and guards exist to catch mistakes. Those include an agent's

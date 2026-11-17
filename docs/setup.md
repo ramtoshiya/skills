@@ -195,6 +195,21 @@ in [arXiv:2610.34654](https://arxiv.org/abs/2610.34654), which found that a
 record written before feedback keeps agents from undoing correct work, while
 the same record written after feedback helps little.
 
+When an agent builds or starts a web UI or development preview for your own
+use, the instructions have it listen on loopback and on the addresses
+`tailscale ip` reports, so the tool also works from your other Tailscale
+devices without a separate request. If the server cannot listen there, the
+agent keeps it on loopback and adds a tailnet-only `tailscale serve` mapping
+instead. Agents do not bind every interface, enable Funnel, or change tailnet
+access rules for this. Test fixtures, OAuth callbacks, credential-holding
+services, and anything you ask to keep local stay on loopback. Without a
+running Tailscale, the tool stays on loopback and the agent says that other
+devices cannot reach it. The
+[personal web access cases](../dev/evals/personal-web-access/cases.json) check
+this in fresh Claude Code and Codex sessions. Run them with
+`node dev/evals/personal-web-access/run.mjs <new-output-directory>` and grade
+each reply against its assertions.
+
 The bb instructions give agents in bb threads standing permission to start the
 worker threads their workflow calls for, such as reviewers, judges, and arena
 candidates, as visible child threads. bb's own introduction tells agents not to
