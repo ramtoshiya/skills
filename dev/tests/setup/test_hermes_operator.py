@@ -461,6 +461,18 @@ class OperatorProfileSetupTests(unittest.TestCase):
         self.assertIn("`self-compact`", handoff)
         self.assertIn("`korean-pack:korean`", handoff)
 
+    def test_installed_handoff_archives_finished_children(self):
+        self.setup_profile()
+        self.start_hermes()
+
+        def results(text):
+            return text.split("## Results {:#results}", 1)[1].split("\n## ", 1)[0]
+
+        source = (ROOT / "setup/hermes/skills/operator-handoff/SKILL.md").read_text()
+        installed = (runtime_skills(self.operator)["operator-handoff"][0] / "SKILL.md").read_text()
+        self.assertEqual(results(installed), results(source))
+        self.assertIn("bb thread archive <threadId>", results(installed))
+
     def test_bb_lists_what_the_operator_loads(self):
         self.setup_profile()
         self.start_hermes()

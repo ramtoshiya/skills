@@ -586,6 +586,20 @@ For other work, the `operator-handoff` skill tells Hermes how to write a brief
 and create the draft. Drafts are held while the held-drafts plugin's `mode`
 setting is `draft`. Setting it to `direct` sends new drafts immediately.
 
+When a child thread reports back, the skill has Hermes read the full output
+and then archive the child in the same turn, so finished workers leave the
+sidebar without a separate cleanup request. Hermes first checks the child and
+all its descendants again. It keeps a child whose output is a question, error,
+or partial result. It also keeps one that is not idle, has queued messages,
+has a managed workspace with uncommitted changes, or whose workspace is still
+needed for review or integration. Archiving keeps the history and archives
+every descendant. bb removes a managed worktree after a grace window but keeps
+its branch. This is an instruction Hermes follows, not a background job. A
+child whose result arrives while no operator session handles it stays until a
+session reads it. Workers that a coding agent starts for its own workflow are
+archived by that agent, as `setup/agents/bb-agents.md` and the
+`worker-routing` skill instruct.
+
 The terminal can still edit files, so keeping Hermes to conversation relies on
 `SOUL.md` and the skill.
 

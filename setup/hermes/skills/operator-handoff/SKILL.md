@@ -114,6 +114,46 @@ brief and states:
 A child's completion notification is truncated. Before you report or act on a
 result, read it in full with `bb thread output <threadId>`.
 
+Handling a result includes archiving the child once it is finished, so
+finished workers do not pile up in the sidebar. Do this in the same turn,
+without waiting for the user to ask for cleanup. Archiving keeps the
+conversation history. It also archives every descendant of the child and
+retires its environment, and bb removes a managed worktree from disk after a
+grace window. The branch and its commits stay, but uncommitted changes are
+lost.
+
+1. Read the whole output, as above.
+2. Query the child now, not from a notification or an earlier reply:
+   `bb thread show <threadId> --json` and
+   `bb thread queue list <threadId> --json`. List its descendants with
+   `bb thread list --parent-thread <threadId> --include-hidden --json`,
+   repeat for each descendant's children, and query each unarchived
+   descendant the same way.
+3. Keep the child unless every check passes:
+   - The output reports the task finished. A question, an approval request, a
+     blocker, an error, or a partial result is not finished.
+   - The child and every unarchived descendant have `thread.status` `idle`
+     and an empty queue. An idle thread with an empty queue is not enough by
+     itself. The output must also report the task finished.
+   - For the child and each descendant whose `environment.managed` is true,
+     `bb git status <environmentId> --json` reports
+     `hasUncommittedChanges: false`.
+   - Nothing that is still to happen needs the workspace, such as the user's
+     review of its diff, a follow-up message to the child, or an integration
+     step that runs in that checkout. When the output says its commits are not
+     pushed or merged yet and the brief required that, keep the child.
+4. Tell the user what the result says and anything they will need from it
+   later, such as commits, links, and unfinished items.
+5. Run `bb thread archive <threadId>`. Then run
+   `bb thread show <threadId> --json` and check that `thread.archivedAt` is
+   set.
+6. In the same reply, name each child you archived. Name each child you kept,
+   with the check it failed.
+
+Archive only children of this thread whose result you handled in this
+conversation. Leave other threads alone, even finished ones. To archive a
+kept child later, run these steps again. Never delete a thread.
+
 ## Never {:#never}
 
 - Never call `skill_manage`. A plugin turns every call into a draft built from
