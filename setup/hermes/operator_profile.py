@@ -29,7 +29,7 @@ RESEARCH_PROJECT = "proj_personal"
 # them as deleted. Mirrors ESSENTIAL_SKILLS in Hermes's agent/skill_utils.py.
 ESSENTIAL_SKILLS = ("hermes-agent",)
 # bb's shipped Hermes entry, minus the launch and skill roots that bb_catalog_agent sets. Manual
-# compaction is on because Hermes runs /compact, and bb refuses `bb thread compact` without the flag.
+# compaction is on because bb refuses `bb thread compact` for an entry without the flag.
 BB_AGENT = {"id": "hermes-agent", "displayName": "Hermes Agent", "command": "hermes",
             "supportsManualCompaction": True,
             "nativeReasoning": {"configId": "reasoning_effort", "defaultLevel": "medium",
@@ -42,7 +42,6 @@ CONFIG = {
     "skills.project_discovery": "false",
     "curator.enabled": "false",
     "memory.write_approval": "false",
-    # The self-compact plugin reminds from 75% of this window. At the window Hermes compresses on its own.
     "compression.threshold_tokens": "300000",
 }
 

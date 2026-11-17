@@ -1,19 +1,6 @@
-"""Run the shared self-compact workflow for Hermes sessions that bb shows.
-
-bb runs the operator as `hermes -p operator acp`. The sessions of all its threads, with their hooks
+"""bb runs the operator as `hermes -p operator acp`. The sessions of all its threads, with their hooks
 and tools, run in one shared gateway process, so every value here is keyed by the calling session or
-its bb thread and never read from the process environment. The plugin:
-
-- records each session's last request size from `post_api_request` and, from 75% of the profile's
-  `compression.threshold_tokens`, queues one reminder per 5-point band until a real compaction;
-- delivers queued text when a turn starts or at the head of a trusted tool's result. Hermes marks
-  web, browser, and MCP results as untrusted, so they never carry an instruction;
-- gives the agent the `self_compact` tool, the operator's only way to write its handoff note, whose
-  compact action starts the skill's bb helper;
-- appends every committed compaction of a thread whose helper is running to that helper's ledger.
-  bb reports any ACP end_turn as a compaction, so the helper needs the ledger as positive proof.
-
-State lives in the profile's plugin-data directory, which reinstalling the plugin leaves alone.
+its bb thread and never read from the process environment.
 """
 
 from __future__ import annotations
@@ -30,21 +17,19 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator, Literal, Optional
 
 logger = logging.getLogger(__name__)
 
+LaunchState = Literal["running", "finished", "lost"]
 SUGGEST_PERCENT = 75
 BAND_PERCENT = 5
-# Hermes marks web_*, browser_* and mcp_* results as untrusted. Only these tools carry a notice, so a
-# tool added to Hermes later carries none until someone checks how Hermes presents its result.
+# Hermes marks web_*, browser_* and mcp_* results as untrusted.
 TRUSTED_CARRIERS = frozenset({"terminal", "process", "self_compact", "skill_view", "skills_list", "memory", "todo"})
-# Compactions that leave little context. Pruning tool results or a micro summary keeps most of it.
 RESETTING_KINDS = frozenset({"summarize", "provider_native"})
 NOTE_LIMIT_BYTES = 64 * 1024
 SESSIONS_KEPT = 200
 PREPARE_TIMEOUT_SECONDS = 60
-# A claim without a pid file belongs to a launch that is still preparing, for at most this long.
 START_GRACE_SECONDS = PREPARE_TIMEOUT_SECONDS + 30
 HELPER = Path("skills/self-compact/scripts/bb-compact.mjs")
 THREAD_ID = re.compile(r"thr_[A-Za-z0-9_-]+")
@@ -53,8 +38,6 @@ PREFIX = "[self-compact] "
 AFTER_COMPACTION = ("A self-compact handoff note exists for this thread. Read it with the self_compact tool's "
                     "read action before you continue. It records the task state written before this compaction.")
 
-# Runs the helper in its own session, so it outlives a gateway restart, and records the exit code
-# after the helper's outcome so that a missing exit file means the helper has not finished.
 WRAPPER = r'''node=$1 helper=$2 note=$3 seq=$4 turn=$5 dir=$6
 shift 6
 "$node" "$helper" run "$note" --launch-seq "$seq" --turn-id "$turn" --compaction-ledger "$dir/ledger.jsonl" "$@" \
@@ -98,10 +81,7 @@ def budget_notice(tokens: int, window: int) -> str:
             "Otherwise Hermes compresses on its own at the window, even in the middle of a step.")
 
 
-# --- Hermes lookups. Imported lazily so tests can stand in for them. ---
-
 def _thread_from_env(session_id: str) -> Optional[str]:
-    """The bb thread that shows the session, from the bb-thread-env plugin's session resolver."""
     try:
         from hermes_cli.plugins_session_env import resolve_session_env
         value = resolve_session_env(session_id).get("BB_THREAD_ID")
@@ -121,8 +101,6 @@ def _hermes_home() -> Path:
     from hermes_constants import get_hermes_home
     return Path(get_hermes_home())
 
-
-# --- Files ---
 
 def _root() -> Path:
     return Path(_state.data_dir)
@@ -144,8 +122,7 @@ def _read_json(path: Path) -> Any:
 
 
 @contextlib.contextmanager
-def _session(root: Path, session_id: str) -> Iterator[dict]:
-    """Lock one session's record and yield it. Changes are saved when the block exits normally."""
+def _record_transaction(root: Path, session_id: str) -> Iterator[dict]:
     directory = root / "sessions"
     directory.mkdir(parents=True, exist_ok=True)
     key = session_id if SAFE_KEY.fullmatch(session_id) else hashlib.sha256(session_id.encode()).hexdigest()
@@ -170,12 +147,11 @@ def _prune(directory: Path) -> None:
         path.with_suffix(".lock").unlink(missing_ok=True)
 
 
-def _rename_session(root: Path, old: str, new: str) -> None:
-    """Carry a session's record to the id Hermes gave it when a compaction rotated it."""
-    with _session(root, old) as source:
+def _rename_record_transaction(root: Path, old: str, new: str) -> None:
+    with _record_transaction(root, old) as source:
         if not source:
             return
-        with _session(root, new) as target:
+        with _record_transaction(root, new) as target:
             for name, value in source.items():
                 if name == "pending":
                     target["pending"] = {**value, **target.get("pending", {})}
@@ -185,15 +161,12 @@ def _rename_session(root: Path, old: str, new: str) -> None:
 
 
 def _thread_for(root: Path, session_id: str) -> Optional[str]:
-    """The session's bb thread, remembered in its record for sessions a compaction renamed."""
     thread = _thread_from_env(session_id) if session_id else None
-    with _session(root, session_id) as record:
+    with _record_transaction(root, session_id) as record:
         if thread:
             record["thread"] = thread
         return record.get("thread")
 
-
-# --- Helper launches: launches/<thread>/ holds the latest one ---
 
 def _launch_dir(root: Path, thread: str) -> Path:
     return root / "launches" / thread
@@ -209,8 +182,7 @@ def _alive(pid: int) -> bool:
     return True
 
 
-def launch_state(directory: Path) -> Optional[str]:
-    """None, running, finished, or lost: no exit file and the wrapper is gone, so the outcome is unknown."""
+def launch_state(directory: Path) -> Optional[LaunchState]:
     try:
         claimed_at = (directory / "claim.json").stat().st_mtime
     except FileNotFoundError:
@@ -252,8 +224,7 @@ def launch_result(directory: Path) -> Optional[dict]:
     return result
 
 
-def _unreported_failure(root: Path, thread: str) -> Optional[str]:
-    """A failed or lost launch the helper did not report to the thread itself, returned once."""
+def _take_unreported_failure(root: Path, thread: str) -> Optional[str]:
     directory = _launch_dir(root, thread)
     result = launch_result(directory)
     if result is None or result["state"] not in ("failed", "lost"):
@@ -273,99 +244,81 @@ def _unreported_failure(root: Path, thread: str) -> Optional[str]:
 
 
 def drain(root: Path, session_id: str) -> Optional[str]:
-    with _session(root, session_id) as record:
+    with _record_transaction(root, session_id) as record:
         pending = record.get("pending") or {}
         texts = [pending.pop(kind) for kind in ("budget", "after") if kind in pending]
         thread = record.get("thread")
-    if thread and (failure := _unreported_failure(root, thread)):
+    if thread and (failure := _take_unreported_failure(root, thread)):
         texts.append(failure)
     return "\n\n".join(texts) or None
 
 
-# --- Hooks. Each one logs and swallows its errors, because a hook must never break the turn. ---
-
 def on_post_api_request(session_id: str = "", usage: Optional[dict] = None, **_: Any) -> None:
-    try:
-        tokens = (usage or {}).get("total_tokens")
-        if not session_id or not isinstance(tokens, int) or isinstance(tokens, bool) or tokens <= 0:
-            return
-        window = _window()
-        if window is None:
-            return
-        current = band(tokens, window)
-        with _session(_root(), session_id) as record:
-            record["tokens"] = tokens
-            previous = record.get("band")
-            if current is not None and (previous is None or current > previous):
-                record["band"] = current
-                record.setdefault("pending", {})["budget"] = budget_notice(tokens, window)
-    except Exception:
-        logger.warning("self-compact: post_api_request failed", exc_info=True)
+    tokens = (usage or {}).get("total_tokens")
+    if not session_id or not isinstance(tokens, int) or isinstance(tokens, bool) or tokens <= 0:
+        return
+    window = _window()
+    if window is None:
+        return
+    current = band(tokens, window)
+    with _record_transaction(_root(), session_id) as record:
+        record["tokens"] = tokens
+        previous = record.get("band")
+        if current is not None and (previous is None or current > previous):
+            record["band"] = current
+            record.setdefault("pending", {})["budget"] = budget_notice(tokens, window)
 
 
 def on_pre_llm_call(session_id: str = "", **_: Any) -> Optional[dict]:
-    try:
-        if not session_id:
-            return None
-        root = _root()
-        _thread_for(root, session_id)
-        text = drain(root, session_id)
-        return {"context": PREFIX + text} if text else None
-    except Exception:
-        logger.warning("self-compact: pre_llm_call failed", exc_info=True)
+    if not session_id:
         return None
+    root = _root()
+    _thread_for(root, session_id)
+    text = drain(root, session_id)
+    return {"context": PREFIX + text} if text else None
 
 
 def on_transform_tool_result(tool_name: str = "", result: Any = None, session_id: str = "", **_: Any) -> Optional[str]:
-    try:
-        if tool_name not in TRUSTED_CARRIERS or not isinstance(result, str) or not session_id:
-            return None
-        text = drain(_root(), session_id)
-        # At the head, because Hermes moves an oversized result to a file and keeps only its start inline.
-        return f"{PREFIX}{text}\n\n{result}" if text else None
-    except Exception:
-        logger.warning("self-compact: transform_tool_result failed", exc_info=True)
+    if tool_name not in TRUSTED_CARRIERS or not isinstance(result, str) or not session_id:
         return None
+    text = drain(_root(), session_id)
+    # At the head, because Hermes moves an oversized result to a file and keeps only its start inline.
+    return f"{PREFIX}{text}\n\n{result}" if text else None
 
 
 def on_post_compaction(session_id: str = "", old_session_id: str = "", kind: str = "", reason: str = "",
                        before_tokens: Optional[int] = None, after_tokens: Optional[int] = None, **_: Any) -> None:
-    try:
-        if not session_id:
-            return
-        root = _root()
-        if old_session_id and old_session_id != session_id:
-            _rename_session(root, old_session_id, session_id)
-        with _session(root, session_id) as record:
-            thread = record.get("thread") or _thread_from_env(session_id) or (
-                old_session_id and _thread_from_env(old_session_id)) or None
-            if thread:
-                record["thread"] = thread
-            if kind in RESETTING_KINDS:
-                record.pop("band", None)
-                record.pop("tokens", None)
-                (record.get("pending") or {}).pop("budget", None)
-        if not thread:
-            return
-        directory = _launch_dir(root, thread)
-        running = launch_state(directory) == "running"
-        if running:
-            entry = {"sessionId": session_id, "oldSessionId": old_session_id, "kind": kind or "unknown", "reason": reason or "unknown",
-                     "beforeTokens": before_tokens, "afterTokens": after_tokens, "at": time.time()}
-            descriptor = os.open(directory / "ledger.jsonl", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-            try:
-                os.write(descriptor, (json.dumps(entry) + "\n").encode())
-            finally:
-                os.close(descriptor)
-        resuming = running and (_read_json(directory / "claim.json") or {}).get("resume") is True
-        if kind in RESETTING_KINDS and not resuming and (root / "notes" / f"{thread}.md").is_file():
-            with _session(root, session_id) as record:
-                record.setdefault("pending", {})["after"] = AFTER_COMPACTION
-    except Exception:
-        logger.warning("self-compact: post_compaction failed", exc_info=True)
+    if not session_id:
+        return
+    root = _root()
+    if old_session_id and old_session_id != session_id:
+        _rename_record_transaction(root, old_session_id, session_id)
+    with _record_transaction(root, session_id) as record:
+        thread = record.get("thread") or _thread_from_env(session_id) or (
+            old_session_id and _thread_from_env(old_session_id)) or None
+        if thread:
+            record["thread"] = thread
+        if kind in RESETTING_KINDS:
+            record.pop("band", None)
+            record.pop("tokens", None)
+            (record.get("pending") or {}).pop("budget", None)
+    if not thread:
+        return
+    directory = _launch_dir(root, thread)
+    running = launch_state(directory) == "running"
+    if running:
+        entry = {"sessionId": session_id, "oldSessionId": old_session_id, "kind": kind or "unknown", "reason": reason or "unknown",
+                 "beforeTokens": before_tokens, "afterTokens": after_tokens, "at": time.time()}
+        descriptor = os.open(directory / "ledger.jsonl", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            os.write(descriptor, (json.dumps(entry) + "\n").encode())
+        finally:
+            os.close(descriptor)
+    resuming = running and (_read_json(directory / "claim.json") or {}).get("resume") is True
+    if kind in RESETTING_KINDS and not resuming and (root / "notes" / f"{thread}.md").is_file():
+        with _record_transaction(root, session_id) as record:
+            record.setdefault("pending", {})["after"] = AFTER_COMPACTION
 
-
-# --- The tool ---
 
 class _NotScheduled(Exception):
     pass
@@ -409,7 +362,6 @@ def _compact(args: dict, session_id: str, thread: str, note: Path, directory: Pa
         return _error("Compaction is already scheduled for this thread. End your turn and let it finish.")
     with os.fdopen(claim, "w") as stream:
         json.dump({"sessionId": session_id, "resume": resume, "claimedAt": time.time()}, stream)
-    # The gateway's own environment names no thread. Pass only this session's.
     env = {name: value for name, value in os.environ.items() if not name.startswith("BB_")}
     env["BB_THREAD_ID"] = thread
     try:
@@ -431,7 +383,7 @@ def _compact(args: dict, session_id: str, thread: str, note: Path, directory: Pa
         return _error(f"Compaction was not scheduled: {error}", note)
     _write(directory / "pid", str(process.pid))
     threading.Thread(target=process.wait, name="self-compact-reaper", daemon=True).start()
-    with _session(_root(), session_id) as record:
+    with _record_transaction(_root(), session_id) as record:
         (record.get("pending") or {}).pop("budget", None)
     return {"status": "scheduled", "note": str(note), "resume": resume,
             "next": ("End your turn now with one line saying compaction is scheduled and work will resume. "
@@ -459,7 +411,7 @@ def _handle(args: dict, session_id: str) -> dict:
             return _error("Compaction is in progress. Clear the note after it finishes.")
         note.unlink(missing_ok=True)
         shutil.rmtree(directory, ignore_errors=True)
-        with _session(root, session_id) as record:
+        with _record_transaction(root, session_id) as record:
             (record.get("pending") or {}).pop("after", None)
         return {"status": "cleared"}
     return _error('action must be "compact", "read", or "clear".')

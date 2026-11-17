@@ -15,8 +15,6 @@ ROOT = Path(__file__).resolve().parents[3]
 PLUGIN = ROOT / "setup/hermes/plugins/self-compact/__init__.py"
 CLAUDE_HOOK = ROOT / "plugins/ramtoshiya-cc/hooks/context-budget.py"
 WINDOW = 300_000
-# Stands in for bb-compact.mjs. prepare answers like the real helper. run records its arguments
-# and environment, waits while $dir/hold exists, then prints the outcome in $dir/outcome.json.
 FAKE_HELPER = r"""
 import fs from 'node:fs';
 import path from 'node:path';
@@ -52,9 +50,7 @@ def load(name, path):
     return module
 
 
-class Context:
-    """The parts of Hermes's plugin context the plugin uses."""
-
+class FakePluginContext:
     def __init__(self, data_dir):
         self.state = types.SimpleNamespace(data_dir=data_dir)
         self.tools, self.hooks = {}, {}
@@ -84,14 +80,13 @@ class SelfCompactPluginTests(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
         self.plugin = load("self_compact_plugin", PLUGIN)
-        self.ctx = Context(self.home / "plugin-data/self-compact")
+        self.ctx = FakePluginContext(self.home / "plugin-data/self-compact")
         self.plugin.register(self.ctx)
         self.data = self.home / "plugin-data/self-compact"
         helper = self.home / "skills/self-compact/scripts/bb-compact.mjs"
         helper.parent.mkdir(parents=True)
         helper.write_text(FAKE_HELPER)
 
-    # Helpers that act like Hermes.
     def request(self, session, tokens):
         self.ctx.hooks["post_api_request"](session_id=session, usage={"total_tokens": tokens})
 
@@ -152,7 +147,7 @@ class SelfCompactPluginTests(unittest.TestCase):
         self.request("sess_a", 230_000)
         self.assertIn("about 76%", self.turn_start("sess_a"))
         self.request("sess_a", 236_000)
-        self.request("sess_a", 200_000)  # A side request with less context does not re-arm the band.
+        self.request("sess_a", 200_000)
         self.request("sess_a", 231_000)
         self.assertIsNone(self.turn_start("sess_a"))
         self.compaction("sess_a", kind="prune_tool_results", reason="pre_api")
@@ -216,7 +211,7 @@ class SelfCompactPluginTests(unittest.TestCase):
         self.assertIn("already scheduled", second["error"])
         self.assertIn("in progress", self.tool("sess_a", action="clear")["error"])
         self.assertEqual((self.data / "notes/thr_a.md").read_text(), "first")
-        self.compaction("sess_b")  # Another thread's compaction stays out of this ledger.
+        self.compaction("sess_b")
         self.compaction("sess_a2", old="sess_a")
         self.assertIsNone(self.turn_start("sess_a2"), "the helper's resume points to the note")
         (self.launch() / "hold").unlink()
