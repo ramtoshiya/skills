@@ -181,6 +181,10 @@ pushing, publishing, or destructive history changes. The instructions also requi
 completing necessary authorized follow-up steps and removing task-owned experiments,
 including temporary files and test sessions, before reporting completion.
 
+They state that checks, hooks, and guards exist to catch mistakes, including an
+agent's habitual shortcuts such as suppressing a lint rule. Deliberate bypass,
+such as `git commit --no-verify`, is out of scope for them.
+
 `claude-settings.json` sets these Claude Code preferences:
 
 - `includeGitInstructions` is false, which disables Claude Code's built-in

@@ -63,6 +63,13 @@ commit permission does not authorize pushing, publishing, destructive history
 changes, or changing repository policy. Report real blockers rather than
 silently narrowing the task.
 
+## Checks and guards {:#guards}
+
+Checks, hooks, and guards exist to catch mistakes. Those include an agent's
+habitual shortcuts, such as suppressing a lint rule to get a check green.
+Deliberate bypass, such as `git commit --no-verify` or editing a hook, is out
+of scope. Do not design rules or defenses against it.
+
 ## Experiment cleanup {:#cleanup}
 
 Remove what you create for an experiment, a reproduction, or an end-to-end
