@@ -192,6 +192,20 @@ def drop_bundled(profile: str, home: Path, keep: set[Path]) -> None:
             shutil.rmtree(skill_md.parent)
 
 
+def reload_gateway(profile: str) -> None:
+    """Load the plugin files just copied into the gateway that serves the profile, without a restart."""
+    lines = run("hermes", "-p", profile, "skill-drafts", "reload").strip().splitlines()
+    answer = json.loads(lines[-1]) if lines else None
+    if answer is None:
+        print(f"hermes-operator: no running gateway serves profile {profile}. The next one to start loads its plugins")
+    elif not answer.get("reloaded"):
+        sys.exit(f"hermes-operator: the running gateway did not reload profile {profile}'s plugins: "
+                 f"{answer.get('error') or 'no reason given'}. Its sessions keep the previous plugin code "
+                 f"until that gateway restarts")
+    else:
+        print(f"hermes-operator: the running gateway reloaded profile {profile}'s plugins")
+
+
 def bb_catalog_agent(profile: str, home: Path, packages: dict[str, Source]) -> None:
     """Point bb's Hermes provider at the profile: the process it launches and the skills its composer lists.
 
@@ -304,6 +318,7 @@ def main() -> None:
         run("hermes", "-p", profile, "config", "set", key, value)
     for plugin in (*PLUGINS, *sorted(packages)):
         run("hermes", "-p", profile, "plugins", "enable", plugin, "--no-allow-tool-override")
+    reload_gateway(profile)
     # bb lists the default home's skills/ for Hermes even with its own skill roots, so that home
     # loses its bundled skills too.
     drop_bundled(profile, home, {skills_dir / name for name in managed})

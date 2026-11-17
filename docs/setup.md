@@ -466,6 +466,16 @@ the marketplace no longer selects, and leaves memories, sessions,
 credentials, and other settings alone. It reports any other skill it finds in
 the profile's `skills/` and leaves it in place.
 
+A running Hermes gateway keeps the plugin code it imported, and enabling an
+already enabled plugin does not reload it. So after copying and enabling the
+plugins, the task runs `hermes -p operator skill-drafts reload`, a command the
+`skill-drafts` plugin adds. It asks the gateway that serves the profile to
+import the profile's current plugin files. Other profiles and open sessions
+keep running. When no gateway runs, the next one to start loads the new files.
+When the gateway refuses, the task fails and prints the gateway's reason, and
+the profile's sessions keep the previous plugin code until that gateway
+restarts. Run the same command after copying plugin files by hand.
+
 ### Bundled skills
 
 Hermes copies its bundled skills into a profile's `skills/` at every chat

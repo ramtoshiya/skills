@@ -206,5 +206,20 @@ def on_pre_tool_call(tool_name: str = "", args: dict[str, Any] | None = None, **
         f"where the worker will read it.")}
 
 
+def reload_arguments(parser) -> None:
+    parser.add_argument("action", choices=["reload"])
+
+
+def reload_plugins(_args) -> int:
+    """`hermes -p <profile> skill-drafts reload`: the gateway serving the profile imports its plugins'
+    current files. Enabling an already enabled plugin does not, so a reinstall needs this.
+    Prints the gateway's answer as JSON, or null when no gateway answered."""
+    from hermes_cli.plugins_activation import reload_running_gateway
+    print(json.dumps(reload_running_gateway()))
+    return 0
+
+
 def register(ctx) -> None:
     ctx.register_hook("pre_tool_call", on_pre_tool_call)
+    ctx.register_cli_command("skill-drafts", "Load this profile's current plugin files into the running gateway",
+                             reload_arguments, reload_plugins)

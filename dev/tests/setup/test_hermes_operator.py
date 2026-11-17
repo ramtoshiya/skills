@@ -249,6 +249,11 @@ elif command[:2] == ["plugins", "enable"]:
         values.setdefault("plugins.enabled", []).append(command[2])
         path.write_text(json.dumps(values))
         reload_gateway(h)
+elif command[:2] == ["plugins", "disable"]:
+    if command[2] in values.get("plugins.enabled", []):
+        values["plugins.enabled"].remove(command[2])
+        path.write_text(json.dumps(values))
+        reload_gateway(h)
 elif command[:2] == ["skills", "opt-out"]:
     (h / ".no-bundled-skills").touch()
     if "--remove" in command:
