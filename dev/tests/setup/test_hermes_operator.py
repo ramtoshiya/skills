@@ -275,6 +275,10 @@ elif command[:2] == ["skills", "reset"]:
     sync(h)
 elif command == ["sync"]:
     sync(h)
+elif command[:2] == ["sessions", "refresh-prompts"]:
+    if os.environ.get("FAIL_REFRESH"):
+        sys.exit("prompt refresh refused")
+    print("Requested a system prompt refresh for every session in this profile.")
 elif command[0] not in {"config", "plugins", "skills"}:
     run_plugin_command(h, command)
 path.parent.mkdir(parents=True, exist_ok=True)
@@ -516,6 +520,22 @@ class OperatorProfileSetupTests(unittest.TestCase):
         expected = self.expected() - {"grilling", "korean-pack:korean"}
         self.assertEqual(set(runtime_skills(self.operator)), expected)
         self.assertEqual(bb_catalog(self.home), expected)
+
+    def test_install_requests_prompt_refresh_for_continuing_sessions(self):
+        output = self.setup_profile()
+
+        calls = [json.loads(line) for line in (self.home / "hermes-calls.jsonl").read_text().splitlines()]
+        self.assertEqual(calls[-1], ["-p", "operator", "sessions", "refresh-prompts"])
+        self.assertIn("Requested a system prompt refresh", output)
+
+    def test_prompt_refresh_failure_fails_install(self):
+        self.env["FAIL_REFRESH"] = "1"
+
+        result = subprocess.run([sys.executable, str(self.repo / "setup/hermes/operator_profile.py"),
+                                 "--pstack", str(self.pstack)], env=self.env, capture_output=True, text=True)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("prompt refresh refused", result.stderr)
 
     def test_running_gateway_gets_changed_plugin_code(self):
         self.setup_profile()
