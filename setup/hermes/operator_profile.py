@@ -23,13 +23,15 @@ PSTACK_SKILLS = ("in-your-own-words", "why", "how", "interrogate", "statechart",
                  "technical-writing", "unslop")
 PSTACK_SKILL_DIR = "plugins/pstack-mode/skills"
 LOCAL_SKILLS = ("operator-handoff",)
-PLUGINS = ("skill-drafts", "bb-thread-env")
+PLUGINS = ("skill-drafts", "bb-thread-env", "self-compact")
 RESEARCH_PROJECT = "proj_personal"
 # Hermes seeds these into every home, opted out or not, until the home's .bundled_manifest tracks
 # them as deleted. Mirrors ESSENTIAL_SKILLS in Hermes's agent/skill_utils.py.
 ESSENTIAL_SKILLS = ("hermes-agent",)
-# bb's shipped Hermes entry, minus the launch and skill roots that bb_catalog_agent sets.
+# bb's shipped Hermes entry, minus the launch and skill roots that bb_catalog_agent sets. Manual
+# compaction is on because Hermes runs /compact, and bb refuses `bb thread compact` without the flag.
 BB_AGENT = {"id": "hermes-agent", "displayName": "Hermes Agent", "command": "hermes",
+            "supportsManualCompaction": True,
             "nativeReasoning": {"configId": "reasoning_effort", "defaultLevel": "medium",
                                 "supportedLevels": ["none", "low", "medium", "high", "xhigh", "max"]}}
 SOUL_BEGIN = "<!-- BEGIN ramtoshiya:operator -->"
@@ -40,6 +42,8 @@ CONFIG = {
     "skills.project_discovery": "false",
     "curator.enabled": "false",
     "memory.write_approval": "false",
+    # The self-compact plugin reminds from 75% of this window. At the window Hermes compresses on its own.
+    "compression.threshold_tokens": "300000",
 }
 
 

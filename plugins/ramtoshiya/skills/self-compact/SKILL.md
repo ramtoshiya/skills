@@ -1,15 +1,15 @@
 ---
 name: self-compact
 description: >-
-  Compact this Claude Code conversation at a boundary you choose and resume without the user. Use
-  when a "Context budget" note from the ramtoshiya-cc hook says to compact, or when the user asks
-  you to compact yourself and keep working.
+  Compact this conversation at a boundary you choose and resume without the user. Use when a
+  "Context budget" notice says to compact, or when the user asks you to compact yourself and keep
+  working. Covers Claude Code in T3 Code, BB, and Paseo, and Hermes in BB.
 ---
 
 # Self-compact
 
-Claude Code compacts on its own when the context nears its auto-compact window, often in the middle
-of a step. This skill compacts earlier, at a point you choose, and carries the task across the
+Claude Code and Hermes compact on their own when the context nears their window, often in the
+middle of a step. This skill compacts earlier, at a point you choose, and carries the task across the
 compaction in a handoff note.
 
 ## Pick the boundary {:#boundary}
@@ -21,8 +21,10 @@ compaction in a handoff note.
 
 ## Write the handoff note {:#handoff}
 
-Write the note to the path the budget warning names. Without a warning, create a file with
-`mktemp -t handoff`. Never put it inside a repository. Overwrite an older note rather than append.
+When the `self_compact` tool is in your tool list, save the note only through that tool, which
+chooses the path. Otherwise write the note to the path the budget warning names. Without a
+warning, create a file with `mktemp -t handoff`. Never put it inside a repository. Overwrite an
+older note rather than append.
 
 The note is the only reliable state after compaction, so write it for a reader who saw nothing:
 
@@ -35,7 +37,8 @@ The note is the only reliable state after compaction, so write it for a reader w
 
 ## Compact and resume {:#compact}
 
-When `BB_THREAD_ID` is set, use the BB section below. Otherwise, when `PASEO_AGENT_ID` is set,
+When the `self_compact` tool is in your tool list, use the Hermes section below. Otherwise, when
+`BB_THREAD_ID` is set, use the BB section. Otherwise, when `PASEO_AGENT_ID` is set,
 use the Paseo section. Otherwise, in T3 Code
 (`printenv T3CODE_THREAD_ID` prints a thread id), queue two
 messages to your own thread with `t3_thread_send`, mode `queue`, in this order:
@@ -54,7 +57,7 @@ the question, so the resume does not run ahead of the user.
 
 When `BB_THREAD_ID` is set, use the bundled helper. It requires `node` and the installed `bb`
 CLI, and supports BB's `claude-code` provider. It does not install dependencies or change BB
-settings. Other providers use the fallback below.
+settings. Hermes uses its own section, and other providers use the fallback below.
 
 Give this helper exclusive control of the thread until it finishes. Do not launch another helper
 or send more prompts to this thread during that time. Other threads can keep working.
@@ -95,6 +98,25 @@ send automatically, because its delivery can be uncertain. A queued resume recei
 late race, including its queue id, rather than confirmed delivery. Inspect that row before
 retrying. With `--no-resume`, a completion notification does not authorize continuing past the
 user's pending question.
+
+### Hermes in BB {:#bb-hermes}
+
+Call `self_compact` with action `compact` and the complete handoff note as `note`. Add
+`resume: false` when the next step needs the user's answer. The tool saves the note and starts the
+helper from the BB section above for this thread. Do not run the helper or write the note through
+the terminal.
+
+- `"status": "scheduled"`: end the turn at once with one line saying compaction is scheduled and
+  work will resume. With `resume: false`, end with the question instead. Call no other tool in
+  that turn and send nothing to this thread.
+- `"status": "error"`: the note is saved unless the error says otherwise. Keep working, and call
+  `compact` again only at a later natural boundary. Hermes compresses on its own at its window.
+
+BB reports a `/compact` that Hermes refused or found nothing to compact as finished too. So the
+helper also requires the one manual compaction that Hermes committed for this thread after the
+request. If compaction fails, a message starting with "Self-compaction did not complete" arrives
+in this thread or with your next turn or tool result. It arrives once and the note stays. Do not
+retry at once. Action `read` returns the note and the last helper's result.
 
 ### Paseo Desktop on macOS {:#paseo}
 
@@ -139,4 +161,5 @@ if scheduling compaction fails.
 ## After compaction {:#after}
 
 Read the handoff note before anything else and continue from its next step without asking whether
-to continue. When the task in the note is finished, delete the note.
+to continue. When the task in the note is finished, delete the note. With the `self_compact` tool,
+read the note with action `read` and delete it with action `clear`.

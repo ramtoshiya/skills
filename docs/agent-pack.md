@@ -22,6 +22,7 @@ does not run the hooks.
 | `mermaid-check` | Runs the Mermaid parser over diagrams before the agent delivers them | Node.js. The first run downloads `@mermaid-js/mermaid-cli` 12.0.0 through `npx` |
 | `read-x` | Reads public X posts, threads, profiles, and searches through the mdfromx HTTP API | HTTP access to [mdfromx](https://mdfromx.com/) and curl |
 | `reorganize-commits` | Rewrites the current branch's commits into reviewable chunks. Runs only when you invoke it | Git |
+| `self-compact` | Compacts the conversation at a boundary the agent picks and resumes from a handoff note without you | T3 Code, BB with Claude Code or Hermes, or macOS Paseo Desktop. Node.js and the `bb` CLI in BB |
 | `stable-refs` | Gives documents and plans permanent identifiers that survive edits | Nothing |
 | `worker-routing` | Supplies the shared model, effort, provider, quota, retry, and escalation policy when another skill or session mode names it. It does not activate lead mode | T3 Code or BB for cross-provider workers, and for Claude workers when the host hides Claude Code's own subagent tools. Elsewhere, the host's agent tool |
 
@@ -40,6 +41,41 @@ installs missing tools and never enables verbose/debug `zizmor` logging with a
 GitHub token present. Follow the target repository's documented setup step for
 missing tools, or [Machine setup](setup.md) for this repository. These are agent
 instructions, not automatic hook enforcement.
+
+The `self-compact` skill compacts the conversation earlier than the host would,
+at a boundary the agent picks. A context budget reminder asks for it from 75%
+of the compaction window. In Claude Code the reminder comes from the
+`ramtoshiya-cc` hook. In the Hermes operator profile it comes from that
+profile's self-compact plugin, described in [Machine setup](setup.md). The
+agent finishes its step and writes a handoff note first.
+
+- In T3 Code the agent queues `/compact` and a resume message to its own
+  thread, so the work continues without you.
+- In BB a helper uses the installed `bb` CLI and Node.js to wait for the turn
+  to end and request native compaction. It sends the resume only after the
+  matching turn reports an actual compaction boundary and successful
+  completion. It supports the `claude-code` provider, which launches it as a
+  Bash background task with completion notifications. It also supports Hermes,
+  which launches it through the profile's `self_compact` tool. For Hermes it
+  also requires the one compaction that Hermes committed after the request,
+  because BB reports a refused or empty `/compact` as finished too. Other
+  providers, pending work, interactions, and missing proof keep the handoff
+  note and stop the helper. A queued resume receipt reports uncertain delivery
+  and its queue id. The helper needs exclusive control of the thread. Do not
+  send new prompts until it finishes. The CLI cannot atomically send only if
+  no new work arrived after the last check.
+- On macOS Paseo Desktop, a background helper waits for the current turn to
+  finish, sends the provider's native `/compact` command, and sends a resume
+  instruction only after a completed compaction event tied to that command.
+  This proof of concept requires exclusive control of the session and a shell
+  tool with background completion notifications. Do not send new prompts until
+  the helper finishes. Paseo cannot atomically reject a send when another turn
+  starts, so concurrent prompts could be interrupted. The provider must
+  advertise `/compact`. The helper uses the installed Desktop bundle's SDK and
+  runtime, not extra dependencies. It does not support standalone or remote
+  daemons. Set `PASEO_DESKTOP_APP` for a nonstandard bundle location.
+- Other hosts use their automatic compaction. The Claude Code hook points the
+  agent to the note afterward.
 
 `ramtoshiya` hooks, described in [Hooks](hooks.md):
 
@@ -107,31 +143,10 @@ instructions, not automatic hook enforcement.
   subagents the session starts read the same
   instructions and lead their part of the work. Claude
   Code keeps the instructions in context after compaction.
-- The `self-compact` skill and a context budget hook. From 75% of the
-  auto-compact window, the hook asks the agent to compact at the next natural
-  boundary. The agent writes a handoff note first. In T3 Code it then queues
-  `/compact` and a resume message to its own thread, so the work continues
-  without you. In BB with its `claude-code` provider, a helper uses the installed
-  `bb` CLI and Node.js to wait for the turn to end and request native compaction.
-  It sends the resume only after the matching turn reports an actual compaction
-  boundary and successful completion. Unsupported providers, pending work,
-  interactions, and missing proof keep the handoff note and stop the helper.
-  A queued resume receipt reports uncertain delivery and its queue id.
-  This path requires exclusive control of the thread and Bash background
-  completion notifications. Do not send new prompts until the helper finishes.
-  The CLI cannot atomically send only if no new work arrived after the last check.
-  On macOS Paseo Desktop, a background helper waits for the current
-  turn to finish, sends the provider's native `/compact` command, and sends a
-  resume instruction only after a completed compaction event tied to that command.
-  This proof of concept requires exclusive control of the session and a shell
-  tool with background completion notifications. Do not send new prompts until
-  the helper finishes. Paseo cannot atomically reject a send when another turn
-  starts, so concurrent prompts could be interrupted. The provider must advertise
-  `/compact`. The helper uses the installed Desktop bundle's SDK
-  and runtime, not extra dependencies. It does not support standalone or remote
-  daemons. Set `PASEO_DESKTOP_APP` for a nonstandard bundle location. Other hosts
-  use Claude Code's automatic compaction, and the hook points the agent to the
-  note afterward.
+- A context budget hook for the shared `self-compact` skill. From 75% of the
+  numeric `autoCompactWindow` setting, it asks the agent once per five-point
+  band to compact at the next natural boundary. After a compaction it points
+  the agent to the handoff note.
 - A hook that blocks AI attribution lines in commits and pull requests.
 
 Excalidraw board requests update a shared room. A `.excalidraw` attachment is
