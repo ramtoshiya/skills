@@ -17,3 +17,12 @@ each spawn.
   fails, and report the failure.
 - It covers spawning and talking to your own workers only. Messages to any other
   thread still follow the bb introduction.
+
+## BB references and customizations {:#bb-references-customizations}
+
+Separate a thread or message reference from adjacent text with spaces, including
+before Korean particles. For example: @thread:thr_abc123 에서 확인하세요.
+Keep the reference syntax described in the bb introduction.
+
+For BB customizations, use a BB plugin instead of replacing the application
+bundle.
