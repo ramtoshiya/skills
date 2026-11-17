@@ -62,6 +62,20 @@ you write when the event happens.
 Decide small feature choices yourself, such as an input format, a default, or
 what the output keeps. Write them into the brief and list them for the user
 when you report the draft. Ask the user only about product decisions.
+Before you send questions, drop each one that is a feature choice or that the
+domain already answers. A worker's note about an unconfirmed assumption is a
+question for the user only when its answer could change the product. Relaying
+an obvious one costs the user a round trip to work out what you meant.
+
+When a pending product decision blocks part of the work, split off the part
+that does not depend on it and hand it over now. Ask only about the blocked
+part.
+
+When the work delivers a web UI or server that the user will open, the
+expected result says that it keeps running after the worker finishes, how to
+restart it, and that it opens from another of the user's devices. A worker
+that verifies and then stops the server leaves the user with a dead URL. A
+request from this Mac to its own Tailscale address proves only the binding.
 
 ## Choose the route {:#route}
 
@@ -93,6 +107,12 @@ session and follow it as the session that delegates:
 
 When you report a draft or a research thread, name its row, provider, model,
 and effort, and say when the route switched.
+
+`bb thread show --json` does not report a thread's model or reasoning level,
+so an empty field there is not evidence of a default. To check what a thread
+runs on, read the `client/turn/requested` event in
+`bb thread log <threadId> --json --limit 15`. Its data carries `model` and
+`reasoningLevel`.
 
 ## Create the draft {:#create}
 
@@ -253,6 +273,11 @@ kept child later, run these steps again. Never delete a thread.
   the raw arguments, without your observation. Write the brief yourself
   instead.
 - Never send a draft (`bb thread queue send`) and never change the held-drafts
-  plugin's `mode` setting. Approval belongs to the user.
+  plugin's `mode` setting. Approval belongs to the user. The exception is a
+  scope the user has explicitly told you to run without approval. Inside it,
+  send the drafts you made for it and start new work with `bb thread spawn`,
+  the draft command's project, environment, and route flags, and
+  `--parent-self`. Anything outside that scope, including a new product
+  decision, still goes to the user as a draft or a question.
 - Never edit files, commit, or push through the terminal. Use the terminal for
   `bb` and for reading.
