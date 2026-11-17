@@ -491,7 +491,7 @@ Then it changes these files under `~/.hermes/profiles/operator/`:
 | `skills/<skill>/` | A copy of the files Git tracks in each skill, and of `setup/hermes/skills/operator-handoff` with this machine's paths and the list of plugins filled in. The task replaces these folders on every run |
 | `skills/` | Hermes's bundled skills deleted. Other skills stay |
 | `plugins/<entry>/` | The files Git tracks in each marketplace entry that is a native Hermes plugin |
-| `plugins/skill-drafts/` | A copy of `setup/hermes/plugins/skill-drafts` and a `sources.json` that maps each skill to the checkout and, for a third-party skill, the fork and commit it came from |
+| `plugins/skill-drafts/` | A copy of `setup/hermes/plugins/skill-drafts` and a `sources.json` that maps each skill to the checkout and, for a third-party skill, the fork and commit it came from. The plugin keeps its evidence packets and proposal record in the profile's `skill-drafts/` folder, which a reinstall leaves alone |
 | `plugins/bb-thread-env/` | A copy of `setup/hermes/plugins/bb-thread-env` |
 | `config.yaml` | The settings below, and the plugins enabled |
 
@@ -611,16 +611,45 @@ entry on the ACP providers plugin's settings page.
 ### How a change reaches a skill
 
 The installed skills are copies, so a local edit would drift from its source.
-The `skill-drafts` plugin blocks every `skill_manage` call, including the
-background self-review's, and creates a held draft instead. The draft's brief
-names the owning repository, the raw arguments, a diff against the installed
-copy, the Hermes session to read for the reason, and the authority to commit,
-push, and reinstall. A worker started by sending the draft makes the change at
-the source, then runs `mise run hermes:operator` to refresh the copies. A
-third-party skill is changed in its fork and the pin updated, as
-[Third-party skills](upstream-skills.md) describes. When
-the plugin cannot create the draft, it still blocks the call and tells Hermes
-why.
+The `skill-drafts` plugin blocks every `skill_manage` call. When the operator
+itself calls it, the plugin tells the operator to write the brief and create
+the draft as `operator-handoff` describes, because only the operator knows why
+the skill fell short.
+
+After some turns, Hermes reviews the conversation in the background and may
+call `skill_manage`. Hermes never stores that review's messages, so the plugin
+keeps the reviewer's text from each of its model responses. When the review
+ends, the plugin starts one analyst thread for all of that review's calls:
+
+- It writes an evidence packet to
+  `~/.hermes/profiles/operator/skill-drafts/proposals/<id>/`. `evidence.md`
+  has each blocked call, a diff against the installed copy, the owning source,
+  the reviewer's messages, known gaps, and earlier reviews for the same skills.
+  `session.jsonl` is an export of the stored conversation.
+- It starts the analyst with `bb thread spawn` in the personal workspace, on
+  `claude-code` with the highest-numbered Opus model at `high` effort. When
+  the bb thread that shows the session is known, the analyst is its child.
+- The analyst decides whether the evidence supports a change. If it does, the
+  analyst writes a brief with a confidence and gaps section and creates a held
+  draft titled `Skill change: <skills>`, parented to the same operator thread.
+  If the held-drafts plugin's `mode` is not `draft`, it creates no draft and
+  reports the brief instead. A worker started by sending the draft makes the
+  change at the source, then runs `mise run hermes:operator` to refresh the
+  copies. A third-party skill is changed in its fork and the pin updated, as
+  [Third-party skills](upstream-skills.md) describes.
+- When the analyst finishes, the operator reports its decision and archives
+  it. The draft stays, because it is the analyst's sibling.
+
+A review that sends no final response is handed over after 10 quiet minutes,
+and its packet says the closing summary is missing. Unloading the plugin hands
+over every review in progress. A proposal whose operations and installed files
+match one an analyst received in the last 14 days starts no second analyst.
+The record is `skill-drafts/ledger.json` in the profile. When the analyst
+cannot start, the plugin logs a warning in the gateway log and tells the
+operator thread, which tells the user. A later review that proposes the same
+change tries again. A session with no bb thread gets a top-level analyst and
+draft. A gateway that stops during a review loses that review's proposals.
+The skill files never change in any of these cases.
 
 For other work, the `operator-handoff` skill tells Hermes how to write a brief
 and create the draft. Hermes passes each draft and research thread a provider,

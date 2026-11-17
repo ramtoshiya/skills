@@ -24,6 +24,7 @@ PSTACK_SKILLS = ("in-your-own-words", "why", "how", "interrogate", "statechart",
 PSTACK_SKILL_DIR = "plugins/pstack-mode/skills"
 LOCAL_SKILLS = ("operator-handoff",)
 PLUGINS = ("skill-drafts", "bb-thread-env")
+RESEARCH_PROJECT = "proj_personal"
 # Hermes seeds these into every home, opted out or not, until the home's .bundled_manifest tracks
 # them as deleted. Mirrors ESSENTIAL_SKILLS in Hermes's agent/skill_utils.py.
 ESSENTIAL_SKILLS = ("hermes-agent",)
@@ -230,8 +231,6 @@ def main() -> None:
     parser.add_argument("--profile", default="operator")
     parser.add_argument("--pstack", default="~/workspaces/pstack-mode",
                         help="pstack-mode checkout that supplies mode.md and the conversation skills")
-    parser.add_argument("--worker-provider", default="claude-code",
-                        help="bb provider for drafts created from blocked skill writes")
     options = parser.parse_args()
 
     if shutil.which("hermes") is None:
@@ -279,6 +278,7 @@ def main() -> None:
         if old.parent == skills_dir:
             shutil.rmtree(old, ignore_errors=True)
     values = {"MODE_MD": str(mode_md), "SOURCES_JSON": str(sources_json), "SKILLS_REPO": str(skills_repo),
+              "RESEARCH_PROJECT": RESEARCH_PROJECT,
               "SKILL_PLUGINS": plugin_list(descriptions, {**skills, **pstack_skills, **registered})}
     for name, source in managed.items():
         install_skill(skills_dir / name, source, values)
@@ -306,9 +306,9 @@ def main() -> None:
         "profile": profile,
         "modePath": str(mode_md),
         "defaultRepo": str(skills_repo),
-        "skillsRepo": str(skills_repo),
-        "provider": options.worker_provider,
-        "sourceCheckouts": [str(skills_repo), str(pstack)],
+        "researchProject": RESEARCH_PROJECT,
+        "skillsDir": str(skills_dir),
+        "sourcesPath": str(sources_json),
         "skills": owners,
         "packagePlugins": sorted(packages),
     }

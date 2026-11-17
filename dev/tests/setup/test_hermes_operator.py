@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from unittest import mock
 
@@ -14,14 +15,18 @@ ROOT = Path(__file__).resolve().parents[3]
 PLUGIN = ROOT / "setup/hermes/plugins/skill-drafts/__init__.py"
 SETUP = ROOT / "setup/hermes/operator_profile.py"
 THREAD_ENV = ROOT / "setup/hermes/plugins/bb-thread-env/__init__.py"
-# Stands in for the bb CLI: lists one project, records the draft it was asked to create, and
-# keeps the provider-acp plugin settings in $HOME/bb-provider-acp.json. Like the real CLI with
-# the tracker plugin installed, the plural `projects` group has no `list`, and any command the
-# fake does not know fails.
+# Stands in for the bb CLI. It appends each call's arguments and stdin to $CALLS when that is set,
+# keeps the provider-acp plugin settings in $HOME/bb-provider-acp.json, lists Claude models, and
+# starts threads. FAIL_SPAWN makes `thread spawn` fail. Any command the fake does not know fails,
+# as the real CLI does.
 FAKE_BB = f"""#!{sys.executable}
 import json, os, sys
 from pathlib import Path
 args = sys.argv[1:]
+stdin = sys.stdin.read() if "-" in args else None
+if os.environ.get("CALLS"):
+    with open(os.environ["CALLS"], "a") as log:
+        log.write(json.dumps({{"args": args, "stdin": stdin}}) + "\\n")
 if args[:3] == ["plugin", "config", "provider-acp"]:
     store = Path(os.environ["HOME"]) / "bb-provider-acp.json"
     values = json.loads(store.read_text()) if store.exists() else {{"customAgents": ""}}
@@ -30,17 +35,25 @@ if args[:3] == ["plugin", "config", "provider-acp"]:
         store.write_text(json.dumps(values))
     else:
         print(json.dumps({{"ok": True, "values": values}}))
-elif args[:2] == ["project", "list"]:
-    print(json.dumps([{{"id": "proj_skills", "sources": [{{"path": os.environ["REPO"]}}]}}]))
-elif args[:2] == ["draft", "create"]:
-    if os.environ.get("FAIL"):
+elif args[:3] == ["provider", "models", "claude-code"]:
+    efforts = [{{"reasoningEffort": e}} for e in ("low", "high")]
+    print(json.dumps([{{"id": i, "supportedReasoningEfforts": efforts}} for i in (
+        "claude-sonnet-5-5", "claude-opus-4-8", "claude-opus-5-5", "claude-opus-5", "claude-opus-5-5[1m]",
+        "claude-opus-4-1-20250805")]))
+elif args[:2] == ["thread", "spawn"]:
+    if os.environ.get("FAIL_SPAWN"):
         sys.exit("HTTP 500: server down")
-    with open(os.environ["CAPTURE"], "w") as file:
-        json.dump(args, file)
-    print(json.dumps({{"threadId": "thr_new", "held": True}}))
+    print(json.dumps({{"id": "thr_analyst", "status": "pending"}}))
+elif args[:2] == ["thread", "tell"]:
+    print("queued")
 else:
     print(json.dumps({{"ok": False, "error": {{"code": "unknown_command", "message": "unknown command"}}}}))
     sys.exit(1)
+"""
+# Stands in for `hermes sessions export`: writes one line to the requested file.
+FAKE_EXPORT = f"""#!{sys.executable}
+import sys
+open(sys.argv[-1], "w").write('{{"role": "user", "content": "keep it short"}}\\n')
 """
 
 
@@ -55,7 +68,24 @@ def option(args, name):
     return args[args.index(name) + 1]
 
 
+def hermes_runtime(origin, resolve):
+    """The two Hermes modules the hook imports: the write origin and the session-env resolver."""
+    tools, approval = types.ModuleType("tools"), types.ModuleType("tools.write_approval")
+    approval.current_origin = origin
+    cli, session_env = types.ModuleType("hermes_cli"), types.ModuleType("hermes_cli.plugins_session_env")
+    session_env.resolve_session_env = resolve
+    return {"tools": tools, "tools.write_approval": approval,
+            "hermes_cli": cli, "hermes_cli.plugins_session_env": session_env}
+
+
+def reply(content, tools=0):
+    calls = [types.SimpleNamespace(function=types.SimpleNamespace(name="skill_manage", arguments="{}"))] * tools
+    return types.SimpleNamespace(content=content, tool_calls=calls)
+
+
 class SkillDraftsHookTests(unittest.TestCase):
+    """Drives the hooks as Hermes calls them and the worker step that the plugin's thread runs."""
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -68,54 +98,190 @@ class SkillDraftsHookTests(unittest.TestCase):
         sources = root / "sources.json"
         sources.write_text(json.dumps({
             "profile": "operator", "modePath": "/pstack/mode.md", "defaultRepo": str(self.repo),
-            "skillsRepo": str(self.repo), "sourceCheckouts": [str(self.repo)], "provider": "claude-code",
+            "researchProject": "proj_personal", "skillsDir": str(root / "profile/skills"),
+            "sourcesPath": str(sources),
             "skills": {"unslop": {"repo": str(self.repo), "path": "skills/unslop", "installed": str(installed)}},
         }))
-        bb = root / "bb"
-        bb.write_text(FAKE_BB)
-        bb.chmod(0o755)
-        self.capture = root / "capture.json"
+        bin_dir = root / "bin"
+        bin_dir.mkdir()
+        for name, script in {"bb": FAKE_BB, "hermes": FAKE_EXPORT}.items():
+            (bin_dir / name).write_text(script)
+            (bin_dir / name).chmod(0o755)
+        self.calls = root / "calls.jsonl"
+        self.state = root / "profile/skill-drafts"
+        self.origin = "background_review"
+        self.threads = {"sess_1": "thr_op"}
         self.hook = load("skill_drafts_under_test", PLUGIN)
-        self.enterContext(mock.patch.object(self.hook, "SOURCES", sources))
+        self.now = 1_000_000.0
+        self.proposals = self.hook.Proposals(self.state, sources, clock=lambda: self.now)
+        self.proposals.poke = lambda: None
+        self.enterContext(mock.patch.object(self.hook, "PROPOSALS", self.proposals))
+        self.enterContext(mock.patch.dict(sys.modules, hermes_runtime(
+            lambda: self.origin, lambda sid: {"BB_THREAD_ID": self.threads.get(sid)})))
         self.enterContext(mock.patch.dict(os.environ, {
-            "BB_CLI": str(bb), "REPO": str(self.repo), "CAPTURE": str(self.capture)}))
+            "BB_CLI": str(bin_dir / "bb"), "CALLS": str(self.calls),
+            "PATH": os.pathsep.join([str(bin_dir), os.environ.get("PATH", "")])}))
 
-    def call(self, args):
-        return self.hook.on_pre_tool_call(tool_name="skill_manage", args=args, session_id="sess_1")
+    def call(self, args, turn="sess_1:task:t1", session="sess_1"):
+        return self.hook.on_pre_tool_call(tool_name="skill_manage", args=args, session_id=session, turn_id=turn,
+                                          tool_call_id="call_1")
+
+    def respond(self, content, tools=0, turn="sess_1:task:t1", session="sess_1"):
+        self.hook.on_post_api_request(session_id=session, turn_id=turn, assistant_message=reply(content, tools),
+                                      assistant_tool_call_count=tools)
+
+    def bb_calls(self):
+        return [json.loads(line) for line in self.calls.read_text().splitlines()] if self.calls.exists() else []
+
+    def spawns(self):
+        return [call for call in self.bb_calls() if call["args"][:2] == ["thread", "spawn"]]
+
+    def evidence(self):
+        return next(self.state.glob("proposals/*/evidence.md")).read_text()
+
+    def review(self, args, turn="sess_1:task:t1", summary="The user asked twice for shorter replies."):
+        self.respond("Checking unslop against this session.", tools=1, turn=turn)
+        self.call(args, turn=turn)
+        self.respond(summary, turn=turn)
+        return self.proposals.flush_due()
+
+    PATCH = {"action": "patch", "name": "unslop", "old_string": "Cut filler.", "new_string": "Cut all filler."}
 
     def test_other_tools_pass_through(self):
         self.assertIsNone(self.hook.on_pre_tool_call(tool_name="terminal", args={"command": "ls"}))
 
-    def test_skill_write_becomes_draft_and_is_blocked(self):
-        result = self.call({"operations": [{"action": "patch", "name": "unslop",
-                                            "old_string": "Cut filler.", "new_string": "Cut all filler."}]})
+    def test_operator_call_is_sent_back_to_the_handoff(self):
+        self.origin = "assistant_tool"
+
+        result = self.call(self.PATCH)
 
         self.assertEqual(result["action"], "block")
-        self.assertIn("@thread:thr_new", result["message"])
-        args = json.loads(self.capture.read_text())
-        self.assertEqual(option(args, "--project"), "proj_skills")
-        self.assertEqual(option(args, "--new-environment"), "worktree")
-        brief = option(args, "--prompt")
+        self.assertIn("operator-handoff", result["message"])
+        self.assertEqual(self.proposals.flush_due(everything=True), [])
+        self.assertEqual(self.bb_calls(), [])
+
+    def test_review_becomes_one_analyst_under_the_operator_thread(self):
+        self.respond("Checking unslop against this session.", tools=1)
+        first = self.call({"operations": [self.PATCH]})
+        second = self.call({"action": "create", "name": "fresh", "content": "---\nname: fresh\n---\n"})
+        self.respond("The user asked twice for shorter replies.")
+
+        self.assertEqual({first["action"], second["action"]}, {"block"})
+        self.assertIn("separate agent", first["message"])
+        self.assertEqual(self.bb_calls(), [])
+
+        [outcome] = self.proposals.flush_due()
+        self.assertRegex(outcome, r"^spawned \w+: thr_analyst$")
+        [spawn] = self.spawns()
+        args = spawn["args"]
+        self.assertEqual(option(args, "--parent-thread"), "thr_op")
+        self.assertEqual(option(args, "--project"), "proj_personal")
+        self.assertEqual(option(args, "--new-environment"), "personal")
+        self.assertEqual(option(args, "--provider"), "claude-code")
+        self.assertEqual(option(args, "--model"), "claude-opus-5-5")
+        self.assertEqual(option(args, "--reasoning-level"), "high")
+        self.assertIn("Skill proposal: fresh, unslop", option(args, "--title"))
+        brief = spawn["stdin"]
         self.assertTrue(brief.startswith("Read /pstack/mode.md and follow it"))
-        self.assertIn("-Cut filler.\n+Cut all filler.", brief)
-        self.assertIn("Sending this draft is the user's approval", brief)
-        self.assertIn("--session-id sess_1", brief)
+        self.assertIn("--parent-thread thr_op", brief)
+        self.assertIn("`bb plugin config held-drafts --json`", brief)
+        evidence = self.evidence()
+        self.assertIn("-Cut filler.\n+Cut all filler.", evidence)
+        self.assertIn("+name: fresh", evidence)
+        self.assertIn("a new skill. Place it in", evidence)
+        self.assertLess(evidence.index("Checking unslop"), evidence.index("asked twice for shorter"))
+        self.assertIn("keep it short", next(self.state.glob("proposals/*/session.jsonl")).read_text())
         self.assertEqual(self.skill_md.read_text(), "# Unslop\n\nCut filler.\n")
 
-    def test_new_skill_goes_to_default_repo(self):
-        self.call({"action": "create", "name": "fresh", "content": "---\nname: fresh\n---\n"})
+    def test_review_without_final_response_goes_out_after_ten_quiet_minutes(self):
+        self.call(self.PATCH)
 
-        brief = option(json.loads(self.capture.read_text()), "--prompt")
-        self.assertIn(f"a new skill. Place it in `{self.repo}`", brief)
-        self.assertIn("+name: fresh", brief)
+        self.now += 9 * 60
+        self.assertEqual(self.proposals.flush_due(), [])
+        self.now += 2 * 60
+        self.assertEqual(len(self.proposals.flush_due()), 1)
+        self.assertIn("closing summary is missing", self.evidence())
 
-    def test_bb_failure_still_blocks(self):
-        with mock.patch.dict(os.environ, {"FAIL": "1"}):
-            result = self.call({"action": "delete", "name": "unslop"})
+    def test_review_that_proposes_nothing_starts_no_analyst(self):
+        self.respond("Nothing to change.")
+
+        self.assertEqual(self.proposals.flush_due(), [])
+        self.assertEqual(self.proposals.turns, {})
+        self.assertEqual(self.bb_calls(), [])
+
+    def test_repeated_proposal_goes_to_no_second_analyst_until_the_skill_changes(self):
+        self.review(self.PATCH)
+        repeat = self.review(self.PATCH, turn="sess_1:task:t2")
+
+        self.assertTrue(repeat[0].startswith("duplicate"), repeat)
+        self.assertIn("thr_analyst", repeat[0])
+        self.assertEqual(len(self.spawns()), 1)
+
+        self.skill_md.write_text("# Unslop\n\nCut filler.\nKeep examples.\n")
+        self.review(self.PATCH, turn="sess_1:task:t3")
+        self.assertEqual(len(self.spawns()), 2)
+
+    def test_partial_repeat_names_the_earlier_analyst(self):
+        self.review(self.PATCH)
+        other = {"action": "patch", "name": "unslop", "old_string": "# Unslop", "new_string": "# Unslop it"}
+        self.review({"operations": [self.PATCH, other]}, turn="sess_1:task:t2")
+
+        self.assertEqual(len(self.spawns()), 2)
+        [evidence] = [p.read_text() for p in self.state.glob("proposals/*/evidence.md") if "Unslop it" in p.read_text()]
+        self.assertIn("already received", evidence)
+        self.assertIn("@thread:thr_analyst", evidence)
+
+    def test_spawn_failure_tells_the_operator_and_a_later_review_retries(self):
+        with mock.patch.dict(os.environ, {"FAIL_SPAWN": "1"}):
+            outcome = self.review(self.PATCH)
+
+        self.assertTrue(outcome[0].startswith("failed"), outcome)
+        [tell] = [c for c in self.bb_calls() if c["args"][:2] == ["thread", "tell"]]
+        self.assertEqual(tell["args"][2], "thr_op")
+        self.assertIn("[skill-drafts plugin]", tell["stdin"])
+        self.assertIn("server down", tell["stdin"])
+
+        self.review(self.PATCH, turn="sess_1:task:t2")
+        self.assertEqual(len(self.spawns()), 2)
+
+    def test_session_without_operator_thread_gets_a_top_level_analyst(self):
+        self.threads = {}
+        self.review(self.PATCH)
+
+        [spawn] = self.spawns()
+        self.assertNotIn("--parent-thread", spawn["args"])
+        self.assertIn("leave the draft top-level", spawn["stdin"])
+        self.assertIn("No bb thread shows this Hermes session", self.evidence())
+
+    def test_failing_resolver_and_missing_bb_still_block(self):
+        self.enterContext(mock.patch.dict(sys.modules, hermes_runtime(lambda: self.origin, mock.Mock(
+            side_effect=RuntimeError("gateway gone")))))
+        self.enterContext(mock.patch.dict(os.environ, {"BB_CLI": "", "PATH": "/nonexistent"}))
+
+        self.assertEqual(self.call(self.PATCH)["action"], "block")
+        self.respond("Done.")
+        [outcome] = self.proposals.flush_due()
+
+        self.assertTrue(outcome.startswith("failed"), outcome)
+        self.assertIn("bb CLI is not on the gateway's PATH", outcome)
+        self.assertIn("Exporting the stored conversation failed", self.evidence())
+
+    def test_recording_failure_still_blocks(self):
+        self.proposals.record_call = mock.Mock(side_effect=OSError("disk full"))
+
+        result = self.call(self.PATCH)
 
         self.assertEqual(result["action"], "block")
-        self.assertIn("server down", result["message"])
-        self.assertFalse(self.capture.exists())
+        self.assertIn("disk full", result["message"])
+
+    def test_unload_hands_over_a_review_in_progress(self):
+        self.call(self.PATCH)
+
+        self.proposals.stop()
+        self.proposals.serve()
+
+        self.assertEqual(len(self.spawns()), 1)
+        self.assertIn("closing summary is missing", self.evidence())
 
 
 class BbThreadEnvTests(unittest.TestCase):
@@ -584,31 +750,39 @@ class OperatorProfileSetupTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("korean-pack", result.stderr)
 
-    def test_skill_change_draft_names_the_owning_source(self):
+    def test_installed_plugin_gives_the_analyst_each_owning_source(self):
         self.setup_profile()
         sources = self.operator / "plugins/skill-drafts/sources.json"
-        capture = self.tmp / "capture.json"
+        calls = self.tmp / "calls.jsonl"
         hook = load("skill_drafts_installed", self.operator / "plugins/skill-drafts/__init__.py")
-        self.enterContext(mock.patch.object(hook, "SOURCES", sources))
-        self.enterContext(mock.patch.dict(os.environ, {
-            "BB_CLI": str(self.tmp / "bin/bb"), "REPO": str(self.repo), "CAPTURE": str(capture)}))
+        proposals = hook.Proposals(self.tmp / "drafts-state", sources)
+        proposals.poke = lambda: None
+        self.enterContext(mock.patch.object(hook, "PROPOSALS", proposals))
+        self.enterContext(mock.patch.dict(sys.modules, hermes_runtime(
+            lambda: "background_review", lambda sid: {"BB_THREAD_ID": "thr_op"})))
+        self.enterContext(mock.patch.dict(os.environ, {"BB_CLI": str(self.tmp / "bin/bb"), "CALLS": str(calls)}))
         grill_sha = self.marketplace["plugins"][2]["source"]["sha"]
 
-        hook.on_pre_tool_call(tool_name="skill_manage", session_id="sess_1", args={
-            "action": "patch", "name": "grilling", "old_string": "# grilling", "new_string": "# Grilling"})
+        for name in ("grilling", "read-x"):
+            hook.on_pre_tool_call(tool_name="skill_manage", session_id="sess_1", turn_id="sess_1:t:1", args={
+                "action": "patch", "name": name, "old_string": f"# {name}", "new_string": f"# {name.title()}"})
+        hook.on_post_api_request(session_id="sess_1", turn_id="sess_1:t:1", assistant_message=reply("Done."),
+                                 assistant_tool_call_count=0)
+        [outcome] = proposals.flush_due()
 
-        args = json.loads(capture.read_text())
-        self.assertEqual(option(args, "--project"), "proj_skills")
-        brief = option(args, "--prompt")
-        self.assertIn("`skills/productivity/grilling` in https://github.com/fork/grill-skills", brief)
-        self.assertIn(grill_sha, brief)
-        self.assertIn("-# grilling\n+# Grilling", brief)
-
-        hook.on_pre_tool_call(tool_name="skill_manage", session_id="sess_1", args={
-            "action": "patch", "name": "read-x", "old_string": "# read-x", "new_string": "# Read X"})
-
-        brief = option(json.loads(capture.read_text()), "--prompt")
-        self.assertIn(f"`plugins/ramtoshiya/skills/read-x` in `{self.repo.resolve()}`", brief)
+        self.assertRegex(outcome, r"^spawned \w+: thr_analyst$")
+        evidence = next((self.tmp / "drafts-state").glob("proposals/*/evidence.md")).read_text()
+        self.assertIn("`skills/productivity/grilling` in https://github.com/fork/grill-skills", evidence)
+        self.assertIn(grill_sha, evidence)
+        self.assertIn("-# grilling\n+# Grilling", evidence)
+        self.assertIn(f"`plugins/ramtoshiya/skills/read-x` in `{self.repo.resolve()}`", evidence)
+        [spawn] = [json.loads(line) for line in calls.read_text().splitlines()
+                   if json.loads(line)["args"][:2] == ["thread", "spawn"]]
+        self.assertEqual(option(spawn["args"], "--project"), "proj_personal")
+        handoff = self.operator / "skills/operator-handoff/SKILL.md"
+        self.assertIn(f"`{handoff}`", spawn["stdin"])
+        self.assertIn("--project proj_personal --new-environment personal", handoff.read_text())
+        self.assertNotIn("{{", handoff.read_text())
 
 
 class SoulBlockTests(unittest.TestCase):

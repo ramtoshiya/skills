@@ -168,7 +168,7 @@ and start it without asking the user. Run it in the personal workspace, not in
 another project's checkout:
 
 ```sh
-bb thread spawn --json --project proj_personal --new-environment personal \
+bb thread spawn --json --project {{RESEARCH_PROJECT}} --new-environment personal \
   --parent-self --provider <provider> --model <model-id> \
   --reasoning-level <effort> --title "<short title>" --prompt-file - <<'EOF'
 <the research brief>
@@ -311,11 +311,26 @@ and new implementation scope still starts as a draft:
 - A failed safety check, such as malformed managed-block markers or failed
   validation. Report the check and its output. Never ask a worker to skip it.
 
+## Skill proposals from the background review {:#skill-proposals}
+
+After some of your turns, Hermes reviews the conversation in the background
+and may propose skill changes. A plugin blocks those changes and starts an
+analyst thread as your child, titled `Skill proposal: <skills> [<id>]`. The
+analyst weighs the evidence and either creates a held draft titled
+`Skill change: <skills>`, also as your child, or creates nothing and says why.
+
+- When an analyst reports, handle it as Results describes. Tell the user its
+  decision and confidence. For a draft, name `@thread:<draftId>` and say that
+  sending it approves the change and deleting it rejects it. The draft is the
+  analyst's sibling, so archiving the analyst keeps it.
+- A message starting `[skill-drafts plugin]` means no analyst could start.
+  Tell the user which skills and what failed. Do not start an analyst or
+  write that draft yourself unless the user asks.
+
 ## Never {:#never}
 
-- Never call `skill_manage`. A plugin turns every call into a draft built from
-  the raw arguments, without your observation. Write the brief yourself
-  instead.
+- Never call `skill_manage`. A plugin blocks every call. Write the brief
+  yourself with your observation and create the draft as above.
 - Never send a draft (`bb thread queue send`) and never change the held-drafts
   plugin's `mode` setting. Approval belongs to the user. The exception is a
   scope the user has explicitly told you to run without approval. Inside it,
