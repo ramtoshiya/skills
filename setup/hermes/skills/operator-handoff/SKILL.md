@@ -55,7 +55,7 @@ English and include, in this order:
 
 ## Create the draft {:#create}
 
-Find the project that owns the work with `bb projects list --json`. Match the
+Find the project that owns the work with `bb project list --json`. Match the
 project's `sources[].path` to the repository. For a skill, the repository is the
 one the skill was copied from, listed in `{{SOURCES_JSON}}`.
 

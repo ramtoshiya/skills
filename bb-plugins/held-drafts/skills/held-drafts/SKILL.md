@@ -21,7 +21,7 @@ EOF
 - `--prompt` is the entire first message. The receiving agent sees nothing
   else, so write a self-contained brief.
 - `--project` defaults to the calling thread's project. Pass it when the work
-  belongs to another project (`bb projects list`).
+  belongs to another project (`bb project list`).
 - `--new-environment worktree` gives the work its own checkout when it is sent.
   Omit it to use the project's default environment.
 - `--json` prints `{"threadId": "...", "held": true|false}`. `held` is false

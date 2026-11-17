@@ -151,7 +151,7 @@ def build_brief(sources: dict[str, Any], args: dict[str, Any], origin: str, sess
 
 
 def project_for(repo: str, bb: str) -> str | None:
-    listing = subprocess.run([bb, "projects", "list", "--json"], capture_output=True, text=True,
+    listing = subprocess.run([bb, "project", "list", "--json"], capture_output=True, text=True,
                              timeout=BB_TIMEOUT_SECONDS, check=True)
     for project in json.loads(listing.stdout):
         for source in project.get("sources", []):

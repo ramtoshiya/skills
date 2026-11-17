@@ -127,7 +127,7 @@ export default async function plugin(bb: BbPluginApi) {
             if (projectId === undefined) {
               throw new PluginCliError("no project to create the draft in", {
                 code: "project_required",
-                hint: "Add --project <project-id>. Run `bb projects list` to find it.",
+                hint: "Add --project <project-id>. Run `bb project list` to find it.",
               });
             }
             const hostId =
