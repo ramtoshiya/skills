@@ -149,6 +149,12 @@ ordinary user replies provide the conversation checkpoints used to fork or
 rewind work. Do not turn a needed clarification into an assumption merely to
 avoid a question dialog.
 
+When a step needs the user's hands on a physical device, such as unlocking a
+phone, approving a permission or trust dialog, or tapping something only they
+can reach, ping the user at once with a notification and a chat line that names
+the exact action. Do not hold it for the final report. Never answer a security
+or trust prompt on the user's behalf.
+
 Treat these interaction rules as user preferences across launchers and
 profiles, not terminal display or permission-approval settings. When changing
 agent configuration, classify each setting by its purpose and verify the
