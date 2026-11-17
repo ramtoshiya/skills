@@ -433,7 +433,8 @@ Then it changes these files under `~/.hermes/profiles/operator/`:
 | `SOUL.md` | A block from `setup/hermes/soul-operator.md` between `<!-- BEGIN ramtoshiya:operator -->` and `<!-- END ramtoshiya:operator -->`, after the Hermes default text |
 | `skills/` | Copies of the pstack skills `in-your-own-words`, `why`, `how`, `interrogate`, `statechart`, `technical-writing`, and `unslop` (files Git tracks only), and of `setup/hermes/skills/operator-handoff`, with this machine's paths filled in |
 | `plugins/skill-drafts/` | A copy of `setup/hermes/plugins/skill-drafts` and a `sources.json` that maps each skill to the checkout it came from |
-| `config.yaml` | The settings below, and the `skill-drafts` plugin enabled |
+| `plugins/bb-thread-env/` | A copy of `setup/hermes/plugins/bb-thread-env` |
+| `config.yaml` | The settings below, and both plugins enabled |
 
 | Setting | Value | Effect |
 | --- | --- | --- |
@@ -465,6 +466,26 @@ setting is `draft`. Setting it to `direct` sends new drafts immediately.
 
 The terminal can still edit files, so keeping Hermes to conversation relies on
 `SOUL.md` and the skill.
+
+### How a session knows its bb thread
+
+bb starts `hermes acp` with `BB_THREAD_ID` and the other `BB_*` variables,
+but that process only shows the session. Commands run in the shared Hermes
+gateway, which has no `BB_*` variables. The `bb-thread-env` plugin sets
+`BB_THREAD_ID` for each command a session runs. It reads the id from the env
+of the session's `bb-bridge` MCP server, which bb creates for each thread and
+Hermes keeps with the session. It never exports the bridge's host, port, or
+token. It unsets `BB_PROJECT_ID`, `BB_ENVIRONMENT_ID`, and `BB_THREAD_STORAGE`,
+because the `bb` CLI finds them from the thread id.
+
+With `BB_THREAD_ID` set, `bb status` names the operator's thread. The
+`operator-handoff` skill parents each draft to it with
+`bb thread update <id> --parent-thread "$BB_THREAD_ID"`, so the operator
+receives each worker's completion message.
+
+The plugin reads the server list from the gateway's in-memory session state,
+which Hermes does not document for plugins. If `bb status` in an operator
+session shows `Thread: (not set)` after a Hermes update, check that state first.
 
 ## How mise applies each entry
 

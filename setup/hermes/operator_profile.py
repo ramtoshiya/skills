@@ -20,7 +20,7 @@ PSTACK_SKILLS = ("in-your-own-words", "why", "how", "interrogate", "statechart",
                  "technical-writing", "unslop")
 PSTACK_SKILL_DIR = "plugins/pstack-mode/skills"
 LOCAL_SKILLS = ("operator-handoff",)
-PLUGIN = "skill-drafts"
+PLUGINS = ("skill-drafts", "bb-thread-env")
 SOUL_BEGIN = "<!-- BEGIN ramtoshiya:operator -->"
 SOUL_END = "<!-- END ramtoshiya:operator -->"
 CONFIG = {
@@ -121,8 +121,7 @@ def main() -> None:
     if updated != current:
         soul.write_text(updated, encoding="utf-8")
 
-    plugin_dir = home / "plugins" / PLUGIN
-    sources_json = plugin_dir / "sources.json"
+    sources_json = home / "plugins" / "skill-drafts" / "sources.json"
     previous = {}
     if sources_json.is_file():
         previous = json.loads(sources_json.read_text(encoding="utf-8")).get("skills", {})
@@ -131,8 +130,10 @@ def main() -> None:
     values = {"MODE_MD": str(mode_md), "SOURCES_JSON": str(sources_json), "SKILLS_REPO": str(skills_repo)}
     installed = install_skills(skills_dir, pstack, skills_repo, values, previous)
 
-    shutil.rmtree(plugin_dir, ignore_errors=True)
-    shutil.copytree(HERE / "plugins" / PLUGIN, plugin_dir, ignore=shutil.ignore_patterns("__pycache__"))
+    for plugin in PLUGINS:
+        plugin_dir = home / "plugins" / plugin
+        shutil.rmtree(plugin_dir, ignore_errors=True)
+        shutil.copytree(HERE / "plugins" / plugin, plugin_dir, ignore=shutil.ignore_patterns("__pycache__"))
     sources = {
         "profile": profile,
         "modePath": str(mode_md),
@@ -146,12 +147,13 @@ def main() -> None:
 
     for key, value in CONFIG.items():
         run("hermes", "-p", profile, "config", "set", key, value)
-    run("hermes", "-p", profile, "plugins", "enable", PLUGIN, "--no-allow-tool-override")
+    for plugin in PLUGINS:
+        run("hermes", "-p", profile, "plugins", "enable", plugin, "--no-allow-tool-override")
 
     others = sorted(p.name for p in skills_dir.iterdir()
                     if p.is_dir() and not p.name.startswith(".") and p.name not in installed)
     print(f"hermes-operator: profile {profile} at {home} is the default profile")
-    print(f"hermes-operator: installed skills {', '.join(sorted(installed))} and plugin {PLUGIN}")
+    print(f"hermes-operator: installed skills {', '.join(sorted(installed))} and plugins {', '.join(PLUGINS)}")
     if others:
         print(f"hermes-operator: other skills in the profile, left in place: {', '.join(others)}")
 

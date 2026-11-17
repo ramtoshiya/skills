@@ -10,6 +10,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[3]
 PLUGIN = ROOT / "setup/hermes/plugins/skill-drafts/__init__.py"
 SETUP = ROOT / "setup/hermes/operator_profile.py"
+THREAD_ENV = ROOT / "setup/hermes/plugins/bb-thread-env/__init__.py"
 # Stands in for the bb CLI: lists one project and records the draft it was asked to create.
 FAKE_BB = f"""#!{sys.executable}
 import json, os, sys
@@ -97,6 +98,34 @@ class SkillDraftsHookTests(unittest.TestCase):
         self.assertEqual(result["action"], "block")
         self.assertIn("server down", result["message"])
         self.assertFalse(self.capture.exists())
+
+
+class BbThreadEnvTests(unittest.TestCase):
+    """The resolver Hermes calls when a session's command is spawned."""
+
+    def setUp(self):
+        self.plugin = load("bb_thread_env_under_test", THREAD_ENV)
+        bridge = {"name": "bb-bridge", "command": "node", "args": [], "env": [
+            {"name": "BB_ACP_DYNAMIC_TOOL_HOST", "value": "127.0.0.1"},
+            {"name": "BB_ACP_DYNAMIC_TOOL_PORT", "value": "5555"},
+            {"name": "BB_ACP_DYNAMIC_TOOL_TOKEN", "value": "secret-token"},
+            {"name": "BB_ACP_DYNAMIC_TOOL_THREAD_ID", "value": "thr_a"},
+        ]}
+        sessions = {"sess_a": [{"name": "github", "env": []}, bridge], "sess_plain": []}
+        self.enterContext(mock.patch.object(
+            self.plugin, "session_thread_id",
+            lambda sid: self.plugin.bridge_thread_id(sessions[sid]) if sid in sessions else None))
+
+    def test_bridge_session_gets_its_thread_and_nothing_else(self):
+        env = self.plugin.resolve("sess_a")
+
+        self.assertEqual(env, {"BB_THREAD_ID": "thr_a", "BB_PROJECT_ID": None,
+                               "BB_ENVIRONMENT_ID": None, "BB_THREAD_STORAGE": None})
+        self.assertNotIn("secret-token", json.dumps(env))
+
+    def test_session_without_bridge_unsets_thread_identity(self):
+        for sid in ("sess_plain", "sess_unknown"):
+            self.assertEqual(set(self.plugin.resolve(sid).values()), {None})
 
 
 class SoulBlockTests(unittest.TestCase):

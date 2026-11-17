@@ -56,6 +56,11 @@ EOF
   `@thread:<threadId>` and that sending it is the approval. `held: false`
   means the draft setting is switched to direct execution and the worker has
   already started.
+- Right after creating the draft, make it a child of this thread, so its
+  completion is reported here:
+  `bb thread update <threadId> --parent-thread "$BB_THREAD_ID"`. If you start
+  a thread with `bb thread spawn` instead, pass `--parent-self`. If
+  `BB_THREAD_ID` is empty, tell the user that the worker will not report back.
 - If `bb` fails, show the user the error and stop. Do not work around it.
 
 ## Never {:#never}
