@@ -1,15 +1,19 @@
 ---
 name: operator-handoff
-description: Hand implementation work or a skill change to a coding agent as a bb draft thread that the user approves by sending, and start read-only research as a bb thread without a draft. Use whenever the user wants something built, fixed, changed, or committed, when a skill should change, or when a question needs research or learning first.
+description: Hand implementation work or a skill change to a coding agent as a bb draft thread that the user approves by sending, send an approved task's unfinished steps back to its worker, and start read-only research as a bb thread without a draft. Use whenever the user wants something built, fixed, changed, or committed, when a skill should change, or when a question needs research or learning first.
 ---
 
 # Operator handoff {:#operator-handoff}
 
-You do not implement. Every implementation task and every skill change goes to
-a coding agent as a bb draft: a thread whose first message waits until the user
-sends it. Sending is the approval. Deleting the thread is the rejection.
-Read-only research needs no approval and runs as a thread right away, as
-the Research section below describes.
+You do not implement. Every new implementation task and every skill change
+goes to a coding agent as a bb draft: a thread whose first message waits until
+the user sends it. Sending is the approval. Deleting the thread is the
+rejection. The approval covers the whole outcome the brief describes,
+including the integration, installation, and verification it needs to take
+effect. Finishing those steps is part of the same task and needs no second
+draft, as Complete approved work below describes. Read-only research needs
+no approval and runs as a thread right away, as the Research section below
+describes.
 
 ## Skills you know {:#skills}
 
@@ -36,8 +40,14 @@ English and include, in this order:
    and the files, threads, or links involved. Quote the user where wording
    matters.
 4. Constraints: what must not change, deadlines, and the user's stated
-   preferences.
-5. Expected result: what done looks like and how the worker proves it.
+   preferences. Name each protected target exactly, such as the other
+   profiles an install must leave alone. Do not tell the worker to stop when
+   a convenient command is missing, such as one that cannot target a single
+   profile. Ask it to finish the approved target with the repository's
+   existing tools while keeping their validation, locks, and conflict checks.
+5. Expected result: what done looks like, including the integration,
+   installation, and verification the change needs to take effect where the
+   user meant it, and how the worker proves it.
 6. For a skill change, the observation that prompted it (what happened, in
    which session, why the skill fell short) and the proposed diff of the
    skill's files.
@@ -249,7 +259,9 @@ lost.
      step that runs in that checkout. When the output says its commits are not
      pushed or merged yet and the brief required that, keep the child.
 4. Tell the user what the result says and anything they will need from it
-   later, such as commits, links, and unfinished items.
+   later, such as commits, links, and unfinished items. When the unfinished
+   part is within the approved brief, continue it in the same turn as
+   Complete approved work describes.
 5. Run `bb thread archive <threadId>`. Then run
    `bb thread show <threadId> --json` and check that `thread.archivedAt` is
    set.
@@ -266,6 +278,38 @@ same turn. A per-brief workaround leaves every other worker exposed.
 Archive only children of this thread whose result you handled in this
 conversation. Leave other threads alone, even finished ones. To archive a
 kept child later, run these steps again. Never delete a thread.
+
+## Complete approved work {:#approved-work}
+
+A held draft is not approved yet. When a worker whose draft was sent reports
+its outcome unfinished, such as commits not pushed, a profile not
+reinstalled, or a check not run, and the rest stays within its brief, that
+rest belongs to the same worker:
+
+1. Query the worker's current state as Current state describes.
+2. Reread the brief you sent and the worker's full output. Find what stopped
+   it: your brief, the user, a failed check, or a missing tool. When your
+   brief imposed the stop, tell the user so. Do not attribute it to the user
+   or to a tool.
+3. Send the remaining steps to that worker with `bb thread tell <threadId>`,
+   passing the message through `--message-file -` and a quoted heredoc.
+   Restate the goal, what is left, and the targets it must leave alone. Ask
+   it to look for a safe way to finish with the existing tools before it
+   reports a blocker. Do not create a draft for these steps and do not ask
+   the user to approve them again. If the worker thread is archived or no
+   longer exists, tell the user and ask how to continue.
+
+A missing command option, such as one that targets a single profile, is not
+a blocker. Building that option is new scope. Finishing the approved target
+with the existing tools is not. These need the user before any worker acts,
+and new implementation scope still starts as a draft:
+
+- New scope, such as a feature, command, or change the brief did not ask for.
+- Authority the brief did not grant, such as publishing, a destructive or
+  costly-to-undo action, or changing a target the brief protected.
+- A conflict over a shared resource that another task holds.
+- A failed safety check, such as malformed managed-block markers or failed
+  validation. Report the check and its output. Never ask a worker to skip it.
 
 ## Never {:#never}
 

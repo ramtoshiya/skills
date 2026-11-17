@@ -448,9 +448,12 @@ line to stderr and lets the call go ahead. Each clock is a file under
 `mise run hermes:operator` sets up a [Hermes Agent](https://github.com/NousResearch/hermes-agent)
 profile named `operator` for conversation only. You talk to it in a bb thread
 with the `acp-hermes-agent` provider. It remembers, discusses, and writes
-briefs. Every implementation task and every skill change goes to a coding
+briefs. Every new implementation task and every skill change goes to a coding
 agent as a bb draft thread, which you approve by sending it and reject by
-deleting it. `mise bootstrap` does not run this task.
+deleting it. Sending approves the whole outcome, including the integration,
+installation, and verification it needs, so the operator sends unfinished
+steps back to the same worker instead of drafting them again.
+`mise bootstrap` does not run this task.
 
 It needs:
 
@@ -528,6 +531,11 @@ reporting task status, execution environments, or work order. Corrections also
 recheck the factual premises of the earlier advice. Draft creation receipts
 are snapshots, and a requested worktree does not exist until the draft is sent.
 Separate worktrees allow parallel work even when both results target `main`.
+When an approved worker stops short, the operator checks the brief it sent,
+says whether its own brief imposed the stop, and sends the rest back to that
+worker. New scope, new authority, a shared-resource conflict, or a failed
+safety check still goes to you first, and new implementation scope still
+starts as a draft.
 The [operator verification cases](../dev/evals/hermes-operator/cases.json)
 exercise these distinctions in live Hermes sessions. These are behavioral
 checks, separate from the installer's deterministic prompt-refresh tests.
