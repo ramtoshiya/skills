@@ -10,10 +10,9 @@ const CALL_TIMEOUT_MS = 15_000;
 const POLL_MS = 500;
 const LEDGER_GRACE_MS = 2_000;
 
-// What each BB provider needs. BB reports any ACP end_turn as a finished compaction, and Hermes
-// ends a noop or refused /compress with end_turn too, so Hermes also needs the committed compaction
-// that its self-compact plugin appends to the ledger. Hermes sends no completion notice for a
-// background helper, so the helper reports its own failure to the thread.
+// BB reports any ACP end_turn as a finished compaction, and Hermes ends a noop or refused /compress
+// with end_turn too, so Hermes also needs the committed compaction that its self-compact plugin
+// appends to the ledger.
 const PROVIDERS = {
   'claude-code': { ledger: false, failureNotice: false },
   'acp-hermes-agent': { ledger: true, failureNotice: true },
@@ -43,7 +42,7 @@ function parseRun(rest) {
   return { launchSeq: Number(rest[1]), turnId: rest[3], ...options };
 }
 
-const outcome = { compacted: false, phase: 'waiting-caller', resumeAttempted: false, reporting: false };
+const outcome = { compacted: false, phase: 'waiting-caller', resumeAttempted: false };
 let report = null;
 
 async function main() {
@@ -66,9 +65,8 @@ async function main() {
   }
   const deadline = Date.now() + DEADLINE_MS;
 
-  async function bb(args, input) {
-    // The failure report runs after the helper stopped, possibly past its deadline, so each of its calls gets the per-call limit.
-    const remaining = outcome.reporting ? CALL_TIMEOUT_MS : deadline - Date.now();
+  async function bb(args, input, { pastDeadline = false } = {}) {
+    const remaining = pastDeadline ? CALL_TIMEOUT_MS : deadline - Date.now();
     if (remaining <= 0) fail('Timed out waiting for BB compaction proof.');
     const stdout = await new Promise((resolve, reject) => {
       const child = execFile(cli, [...args, '--json'], {
@@ -279,12 +277,15 @@ async function main() {
   console.log(JSON.stringify({ compacted: true, resumeSent, evidence: proof }));
 }
 
+// A last line without its newline is still being written.
+function completeLines(text) {
+  return text.split('\n').slice(0, -1);
+}
+
 async function readLedger(path) {
   let text;
   try { text = await readFile(path, 'utf8'); } catch (error) { if (error.code === 'ENOENT') return []; throw error; }
-  const lines = text.split('\n');
-  lines.pop(); // A last line without its newline is still being written.
-  return lines.map(line => {
+  return completeLines(text).map(line => {
     let entry;
     try { entry = JSON.parse(line); } catch { fail('The compaction ledger has a malformed line.'); }
     if (!isObject(entry) || !nonempty(entry.kind) || !nonempty(entry.reason)) fail('The compaction ledger has a malformed entry.');
@@ -292,11 +293,8 @@ async function readLedger(path) {
   });
 }
 
-// The plugin appends one line per committed compaction of the session that started this run.
-// Entries before the baseline happened before the request. Exactly one new manual summarize
-// proves that this request compacted. None means a noop or refusal. More means the helper
-// cannot tell which one was its own. Hermes awaits the hook before it answers /compact, so the line
-// normally exists before BB records the turn. The grace only covers a slow write.
+// Hermes awaits the post_compaction hook before it answers /compact, so the ledger line normally
+// exists before BB records the turn. The grace only covers a slow write.
 async function requireLedgerEntry(path, baseline, deadline) {
   const until = Math.min(deadline, Date.now() + LEDGER_GRACE_MS);
   while (true) {
@@ -314,20 +312,18 @@ async function requireLedgerEntry(path, baseline, deadline) {
   }
 }
 
-// Tell the thread once that compaction failed, so its agent can continue. Never after a resume
-// attempt, whose delivery may be uncertain, never while a user decision is pending, and only into
-// an idle thread with nothing queued or pending, so that it cannot run ahead of other work.
 async function sendFailureNotice(error) {
   const { bb, threadId, note, resume } = report;
-  if (!resume || outcome.resumeAttempted) return false;
-  outcome.reporting = true;
+  const awaitingUser = !resume;
+  if (awaitingUser || outcome.resumeAttempted) return false;
+  const late = { pastDeadline: true };
   try {
-    const thread = (await bb(['thread', 'show', threadId]))?.thread;
-    const interactions = await bb(['thread', 'interactions', 'list', threadId]);
+    const thread = (await bb(['thread', 'show', threadId], undefined, late))?.thread;
+    const interactions = await bb(['thread', 'interactions', 'list', threadId], undefined, late);
     if (thread?.status !== 'idle' || thread.queuedMessageCount !== 0 || !Array.isArray(interactions) ||
         interactions.some(item => ['pending', 'resolving'].includes(item?.status))) return false;
     const text = `Self-compaction did not complete: ${error.message} No retry was made. The handoff note is kept at ${JSON.stringify(note)}. Read it with the self_compact tool's read action, continue the task, and schedule compaction again only at a later natural boundary.`;
-    const delivery = await bb(['thread', 'tell', threadId, '--mode', 'queue', '--message-file', '-'], text);
+    const delivery = await bb(['thread', 'tell', threadId, '--mode', 'queue', '--message-file', '-'], text, late);
     return isObject(delivery) && delivery.threadId === threadId && ['sent', 'queued'].includes(delivery.delivery);
   } catch {
     return false;
