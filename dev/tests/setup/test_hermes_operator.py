@@ -13,11 +13,21 @@ ROOT = Path(__file__).resolve().parents[3]
 PLUGIN = ROOT / "setup/hermes/plugins/skill-drafts/__init__.py"
 SETUP = ROOT / "setup/hermes/operator_profile.py"
 THREAD_ENV = ROOT / "setup/hermes/plugins/bb-thread-env/__init__.py"
-# Stands in for the bb CLI: lists one project and records the draft it was asked to create.
+# Stands in for the bb CLI: lists one project, records the draft it was asked to create, and
+# keeps the provider-acp plugin settings in $HOME/bb-provider-acp.json.
 FAKE_BB = f"""#!{sys.executable}
 import json, os, sys
+from pathlib import Path
 args = sys.argv[1:]
-if args[:2] == ["projects", "list"]:
+if args[:3] == ["plugin", "config", "provider-acp"]:
+    store = Path(os.environ["HOME"]) / "bb-provider-acp.json"
+    values = json.loads(store.read_text()) if store.exists() else {{"customAgents": ""}}
+    if args[3:4] == ["set"]:
+        values[args[4]] = args[5]
+        store.write_text(json.dumps(values))
+    else:
+        print(json.dumps({{"ok": True, "values": values}}))
+elif args[:2] == ["projects", "list"]:
     print(json.dumps([{{"id": "proj_skills", "sources": [{{"path": os.environ["REPO"]}}]}}]))
 elif args[:2] == ["draft", "create"]:
     if os.environ.get("FAIL"):
@@ -131,30 +141,59 @@ class BbThreadEnvTests(unittest.TestCase):
 
 
 # Stands in for the hermes CLI. A home's settings live in fake-config.json beside its skills/.
-# `skills opt-out --remove` deletes the skills its .bundled_manifest lists, like Hermes does.
-FAKE_HERMES = f"""#!{sys.executable}
-import json, os, shutil, sys
+# Bundled skills come from $FAKE_BUNDLED. `sync` follows tools/skills_sync.sync_skills, which
+# profile creation, `skills reset`, chat and gateway startup, and `hermes update` all run.
+FAKE_HERMES = """#!PYTHON
+import hashlib, json, os, shutil, sys
 from pathlib import Path
 args = sys.argv[1:]
 root = Path(os.environ["HOME"]) / ".hermes"
+bundled_root = Path(os.environ["FAKE_BUNDLED"])
+ESSENTIAL = {"hermes-agent"}
 with open(Path(os.environ["HOME"]) / "hermes-calls.jsonl", "a") as log:
     log.write(json.dumps(args) + "\\n")
 def home(name):
     return root if name == "default" else root / "profiles" / name
-def config(name):
-    path = home(name) / "fake-config.json"
-    return path, json.loads(path.read_text()) if path.exists() else {{}}
+def digest(directory):
+    return hashlib.sha256((directory / "SKILL.md").read_bytes()).hexdigest()[:8]
+def bundled():
+    return {md.parent.name: md.parent for md in bundled_root.rglob("SKILL.md")}
+def dest(h, name):
+    return h / "skills" / bundled()[name].relative_to(bundled_root)
+def manifest(h):
+    path = h / "skills/.bundled_manifest"
+    return dict(line.split(":", 1) for line in path.read_text().split()) if path.exists() else {}
+def save(h, entries):
+    (h / "skills/.bundled_manifest").write_text("".join(f"{k}:{v}\\n" for k, v in entries.items()))
+def sync(h):
+    # Opted-out homes get only essential skills. A tracked skill missing on disk was deleted by the user.
+    entries = manifest(h)
+    for name, source in bundled().items():
+        if (h / ".no-bundled-skills").exists() and name not in ESSENTIAL:
+            continue
+        target = dest(h, name)
+        if name not in entries:
+            if not target.exists():
+                shutil.copytree(source, target)
+            if digest(target) == digest(source):
+                entries[name] = digest(source)
+    save(h, entries)
 if args[0] == "profile":
     if args[1] == "show" and not home(args[2]).is_dir():
         sys.exit(1)
     if args[1] == "create":
         (home(args[2]) / "skills").mkdir(parents=True)
+        if "--no-skills" in args:
+            (home(args[2]) / ".no-bundled-skills").touch()
+        sync(home(args[2]))
     if args[1] == "use":
         (root / "active_profile").write_text(args[2])
     sys.exit(0)
 assert args[0] == "-p", args
 name, command = args[1], args[2:]
-path, values = config(name)
+h = home(name)
+path = h / "fake-config.json"
+values = json.loads(path.read_text()) if path.exists() else {}
 if command[:2] == ["config", "get"]:
     print(json.dumps(values.get(command[2], [])))
 elif command[:2] == ["config", "set"]:
@@ -164,20 +203,34 @@ elif command[:2] == ["config", "set"]:
         values[command[2]] = command[3]
 elif command[:2] == ["plugins", "enable"]:
     values.setdefault("plugins.enabled", []).append(command[2])
-elif command[:2] == ["skills", "opt-out"] and "--remove" in command:
-    skills = home(name) / "skills"
-    manifest = skills / ".bundled_manifest"
-    bundled = {{line.split(":")[0] for line in manifest.read_text().split()}} if manifest.exists() else set()
-    for skill_md in list(skills.rglob("SKILL.md")):
-        if skill_md.parent.name in bundled:
-            shutil.rmtree(skill_md.parent)
-    (home(name) / ".no-bundled-skills").touch()
+elif command[:2] == ["skills", "opt-out"]:
+    (h / ".no-bundled-skills").touch()
+    if "--remove" in command:
+        entries = manifest(h)
+        for skill_name, origin in list(entries.items()):
+            target = dest(h, skill_name)
+            if not target.exists():
+                del entries[skill_name]
+            elif digest(target) == origin:
+                shutil.rmtree(target)
+                del entries[skill_name]
+        save(h, entries)
+elif command[:2] == ["skills", "reset"]:
+    if "--restore" in command:
+        shutil.rmtree(dest(h, command[2]), ignore_errors=True)
+    entries = manifest(h)
+    entries.pop(command[2], None)
+    save(h, entries)
+    sync(h)
+elif command == ["sync"]:
+    sync(h)
 path.parent.mkdir(parents=True, exist_ok=True)
 path.write_text(json.dumps(values))
-"""
-SUPPORT_DIRS = {"references", "scripts", "templates", "assets"}
+""".replace("PYTHON", sys.executable)
 PSTACK_ALLOWED = ["in-your-own-words", "why", "how", "interrogate", "statechart", "technical-writing", "unslop"]
 CC_DESCRIPTION = "Skills that only work in Claude Code."
+SUPPORT_DIRS = {"references", "scripts", "templates", "assets"}
+OTHER_AGENT = {"id": "claude-local", "displayName": "Claude (ACP)", "command": "/opt/claude-acp", "args": []}
 
 
 def git(*args, cwd):
@@ -210,21 +263,50 @@ def under(prefix, files):
     return {f"{prefix}/{name}": text for name, text in files.items()}
 
 
-def skill_dirs(home):
-    """Skill name -> directories, from the roots a profile reads and that bb's Hermes catalog reads:
-    the home's skills/ and its skills.external_dirs."""
-    config = home / "fake-config.json"
-    external = json.loads(config.read_text()).get("skills.external_dirs", []) if config.exists() else []
+def config(home):
+    path = home / "fake-config.json"
+    return json.loads(path.read_text()) if path.exists() else {}
+
+
+def runtime_skills(home):
+    """Skill name -> directories a Hermes session in this home loads: skills/ and skills.external_dirs
+    without hidden and support directories, plus each enabled plugin's hermes/skills under its name."""
     found = {}
-    for root in [home / "skills", *map(Path, external)]:
+    for root in [home / "skills", *map(Path, config(home).get("skills.external_dirs", []))]:
         for skill_md in root.rglob("SKILL.md"):
-            if SUPPORT_DIRS.isdisjoint(skill_md.relative_to(root).parts[:-1]):
+            parts = skill_md.relative_to(root).parts[:-1]
+            if SUPPORT_DIRS.isdisjoint(parts) and not any(part.startswith(".") for part in parts):
                 found.setdefault(skill_md.parent.name, []).append(skill_md.parent)
+    for plugin in config(home).get("plugins.enabled", []):
+        for skill_md in (home / "plugins" / plugin / "hermes/skills").glob("*/SKILL.md"):
+            found.setdefault(f"{plugin}:{skill_md.parent.name}", []).append(skill_md.parent)
     return found
 
 
+def bb_catalog(user_home):
+    """Skill names bb lists for acp-hermes-agent. The shipped resolver reads the default home's
+    skills/ and skills.external_dirs. A customAgents entry with id hermes-agent adds its user roots,
+    resolved from the user's home, with an optional name prefix."""
+    def scan(root, prefix="", recursive=True):
+        found = root.rglob("SKILL.md") if recursive else root.glob("*/SKILL.md")
+        return {prefix + md.parent.name for md in found} if root.is_dir() else set()
+
+    base = user_home / ".hermes"
+    names = scan(base / "skills")
+    for extra in config(base).get("skills.external_dirs", []):
+        names |= scan(Path(extra))
+    settings = user_home / "bb-provider-acp.json"
+    agents = json.loads(json.loads(settings.read_text())["customAgents"] or "[]") if settings.exists() else []
+    for agent in agents:
+        if agent["id"] == "hermes-agent":
+            for root in agent.get("nativeSkillRoots", {}).get("user", []):
+                root = {"path": root} if isinstance(root, str) else root
+                names |= scan(user_home / root["path"], root.get("namePrefix", ""), root.get("recursive", False))
+    return names
+
+
 class OperatorProfileSetupTests(unittest.TestCase):
-    """Runs the real setup script from a fixture checkout against a fake hermes."""
+    """Runs the real setup script from a fixture checkout against a fake hermes and bb."""
 
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
@@ -235,9 +317,13 @@ class OperatorProfileSetupTests(unittest.TestCase):
         self.repo = self.tmp / "skills"
         bin_dir = self.tmp / "bin"
         bin_dir.mkdir()
-        (bin_dir / "hermes").write_text(FAKE_HERMES)
-        (bin_dir / "hermes").chmod(0o755)
-        self.env = {"HOME": str(self.home), "XDG_STATE_HOME": str(self.state),
+        for name, script in {"hermes": FAKE_HERMES, "bb": FAKE_BB}.items():
+            (bin_dir / name).write_text(script)
+            (bin_dir / name).chmod(0o755)
+        bundled = self.tmp / "bundled"
+        write_tree(bundled, {**under("research", skill("arxiv")), **under("apple", skill("apple-notes")),
+                             **under("autonomous-ai-agents", skill("hermes-agent"))})
+        self.env = {"HOME": str(self.home), "XDG_STATE_HOME": str(self.state), "FAKE_BUNDLED": str(bundled),
                     "PATH": os.pathsep.join([str(bin_dir), str(Path(shutil.which("git")).parent), "/usr/bin", "/bin"])}
 
         self.pstack = self.tmp / "pstack"
@@ -274,8 +360,9 @@ class OperatorProfileSetupTests(unittest.TestCase):
         })
         self.operator = self.home / ".hermes/profiles/operator"
         self.default = self.home / ".hermes"
-        bundled = {**skill("arxiv"), **skill("apple-notes"), ".bundled_manifest": "arxiv:1\napple-notes:2\n"}
-        write_tree(self.default / "skills", bundled)
+        self.default.mkdir(parents=True)
+        self.hermes("profile", "create", "default")
+        (self.home / "bb-provider-acp.json").write_text(json.dumps({"customAgents": json.dumps([OTHER_AGENT])}))
 
     def pinned(self, repo, files):
         """A third-party source fetched by agents:sync at its approved commit."""
@@ -286,77 +373,103 @@ class OperatorProfileSetupTests(unittest.TestCase):
         git("clone", "-q", str(upstream), str(target), cwd=self.tmp)
         return sha
 
+    def hermes(self, *args):
+        subprocess.run([str(self.tmp / "bin/hermes"), *args], env=self.env, check=True)
+
     def setup_profile(self):
         result = subprocess.run([sys.executable, str(self.repo / "setup/hermes/operator_profile.py"),
                                  "--pstack", str(self.pstack)], env=self.env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         return result.stdout
 
+    def start_hermes(self):
+        """What the first chat or gateway start, and every `hermes update`, do to each home."""
+        for profile in ("operator", "default"):
+            self.hermes("-p", profile, "sync")
+
     def expected(self):
-        return {"read-x", "self-compact", "grilling", "operator-handoff", *PSTACK_ALLOWED}
+        return {"read-x", "self-compact", "grilling", "operator-handoff", *PSTACK_ALLOWED, "korean-pack:korean"}
 
     def test_operator_knows_every_repository_skill_without_bundled_ones(self):
-        write_tree(self.operator / "skills", {**skill("apple-notes"), ".bundled_manifest": "apple-notes:2\n",
-                                              **skill("my-hub-skill")})
-
         self.setup_profile()
+        self.start_hermes()
 
-        skills = skill_dirs(self.operator)
-        self.assertEqual(set(skills), self.expected() | {"my-hub-skill"})
+        skills = runtime_skills(self.operator)
+        self.assertEqual(set(skills), self.expected())
         self.assertTrue((skills["self-compact"][0] / "scripts/compact.mjs").is_file())
         self.assertTrue((skills["grilling"][0] / "references/rounds.md").is_file())
-        config = json.loads((self.operator / "fake-config.json").read_text())
-        self.assertIn("korean-pack", config["plugins.enabled"])
-        package = self.operator / "plugins/korean-pack"
-        self.assertTrue((package / "hermes/skills/korean/SKILL.md").is_file())
-        self.assertTrue((package / "scripts/check.py").is_file())
-        self.assertEqual(config["skills.auto_load"], ["operator-handoff"])
-        self.assertEqual(config["agent.disabled_toolsets"], ["file", "code_execution"])
-        self.assertFalse(config["memory.write_approval"])
+        self.assertTrue((self.operator / "plugins/korean-pack/scripts/check.py").is_file())
+        settings = config(self.operator)
+        self.assertEqual(settings["skills.auto_load"], ["operator-handoff"])
+        self.assertEqual(settings["agent.disabled_toolsets"], ["file", "code_execution"])
+        self.assertFalse(settings["memory.write_approval"])
         handoff = (skills["operator-handoff"][0] / "SKILL.md").read_text()
         self.assertIn(CC_DESCRIPTION, handoff)
         self.assertIn("`self-compact`", handoff)
+        self.assertIn("`korean-pack:korean`", handoff)
 
-    def test_bb_catalog_lists_the_operator_skills(self):
-        """bb reads the default home's skills/ and its skills.external_dirs, not the sticky profile."""
+    def test_bb_lists_what_the_operator_loads(self):
+        self.setup_profile()
+        self.start_hermes()
+
+        self.assertEqual(bb_catalog(self.home), set(runtime_skills(self.operator)))
+        self.assertEqual(set(runtime_skills(self.default)), set())
+        self.assertNotIn("skills.external_dirs", config(self.default))
+        agents = json.loads(json.loads((self.home / "bb-provider-acp.json").read_text())["customAgents"])
+        self.assertEqual(agents[0], OTHER_AGENT)
+        self.assertEqual([a["args"] for a in agents if a["id"] == "hermes-agent"], [["-p", "operator", "acp"]])
+
+    def test_pstack_skills_stay_where_and_what_they_were(self):
+        native = self.operator / "plugins/pstack-mode/plugin.yaml"
+        write_tree(native.parent, {"plugin.yaml": "name: pstack-mode\n", "__init__.py": "\n"})
         self.setup_profile()
 
-        self.assertEqual((self.default / "active_profile").read_text(), "operator")
-        self.assertEqual(set(skill_dirs(self.default)), set(skill_dirs(self.operator)))
-        self.assertEqual(set(skill_dirs(self.default)), self.expected())
+        for name in PSTACK_ALLOWED:
+            installed = self.operator / "skills" / name / "SKILL.md"
+            self.assertEqual(installed.read_text(),
+                             (self.pstack / "plugins/pstack-mode/skills" / name / "SKILL.md").read_text())
+        self.assertFalse((self.operator / "skills/tdd").exists())
+        self.assertEqual(native.read_text(), "name: pstack-mode\n")
 
     def test_rerun_converges_on_the_marketplace_selection(self):
-        old_copy = self.operator / "skills/unslop"
-        write_tree(old_copy, {"SKILL.md": "---\nname: unslop\n---\nOld.\n"})
-        write_tree(self.operator / "plugins/skill-drafts", {"sources.json": json.dumps(
-            {"skills": {"unslop": {"repo": str(self.pstack), "path": "x", "installed": str(old_copy)}}})})
-        self.operator.joinpath("skills").mkdir(exist_ok=True)
         self.setup_profile()
+        self.start_hermes()
         self.setup_profile()
+        self.start_hermes()
 
-        for home in (self.operator, self.default):
-            skills = skill_dirs(home)
-            self.assertEqual(set(skills), self.expected())
-            self.assertEqual([name for name, dirs in skills.items() if len(dirs) > 1], [])
+        skills = runtime_skills(self.operator)
+        self.assertEqual(set(skills), self.expected())
+        self.assertEqual([name for name, dirs in skills.items() if len(dirs) > 1], [])
+        self.assertEqual(bb_catalog(self.home), self.expected())
+        agents = json.loads(json.loads((self.home / "bb-provider-acp.json").read_text())["customAgents"])
+        self.assertEqual([a["id"] for a in agents], ["claude-local", "hermes-agent"])
 
-        self.marketplace["plugins"] = [p for p in self.marketplace["plugins"] if p["name"] != "grill-pack"]
+        self.marketplace["plugins"] = [p for p in self.marketplace["plugins"] if p["name"] not in {"grill-pack", "korean-pack"}]
         commit_repo(self.repo, {".claude-plugin/marketplace.json": json.dumps(self.marketplace)})
         self.setup_profile()
 
-        self.assertEqual(set(skill_dirs(self.operator)), self.expected() - {"grilling"})
-        self.assertEqual(set(skill_dirs(self.default)), self.expected() - {"grilling"})
+        expected = self.expected() - {"grilling", "korean-pack:korean"}
+        self.assertEqual(set(runtime_skills(self.operator)), expected)
+        self.assertEqual(bb_catalog(self.home), expected)
+
+    def test_plugin_package_named_differently_from_its_entry_stops_setup(self):
+        self.marketplace["plugins"][3]["name"] = "korean"
+        commit_repo(self.repo, {".claude-plugin/marketplace.json": json.dumps(self.marketplace)})
+
+        result = subprocess.run([sys.executable, str(self.repo / "setup/hermes/operator_profile.py"),
+                                 "--pstack", str(self.pstack)], env=self.env, capture_output=True, text=True)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("korean-pack", result.stderr)
 
     def test_skill_change_draft_names_the_owning_source(self):
         self.setup_profile()
         sources = self.operator / "plugins/skill-drafts/sources.json"
-        bb = self.tmp / "bin/bb"
-        bb.write_text(FAKE_BB)
-        bb.chmod(0o755)
         capture = self.tmp / "capture.json"
         hook = load("skill_drafts_installed", self.operator / "plugins/skill-drafts/__init__.py")
         self.enterContext(mock.patch.object(hook, "SOURCES", sources))
         self.enterContext(mock.patch.dict(os.environ, {
-            "BB_CLI": str(bb), "REPO": str(self.repo), "CAPTURE": str(capture)}))
+            "BB_CLI": str(self.tmp / "bin/bb"), "REPO": str(self.repo), "CAPTURE": str(capture)}))
         grill_sha = self.marketplace["plugins"][2]["source"]["sha"]
 
         hook.on_pre_tool_call(tool_name="skill_manage", session_id="sess_1", args={
