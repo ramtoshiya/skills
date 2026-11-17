@@ -17,7 +17,7 @@ bb plugin install . --yes
 
 ## Approve from the thread header
 
-Open the draft's thread. On a window or pane 768 CSS pixels wide or wider,
+Open the draft's thread. In a window 768 CSS pixels wide or wider,
 **Run draft** is a button in the thread header, after the workspace's
 **Open** button. It needs no hover, so it works with a mouse and on touch
 screens such as an iPad.
@@ -26,8 +26,8 @@ On narrower screens, such as a phone, and in narrow split panes, BB moves
 header buttons into the header's **Thread actions** menu (`···`). Tap `···`
 and choose **Run draft** at the top of the menu. In BB 0.49 that menu also
 lists the menu-entry version of **Run draft**, so the label appears twice.
-Both entries approve the same message. The plugin cannot hide either copy,
-because BB does not tell a thread action which menu shows it. The 768-pixel
+Both entries approve the same message. The plugin cannot tell the two copies
+apart, because BB does not tell a thread action which menu shows it. The 768-pixel
 width is BB 0.49's phone breakpoint. The plugin does not set it.
 
 ## Show the button on sidebar rows
@@ -54,9 +54,8 @@ Point at a draft's row and click the play button to approve its queued
 message.
 
 Every **Run draft** control sends the message without a confirmation dialog
-and without navigation. A toast distinguishes a
-sent message from an approved message that still waits for its workspace or
-another BB prerequisite.
+and without navigation. A toast distinguishes a sent message from an approved
+message that still waits for its workspace or another BB prerequisite.
 
 ## Eligible drafts
 
@@ -124,10 +123,10 @@ The check creates one temporary draft for each of four cases:
 - The **Thread actions** menu on a 390 by 844 touch screen. The check reports
   how many **Run draft** entries the menu lists and taps the first.
 
-Each case holds the request until the control shows its pending state where
-the control stays on screen. It then checks that exactly one request carries
-the displayed target, and that the original message leaves the Held Drafts
-wait without navigation or replacement messages. It waits for the expected
+In the two header cases, the check holds the request until the button shows
+**Sending draft…** and is disabled. In every case, it checks that exactly one
+request carries the displayed target, and that the original message leaves
+the Held Drafts wait without navigation or replacement messages. It waits for the expected
 Claude Haiku 5.5 reply and for the control to disappear. The check deletes its
 test threads even on failure. It does not approve existing drafts or download
 a browser. Touch emulation in Chromium is not a physical iPad.

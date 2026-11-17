@@ -45,7 +45,7 @@ async function openPage(device, path = "") {
 }
 
 const openThread = (device, target) => openPage(device, `/projects/${projectId}/threads/${target.threadId}`);
-const headerButton = (page) => page.locator('[data-thread-action="draft-quick-actions/run-draft-header"]');
+const headerButton = (page, label = /^(Run draft|Sending draft…)$/) => page.locator("[data-thread-header-responsive-action] button", { hasText: label });
 const threadMenu = (page) => page.getByRole("button", { name: "Thread actions" });
 
 async function holdRunDraft(page) {
@@ -122,18 +122,15 @@ async function headerButtonCase(device, name) {
   const session = await openThread(device, target);
   const { page } = session;
   const button = headerButton(page);
-  await button.waitFor({ state: "visible" });
-  assert.equal(await button.textContent(), "Run draft");
+  await headerButton(page, "Run draft").waitFor({ state: "visible" });
   const hover = await page.evaluate(() => matchMedia("(hover: hover)").matches);
   assert.equal(hover, device.hasTouch !== true, "The emulated device has the wrong hover capability.");
   const startingUrl = page.url();
   const hold = await holdRunDraft(page);
   if (device.hasTouch) await button.tap();
   else await button.click();
-  await page.waitForFunction(() => {
-    const element = document.querySelector('[data-thread-action="draft-quick-actions/run-draft-header"]');
-    return element?.textContent === "Sending draft…" && element.disabled;
-  });
+  await headerButton(page, "Sending draft…").waitFor({ state: "visible" });
+  assert.equal(await button.isDisabled(), true, "The header button must be disabled while its request is pending.");
   hold.release();
   const kind = await expectApproved(target, hold, session, startingUrl);
   await button.waitFor({ state: "detached" });

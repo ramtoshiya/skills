@@ -28,12 +28,12 @@ no hover. Do not suggest hovering a sidebar row or touching and holding it.
 Touch screens hide sidebar quick-action buttons. On an iPad, touching and
 holding a sidebar row can start a drag instead of opening its menu.
 
-In BB 0.49, a window or pane narrower than 768 CSS pixels, such as a phone,
-moves header buttons into the header's `···` menu. Tell the person to tap
+In BB 0.49, a window narrower than 768 CSS pixels, such as a phone, or a
+narrow split pane moves header buttons into the header's `···` menu. Tell the person to tap
 `···` and choose **Run draft** at the top. That menu also lists the menu entry,
 so **Run draft** appears twice there. Both entries approve the same message.
-The plugin cannot hide either copy, because BB does not tell a thread action
-which menu shows it.
+The plugin cannot tell the two copies apart, because BB does not tell a
+thread action which menu shows it.
 
 ## Missing button {:#missing-button}
 
