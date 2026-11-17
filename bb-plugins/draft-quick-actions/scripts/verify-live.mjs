@@ -28,32 +28,34 @@ try {
   assert.equal(before.length, 1);
   const originalMessageId = before[0].id;
   assert.equal(before[0].waitingOn?.pluginId, "held-drafts");
-  const extra = bb(["thread", "queue", "create", threadId, "Temporary scheduled message for draft-action verification."]);
-  assert.ok(extra.id, "The additional message did not return a queue ID.");
-  const scheduled = bb(["thread", "queue", "update", threadId, extra.id, "--send-at", "1h"]);
-  assert.equal(scheduled.waitingOn?.kind, "time", "The extra message must wait on its schedule rather than Held Drafts.");
   bb(["thread", "pin", threadId]);
   browser = await chromium.launch({ executablePath, headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  const mixedQueueRead = page.waitForResponse(async (response) => {
-    if (!response.url().includes("/api/") || !response.ok()) return false;
-    try {
-      const body = await response.json();
-      return Array.isArray(body) && body.some((message) => message.id === extra.id && message.threadId === threadId);
-    } catch {
-      return false;
-    }
-  });
   await page.goto(serverUrl);
-  await mixedQueueRead;
   await page.locator("[data-sidebar-thread-id]").first().waitFor();
   const row = page.locator(`[data-sidebar-thread-id="${threadId}"]`).first();
   await row.scrollIntoViewIfNeeded();
   await row.hover();
   const button = row.locator("xpath=../..").getByRole("button", { name: "Run draft", exact: true });
-  assert.equal(await button.count(), 0, "A draft with an extra scheduled message must not offer Run draft.");
+  await button.waitFor({ state: "visible" });
+  const extra = bb(["thread", "queue", "create", threadId, "Temporary scheduled message for draft-action verification."]);
+  assert.ok(extra.id, "The additional message did not return a queue ID.");
+  const mixedQueueRead = page.waitForResponse(async (response) => {
+    if (!response.url().includes("/api/") || !response.ok()) return false;
+    try {
+      const body = await response.json();
+      return Array.isArray(body) && body.some((message) => message.id === extra.id && message.threadId === threadId && message.waitingOn?.kind === "time");
+    } catch {
+      return false;
+    }
+  });
+  const scheduled = bb(["thread", "queue", "update", threadId, extra.id, "--send-at", "1h"]);
+  assert.equal(scheduled.waitingOn?.kind, "time", "The extra message must wait on its schedule rather than Held Drafts.");
+  await mixedQueueRead;
+  await button.waitFor({ state: "detached" });
+  assert.equal(await row.isVisible(), true, "The draft row disappeared rather than updating its action.");
   bb(["thread", "queue", "delete", threadId, extra.id]);
   await button.waitFor({ state: "visible" });
   const startingUrl = page.url();
