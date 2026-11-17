@@ -146,9 +146,12 @@ lost.
    - The child and every unarchived descendant have `thread.status` `idle`
      and an empty queue. An idle thread with an empty queue is not enough by
      itself. The output must also report the task finished.
-   - For the child and each descendant whose `environment.managed` is true,
-     `bb git status <environmentId> --json` reports
-     `hasUncommittedChanges: false`.
+   - For the child and each descendant whose `environment.isGitRepo` is
+     true, `bb git status <environmentId> --json` reports
+     `hasUncommittedChanges: false`. A personal workspace is not a Git
+     repository and has no such status. A research worker's final message is
+     its deliverable, so this check passes for it unless the output names a
+     file in the workspace that is still needed.
    - Nothing that is still to happen needs the workspace, such as the user's
      review of its diff, a follow-up message to the child, or an integration
      step that runs in that checkout. When the output says its commits are not

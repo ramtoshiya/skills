@@ -591,7 +591,7 @@ and then archive the child in the same turn, so finished workers leave the
 sidebar without a separate cleanup request. Hermes first checks the child and
 all its descendants again. It keeps a child whose output is a question, error,
 or partial result. It also keeps one that is not idle, has queued messages,
-has a managed workspace with uncommitted changes, or whose workspace is still
+has a Git workspace with uncommitted changes, or whose workspace is still
 needed for review or integration. Archiving keeps the history and archives
 every descendant. bb removes a managed worktree after a grace window but keeps
 its branch. This is an instruction Hermes follows, not a background job. A
