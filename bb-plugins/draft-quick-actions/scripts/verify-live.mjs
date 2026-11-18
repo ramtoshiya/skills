@@ -122,7 +122,7 @@ async function headerButtonCase(device, name) {
   const session = await openThread(device, target);
   const { page } = session;
   const button = headerButton(page);
-  await headerButton(page, "Run draft").waitFor({ state: "visible" });
+  await headerButton(page, /^Run draft$/).waitFor({ state: "visible" });
   const hover = await page.evaluate(() => matchMedia("(hover: hover)").matches);
   assert.equal(hover, device.hasTouch !== true, "The emulated device has the wrong hover capability.");
   const startingUrl = page.url();

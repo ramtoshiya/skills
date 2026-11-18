@@ -1,24 +1,48 @@
 ---
 name: draft-quick-actions
-description: Explain or troubleshoot the Run draft header button, thread menu entry, and sidebar button for Held Drafts messages in BB, including approval on an iPad or phone.
+description: Explain or troubleshoot the Run draft and Run draft on… header buttons, thread menu entries, and sidebar button for Held Drafts messages in BB, including approval on an iPad or phone and running a draft on another provider's model.
 ---
 
 # Draft quick actions {:#draft-quick-actions}
 
-This plugin adds **Run draft** in two registrations that share one eligibility
-check and one `runDraft` RPC:
+This plugin adds **Run draft** and **Run draft on…** in four registrations
+that share one eligibility check and one `runDraft` RPC:
 
 - `draft-quick-actions/run-draft` is a thread menu entry. It appears in the
   thread header's **Thread actions** menu (`···`), sidebar row menus, and the
   quick-action picker. It is the key for a sidebar quick-action slot.
 - `draft-quick-actions/run-draft-header` is a button in the open draft's
   thread header. It never appears in the quick-action picker.
+- `draft-quick-actions/run-draft-on` and
+  `draft-quick-actions/run-draft-on-header` are the menu entry and header
+  button for **Run draft on…**. Both open one dialog with BB's provider and
+  model picker.
+
+## Model choice {:#model-choice}
+
+In the **Run draft on…** dialog, a model from the draft's own provider updates
+the queued message's model, reasoning level, and service tier, then sends it
+on the same thread. BB 0.49 cannot change a thread's provider, so a model from
+another provider starts a new thread on that provider and deletes the draft.
+The new thread has a new ID and keeps the prompt, title, parent thread, parent
+notification setting, project, section, permission mode, and the environment
+request that Held Drafts saved in its plugin metadata. The app opens it. A
+draft without that saved environment cannot move to another provider. Tell the
+person to recreate it with `bb draft create` or pick a model from the draft's
+own provider.
+
+Plain **Run draft** on a message whose model the draft's provider does not
+offer moves the draft to the one other enabled provider that offers the model.
+With no such provider or several, it sends nothing and asks for
+**Run draft on…**. BB's own **Send now** always uses the draft's original
+provider, so it cannot run another provider's model.
 
 ## Approval {:#approval}
 
-The person's click or tap approves the existing queued message. Do not invoke
-`runDraft` RPC or send a real held draft on the person's behalf without
-explicit authorization for that draft. Creating a draft does not approve it.
+The person's click or tap approves the existing queued message on the model
+the person picks. Do not invoke `runDraft` RPC or send a real held draft on
+the person's behalf without explicit authorization for that draft. Creating
+a draft does not approve it.
 
 ## Touch screens {:#touch-screens}
 
@@ -30,8 +54,9 @@ holding a sidebar row can start a drag instead of opening its menu.
 
 In BB 0.49, a window narrower than 768 CSS pixels, such as a phone, or a
 narrow split pane moves header buttons into the header's `···` menu. Tell the person to tap
-`···` and choose **Run draft** at the top. That menu also lists the menu entry,
-so **Run draft** appears twice there. Both entries approve the same message.
+`···` and choose **Run draft** or **Run draft on…** at the top. That menu also
+lists the menu entries, so each label appears twice there. Both copies of an
+action do the same thing.
 The plugin cannot tell the two copies apart, because BB does not tell a
 thread action which menu shows it.
 

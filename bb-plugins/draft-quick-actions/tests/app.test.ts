@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
-import { createElement } from "react";
+import { Fragment, createElement } from "react";
 import { JSDOM } from "jsdom";
 import { makeQueueEntry } from "@get-bb/plugin-sdk/testing";
 
@@ -17,11 +17,12 @@ after(() => dom.window.close());
 
 const { loadPluginApp, renderSlot } = await import("@get-bb/plugin-sdk/testing/app");
 const { useSdk, useBbNavigate } = await import("@get-bb/plugin-sdk/app");
-const { act } = await import("@testing-library/react");
+const { act, fireEvent } = await import("@testing-library/react");
 const app = await loadPluginApp(() => import("../app.ts"));
 const actions = new Map(app.threadActions.map((registration) => [registration.id, registration]));
 const action = actions.get("run-draft");
 const header = app.threadActions.filter((registration) => registration.placement === "header");
+const Overlay = app.appOverlays[0].component;
 const target = { threadId: "draft-thread", queuedMessageId: "draft-message", updatedAt: 10 };
 const draft = () => makeQueueEntry({
   id: target.queuedMessageId,
@@ -45,12 +46,14 @@ function Row({ registration }) {
   }, item.label);
 }
 
-test("Run draft keeps its sidebar quick-action key as a menu action and adds one header action", () => {
+test("Run draft keeps its sidebar quick-action key as a menu action, and both actions also appear in the header", () => {
   assert.equal(action.placement ?? "menu", "menu", "draft-quick-actions/run-draft is the sidebar quick-action key and must stay a menu action.");
-  assert.equal(header.length, 1);
+  assert.equal(actions.get("run-draft-on").placement ?? "menu", "menu");
+  assert.deepEqual(header.map((registration) => registration.id).sort(), ["run-draft-header", "run-draft-on-header"]);
+  assert.equal(app.appOverlays.length, 1);
 });
 
-for (const [surface, registration] of [["menu", action], ["header", header[0]]]) {
+for (const [surface, registration] of [["menu", action], ["header", actions.get("run-draft-header")]]) {
   test(`one ${surface} Run draft click sends the displayed target and blocks a second click`, async (t) => {
     let release;
     const completed = new Promise((resolve) => { release = resolve; });
@@ -123,4 +126,73 @@ test("queue events and reconnection update the button, and unmount disposes subs
   assert.equal(slot.queryByRole("button"), null);
   slot.lifecycle.unmount();
   assert.deepEqual(disposed.sort(), ["realtime:connection", "thread:changed"]);
+});
+
+function renderChooser(t, registration, { runDraft = async () => ({ kind: "sent" }) } = {}) {
+  const calls = [];
+  const slot = renderSlot({
+    component: () => createElement(Fragment, null, createElement(Row, { registration }), createElement(Overlay)),
+  }, {}, {
+    sdk: {
+      subscribe: () => () => {},
+      threads: {
+        queue: { list: async () => [draft()] },
+        get: async ({ threadId }) => ({ id: threadId, providerId: "claude-code" }),
+      },
+    },
+    providers: { status: "ready", providers: [{ id: "codex", displayName: "Codex" }] },
+    rpc: { runDraft: async (input) => { calls.push(input); return runDraft(input); } },
+  });
+  t.after(() => slot.lifecycle.unmount());
+  const open = async () => {
+    const button = await slot.findByRole("button", { name: "Run draft on…" });
+    await act(async () => button.click());
+    await slot.findByLabelText("Provider ID");
+    return slot.getByRole("dialog", { name: "Run draft on…" });
+  };
+  return { slot, calls, open };
+}
+
+for (const [surface, id] of [["menu", "run-draft-on"], ["header", "run-draft-on-header"]]) {
+  test(`the ${surface} Run draft on… action opens the chooser on the draft's provider and model`, async (t) => {
+    const { slot, calls, open } = renderChooser(t, actions.get(id));
+    await open();
+    assert.equal(slot.getByLabelText("Provider ID").value, "claude-code");
+    assert.equal(slot.getByLabelText("Model").value, "test-model");
+    await act(async () => slot.getByRole("button", { name: "Cancel" }).click());
+    assert.equal(slot.queryByRole("dialog"), null);
+    assert.deepEqual(calls, []);
+  });
+}
+
+test("Run sends the picked model and opens the new thread when the draft moves to another provider", async (t) => {
+  const { slot, calls, open } = renderChooser(t, actions.get("run-draft-on-header"), {
+    runDraft: async () => ({ kind: "replaced", threadId: "new-thread" }),
+  });
+  const dialog = await open();
+  assert.doesNotMatch(dialog.textContent, /deletes this draft/);
+  fireEvent.change(slot.getByLabelText("Provider ID"), { target: { value: "codex" } });
+  fireEvent.change(slot.getByLabelText("Model"), { target: { value: "gpt-6-luna" } });
+  await act(async () => slot.getByRole("button", { name: "Apply execution selection" }).click());
+  assert.match(dialog.textContent, /new Codex thread.*deletes this draft/);
+  await act(async () => slot.getByRole("button", { name: "Run" }).click());
+  assert.deepEqual(calls, [{
+    ...target,
+    execution: { providerId: "codex", model: "gpt-6-luna", reasoningLevel: "medium", serviceTier: "default" },
+  }]);
+  assert.deepEqual(slot.inspection.navigateCalls, [{ method: "toThread", threadId: "new-thread" }]);
+  assert.equal(slot.queryByRole("dialog"), null);
+});
+
+test("Escape and a tap outside the chooser close it without running the draft", async (t) => {
+  const { slot, calls, open } = renderChooser(t, actions.get("run-draft-on"));
+  await open();
+  fireEvent.keyDown(document, { key: "Escape" });
+  assert.equal(slot.queryByRole("dialog"), null);
+  const dialog = await open();
+  fireEvent.click(dialog);
+  assert.ok(slot.queryByRole("dialog"), "A tap inside the dialog keeps it open.");
+  fireEvent.click(dialog.parentElement);
+  assert.equal(slot.queryByRole("dialog"), null);
+  assert.deepEqual(calls, []);
 });

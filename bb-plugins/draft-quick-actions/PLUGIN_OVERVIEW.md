@@ -1,20 +1,43 @@
 Approve a held draft with one click or tap, from its thread header or the
-sidebar, without finding its Queue card.
+sidebar, without finding its Queue card. Run it on its own model or on a
+model you pick, including another provider's.
 
 ## What you get
 
-An open draft shows a Run draft button in its thread header. The button
-needs no hover, so it works on an iPad. On a phone, it moves into the
-header's ··· menu. Run draft also appears in BB's thread menus and in
-Customize actions. Add it to a quick-action slot to show a play button on
-eligible draft rows when you point at them with a mouse. Each control sends
-the existing message and keeps you on the current page.
+An open draft shows Run draft and Run draft on… buttons in its thread
+header. The buttons need no hover, so they work on an iPad. On a phone, they
+move into the header's ··· menu. Both actions also appear in BB's thread
+menus. Run draft also appears in Customize actions. Add it to a quick-action
+slot to show a play button on eligible draft rows when you point at them
+with a mouse. Run draft sends the existing message and keeps you on the
+current page.
+
+## Pick a model
+
+Run draft on… opens a dialog with BB's provider and model picker. A model
+from the draft's own provider changes the queued message in place and sends
+it on the same thread.
+
+BB cannot change a thread's provider. A model from another provider
+replaces the draft with a new thread on that provider. The new thread keeps
+the prompt, title, parent thread, project, and environment request. The
+draft is deleted and the app opens the new thread, which has a new thread
+ID. The dialog tells you before this happens.
+
+When a queued message carries a model that only one other provider offers,
+Run draft moves the draft to that provider in the same way. When no provider
+or several providers offer the model, Run draft sends nothing and asks you
+to use Run draft on….
+
+BB's own Send now in the Queue always sends on the draft's original
+provider and cannot use another provider's model.
 
 ## Approval stays manual
 
 Only you choose when a draft starts. The plugin does not switch Held Drafts
-to automatic execution, rewrite its files, or create another thread. BB's
-normal Send now action remains available when this plugin is disabled.
+to automatic execution or rewrite its files. It creates a thread only when
+you run a draft on another provider. BB's normal Send now action remains
+available when this plugin is disabled.
 
 ## Changed drafts and waiting workspaces
 
@@ -28,7 +51,9 @@ message that was sent.
 
 ## Requirements
 
-An installed Held Drafts plugin must create the drafts. Scheduled messages,
-grouped messages, retries, and other plugins' waits are outside this action.
-The plugin uses BB's experimental thread action API and requires verification
-after host API changes.
+An installed Held Drafts plugin must create the drafts. Moving a draft to
+another provider needs a draft made by a Held Drafts version that records
+the draft's environment request. Scheduled messages, grouped messages,
+retries, and other plugins' waits are outside this action. The plugin uses
+BB's experimental thread action, app overlay, and model picker APIs and
+requires verification after host API changes.

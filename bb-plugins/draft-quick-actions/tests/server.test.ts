@@ -16,15 +16,51 @@ const draft = () => makeQueueEntry({
   originPluginId: "held-drafts",
   waitingOn: { kind: "plugin", pluginId: "held-drafts", reason: "Draft" },
 });
-const thread = () => makeThreadResponse({ id: target.threadId, status: "pending", originPluginId: "held-drafts" });
+const thread = () => makeThreadResponse({
+  id: target.threadId,
+  status: "pending",
+  originPluginId: "held-drafts",
+  providerId: "claude-code",
+  projectId: "project",
+  title: "Fix the flaky test",
+  sectionId: "section",
+  parentThreadId: "parent-thread",
+  parentNotifications: "stuck",
+});
+const catalogs = {
+  "claude-code": ["test-model", "claude-opus-5-5"],
+  codex: ["gpt-6-luna", "gpt-6.2-sol", "shared-model"],
+  other: ["shared-model"],
+};
+const environment = { type: "host", hostId: "host-1", workspace: { type: "personal" } };
 
-async function setup(t, { messages = [draft()], current = thread(), send = async () => ({ ok: true, delivery: "sent" }) } = {}) {
+async function setup(t, {
+  messages = [draft()],
+  current = thread(),
+  send = async () => ({ ok: true, delivery: "sent" }),
+  update = async (args) => ({ ...draft(), model: args.model, updatedAt: 20 }),
+  metadata = { environment },
+  spawn = async () => ({ id: "new-thread" }),
+  remove = async () => ({ ok: true }),
+} = {}) {
   const { bb, harness } = createFakePluginHost({
     pluginId: "draft-quick-actions",
     sdk: {
       threads: {
         get: async () => current,
-        queuedMessages: { list: async () => messages, send },
+        getPluginMetadata: async () => metadata,
+        spawn,
+        delete: remove,
+        queuedMessages: { list: async () => messages, send, update },
+      },
+      providers: {
+        catalog: async () => Object.keys(catalogs).map((id) => ({ id, displayName: id, enabled: true, available: true, info: null })),
+        models: async ({ providerId }) => ({
+          modelLoadError: null,
+          models: catalogs[providerId].map((model) => ({ id: model, model })),
+          permissionCeiling: "full",
+          providers: [],
+        }),
       },
     },
   });
@@ -41,6 +77,104 @@ test("a click sends the existing reviewed message without creating a replacement
   ]);
   assert.equal(harness.inspection.sdk.callsTo("threads.spawn").length, 0);
   assert.equal(harness.inspection.sdk.callsTo("threads.queuedMessages.create").length, 0);
+});
+
+test("Run draft on the draft's provider changes the queued message in place and sends it", async (t) => {
+  const harness = await setup(t);
+  const execution = { providerId: "claude-code", model: "claude-opus-5-5", reasoningLevel: "high", serviceTier: "fast" };
+  assert.deepEqual(await harness.behavior.callRpc("runDraft", { ...target, execution }), { kind: "sent" });
+  assert.deepEqual(harness.inspection.sdk.callsTo("threads.queuedMessages.update"), [[{
+    threadId: "draft-thread",
+    queuedMessageId: "draft-message",
+    expectedUpdatedAt: 10,
+    model: "claude-opus-5-5",
+    reasoningLevel: "high",
+    serviceTier: "fast",
+  }]]);
+  assert.deepEqual(harness.inspection.sdk.callsTo("threads.queuedMessages.send"), [
+    [{ threadId: "draft-thread", queuedMessageId: "draft-message", mode: "auto" }],
+  ]);
+  assert.equal(harness.inspection.sdk.callsTo("threads.spawn").length, 0);
+  assert.equal(harness.inspection.sdk.callsTo("threads.delete").length, 0);
+});
+
+test("Run draft on another provider starts a copy of the draft there and deletes the draft", async (t) => {
+  const content = [{ type: "text", text: "Fix the flaky test", mentions: [] }, { type: "image", url: "https://example.test/a.png" }];
+  const harness = await setup(t, { messages: [{ ...draft(), content, permissionMode: "full" }] });
+  const execution = { providerId: "codex", model: "gpt-6-luna", reasoningLevel: "low" };
+  assert.deepEqual(await harness.behavior.callRpc("runDraft", { ...target, execution }), { kind: "replaced", threadId: "new-thread" });
+  assert.deepEqual(harness.inspection.sdk.callsTo("threads.getPluginMetadata"), [[{ threadId: "draft-thread", pluginId: "held-drafts" }]]);
+  assert.deepEqual(harness.inspection.sdk.callsTo("threads.spawn"), [[{
+    projectId: "project",
+    environment,
+    input: content,
+    title: "Fix the flaky test",
+    parentThreadId: "parent-thread",
+    parentNotifications: "stuck",
+    sectionId: "section",
+    providerId: "codex",
+    model: "gpt-6-luna",
+    reasoningLevel: "low",
+    permissionMode: "full",
+    origin: "plugin",
+    originPluginId: "draft-quick-actions",
+  }]]);
+  assert.deepEqual(harness.inspection.sdk.callsTo("threads.delete"), [[{ threadId: "draft-thread", childThreadsConfirmed: false }]]);
+  assert.equal(harness.inspection.sdk.callsTo("threads.queuedMessages.send").length, 0);
+  assert.equal(harness.inspection.sdk.callsTo("threads.queuedMessages.update").length, 0);
+});
+
+test("plain Run draft moves a draft whose model only another provider offers to that provider", async (t) => {
+  const harness = await setup(t, { messages: [{ ...draft(), model: "gpt-6.2-sol", reasoningLevel: "xhigh", serviceTier: "fast" }] });
+  assert.deepEqual(await harness.behavior.callRpc("runDraft", target), { kind: "replaced", threadId: "new-thread" });
+  const [[spawned]] = harness.inspection.sdk.callsTo("threads.spawn");
+  assert.deepEqual(
+    { providerId: spawned.providerId, model: spawned.model, reasoningLevel: spawned.reasoningLevel, serviceTier: spawned.serviceTier },
+    { providerId: "codex", model: "gpt-6.2-sol", reasoningLevel: "xhigh", serviceTier: "fast" },
+  );
+  assert.deepEqual(harness.inspection.sdk.callsTo("threads.delete"), [[{ threadId: "draft-thread", childThreadsConfirmed: false }]]);
+  assert.equal(harness.inspection.sdk.callsTo("threads.queuedMessages.send").length, 0);
+});
+
+test("plain Run draft refuses a model that no provider or several other providers offer", async (t) => {
+  for (const model of ["retired-model", "shared-model"]) {
+    await t.test(model, async (t) => {
+      const harness = await setup(t, { messages: [{ ...draft(), model }] });
+      await assert.rejects(harness.behavior.callRpc("runDraft", target), /Run draft on…/);
+      for (const call of ["threads.queuedMessages.send", "threads.queuedMessages.update", "threads.spawn", "threads.delete"]) {
+        assert.equal(harness.inspection.sdk.callsTo(call).length, 0, call);
+      }
+    });
+  }
+});
+
+test("a draft without a recorded environment is not moved to another provider", async (t) => {
+  const harness = await setup(t, { metadata: {} });
+  await assert.rejects(
+    harness.behavior.callRpc("runDraft", { ...target, execution: { providerId: "codex", model: "gpt-6-luna" } }),
+    /bb draft create/,
+  );
+  for (const call of ["threads.queuedMessages.send", "threads.spawn", "threads.delete"]) {
+    assert.equal(harness.inspection.sdk.callsTo(call).length, 0, call);
+  }
+});
+
+test("a failed start on the other provider leaves the draft in place", async (t) => {
+  const harness = await setup(t, { spawn: async () => { throw new Error("Provider unavailable"); } });
+  await assert.rejects(
+    harness.behavior.callRpc("runDraft", { ...target, execution: { providerId: "codex", model: "gpt-6-luna" } }),
+    /Provider unavailable/,
+  );
+  assert.equal(harness.inspection.sdk.callsTo("threads.delete").length, 0);
+  assert.equal(harness.inspection.sdk.callsTo("threads.queuedMessages.send").length, 0);
+});
+
+test("a draft that cannot be deleted after its copy started is reported with the new thread", async (t) => {
+  const harness = await setup(t, { remove: async () => { throw new Error("Thread is busy"); } });
+  assert.deepEqual(
+    await harness.behavior.callRpc("runDraft", { ...target, execution: { providerId: "codex", model: "gpt-6-luna" } }),
+    { kind: "replaced-draft-kept", threadId: "new-thread", reason: "Thread is busy" },
+  );
 });
 
 test("changed or unrelated queue entries are never sent", async (t) => {
@@ -119,7 +253,7 @@ test("RPC rejects malformed targets before reaching the queue", async (t) => {
 });
 
 test("the package uses public SDK APIs and declared UI and test dependencies", async () => {
-  const result = await experimental_scanPublicSdkOnly(new URL("..", import.meta.url).pathname, { allow: [/^react$/, /^sonner$/, /^jsdom$/, /^@testing-library\/react$/, /^playwright-core$/] });
+  const result = await experimental_scanPublicSdkOnly(new URL("..", import.meta.url).pathname, { allow: [/^react$/, /^react-dom$/, /^sonner$/, /^jsdom$/, /^@testing-library\/react$/, /^playwright-core$/] });
   assert.deepEqual(result.violations, []);
   assert.deepEqual(result.privateDependencies, []);
 });
