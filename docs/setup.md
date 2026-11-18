@@ -123,7 +123,7 @@ Shell:
 
 | Target | Change |
 | --- | --- |
-| `~/.config/shell/environment.zsh` | Copy of `setup/shell/environment.zsh`. Adds `~/.local/bin` to `PATH` and sets `IMPECCABLE_NO_TELEMETRY=1`, which turns off telemetry in the [Impeccable](https://impeccable.style) design skills. In bb agent threads, where `BB_THREAD_ID` is set, it also sets `IMPECCABLE_QUESTION_DISABLED=1`, so Impeccable asks its design questions in the thread instead of on a page that only this Mac can open |
+| `~/.config/shell/environment.zsh` | Copy of `setup/shell/environment.zsh`. Adds `~/.local/bin` to `PATH` and sets `IMPECCABLE_NO_TELEMETRY=1`, which turns off telemetry in the [Impeccable](https://impeccable.style) design skills. In bb agent threads, where `BB_THREAD_ID` is set, it also sets `IMPECCABLE_QUESTION_DISABLED=1`, so Impeccable's design questions and plan reviews happen in the thread instead of on a page that only this Mac can open |
 | `~/.config/shell/interactive.zsh` | Copy of `setup/shell/interactive.zsh`. Puts `~/.local/bin` first in `PATH`, sets `HOMEBREW_CLEANUP_MAX_AGE_DAYS=30` and `GPG_TTY`, and loads zsh, uv, and uvx completions and zsh-autosuggestions |
 | `~/.zshenv` | A block that sources `environment.zsh` |
 | `~/.zshrc` | A block that sources `interactive.zsh`, then mise's activation block |

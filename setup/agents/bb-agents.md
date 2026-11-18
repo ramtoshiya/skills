@@ -46,7 +46,41 @@ route in the thread:
   left column with v1's pool". Ask again only when the reply matches no option
   and no steer.
 
-`component-review serve` reads the same variable and would exit 2, which leaves
-the plan and asset review pending. Start it with the variable cleared, as
-`IMPECCABLE_QUESTION_DISABLED= <launcher> component-review serve --session <id>`,
-and tell the person that this review page opens only on this Mac.
+## Impeccable plan and asset review {:#impeccable-plan-review}
+
+`component-review serve` reads the same variable and exits 2, and Impeccable's
+`component-review.md` then says to stop and report the review as pending. In bb
+threads this section replaces that instruction. Hold the review in the thread
+and relay the person's decisions to the engine:
+
+1. After `component-review capture`, read `.packet` from
+   `<store>/<session>/current.json`. The store is
+   `~/.impeccable/component-reviews` unless you passed `--store`. The packet
+   carries `id`, `revision`, and a `revision` for each component.
+2. Write one HTML file in thread storage. Start with the comp, each component's
+   `box` outlined and numbered. Then give each component a card with its number,
+   id, kind, note, flags, and the comp cropped to its box, or its plate for an
+   asset. Copy the comp once next to the file as a JPEG and crop it with CSS
+   backgrounds. List the `codeRegions` ids at the end. Show the file with the
+   `inline-vis` directive.
+3. Ask in chat, per number, for approve, revise with feedback, or reclassify to
+   plate, image, or texture. Also ask for anything missing from the comp and for
+   `codeRegions` ids to reclassify. Unmentioned items stay undecided. End the
+   turn and wait for the person's own reply in this thread.
+4. Turn that reply, and only that reply, into the body
+   `{"schemaVersion":1,"requestId":<packet id>,"packetRevision":<packet revision>,"decisions":{<id>:{"revision","action","feedback","split":false}},"missing":[{"id","name","box","feedback"}],"inventoryConfirmed":<bool>,"reclassify":[{"id","kind","feedback"}]}`.
+   A reclassify decision also carries `kind`. Boxes are fractions of the comp.
+   Give a missing item an id no region uses, the person's words as `name`, and
+   a box you locate on the comp. When it sits inside an existing region, name
+   that region in `feedback` so the next round can split it. A full approval
+   needs every component approved and `inventoryConfirmed: true`. A reply with
+   any change request may leave components undecided.
+5. Start `IMPECCABLE_QUESTION_DISABLED= <launcher> component-review serve --session <id>`
+   in the background and read its URL. POST the body to `/decision` with
+   `Content-Type: application/json`, `Origin: http://127.0.0.1:<port>`, and
+   `Sec-Fetch-Site: same-origin`. The person approved this relay. It submits
+   their decisions, never yours.
+6. Run `component-review status --session <id>` and check that
+   `receipt.visualDecision` and the number of decisions match the reply. Tell
+   the person where you placed each missing item, then act on the receipt as
+   `component-review.md` describes.
