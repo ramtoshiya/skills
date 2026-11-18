@@ -13,7 +13,9 @@ export type RunPlan =
   | { kind: "send" }
   | { kind: "update"; execution: Execution }
   | { kind: "replace"; execution: Execution }
-  | { kind: "refuse"; message: string };
+  | { kind: "choose" };
+
+type QueuedExecution = Pick<QueuedMessage, "model" | "reasoningLevel" | "serviceTier">;
 
 export function findDraft(messages: readonly QueuedMessage[]): QueuedMessage | null {
   if (messages.length !== 1) return null;
@@ -46,9 +48,21 @@ export function indexDrafts(messages: readonly QueuedMessage[]): ReadonlyMap<str
   return drafts;
 }
 
+const queuedExecution = (providerId: string, message: QueuedExecution): Required<Execution> => ({
+  providerId,
+  model: message.model,
+  reasoningLevel: message.reasoningLevel,
+  serviceTier: message.serviceTier,
+});
+
+function offeringProviders(providerId: string, model: string, catalogs: ModelCatalogs): string[] {
+  if (catalogs.get(providerId)?.has(model) === true) return [providerId];
+  return [...catalogs].filter(([, models]) => models.has(model)).map(([id]) => id);
+}
+
 export function planRun({ providerId, message, request }: {
   providerId: string;
-  message: Pick<QueuedMessage, "model" | "reasoningLevel" | "serviceTier">;
+  message: QueuedExecution;
   request: RunRequest;
 }): RunPlan {
   if (request.kind === "pick") {
@@ -60,24 +74,19 @@ export function planRun({ providerId, message, request }: {
       (execution.serviceTier ?? message.serviceTier) === message.serviceTier;
     return unchanged ? { kind: "send" } : { kind: "update", execution };
   }
-  if (request.catalogs.get(providerId)?.has(message.model) === true) return { kind: "send" };
-  const offeredBy = [...request.catalogs].filter(([, models]) => models.has(message.model)).map(([id]) => id);
+  const offeredBy = offeringProviders(providerId, message.model, request.catalogs);
   const [only] = offeredBy;
-  if (offeredBy.length === 1 && only !== undefined) {
-    return {
-      kind: "replace",
-      execution: {
-        providerId: only,
-        model: message.model,
-        reasoningLevel: message.reasoningLevel,
-        serviceTier: message.serviceTier,
-      },
-    };
-  }
-  return {
-    kind: "refuse",
-    message: `The draft's model ${message.model} is not offered by its provider ${providerId}${
-      offeredBy.length > 1 ? ` and is offered by several others (${offeredBy.join(", ")})` : " or any other enabled provider"
-    }. Use Run draft on… to choose a model.`,
-  };
+  if (offeredBy.length !== 1 || only === undefined) return { kind: "choose" };
+  return only === providerId ? { kind: "send" } : { kind: "replace", execution: queuedExecution(only, message) };
+}
+
+export function startingExecution({ providerId, message, catalogs }: {
+  providerId: string;
+  message: QueuedExecution;
+  catalogs: ModelCatalogs;
+}): Required<Execution> {
+  const [offering] = offeringProviders(providerId, message.model, catalogs);
+  if (offering !== undefined) return queuedExecution(offering, message);
+  const [providerDefault = message.model] = catalogs.get(providerId) ?? [];
+  return { ...queuedExecution(providerId, message), model: providerDefault };
 }

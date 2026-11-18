@@ -181,13 +181,16 @@ test("the chooser starts where the server finds the draft's model and says the d
   assert.equal(slot.getByLabelText("Provider ID").value, "codex");
   assert.equal(slot.getByLabelText("Model").value, "gpt-6-luna");
   assert.match(dialog.textContent, /new Codex thread.*deletes this draft/);
+  await act(async () => slot.getByRole("button", { name: "Cancel" }).click());
 });
 
 test("plain Run draft opens the chooser when the server cannot tell which provider to use", async (t) => {
   const { slot, calls } = renderChooser(t, action, { runDraft: async () => ({ kind: "choose" }) });
-  await act(async () => (await slot.findByRole("button", { name: "Run draft" })).click());
+  const button = await slot.findByRole("button", { name: "Run draft" });
+  await act(async () => button.click());
   assert.ok(await slot.findByRole("dialog", { name: "Run draft on…" }));
   assert.deepEqual(calls, [target]);
+  await act(async () => slot.getByRole("button", { name: "Cancel" }).click());
 });
 
 test("Run sends the picked model and opens the new thread when the draft moves to another provider", async (t) => {

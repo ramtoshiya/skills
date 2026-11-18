@@ -1,6 +1,6 @@
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
-import { findDraft, planRun, type ModelCatalogs, type QueuedMessage, type RunRequest } from "./drafts.ts";
+import { findDraft, planRun, startingExecution, type ModelCatalogs, type QueuedMessage, type RunRequest } from "./drafts.ts";
 
 type Sdk = BbPluginApi["sdk"];
 type Thread = Awaited<ReturnType<Sdk["threads"]["get"]>>;
@@ -50,7 +50,12 @@ export const rpcContract = defineRpcContract({
       z.object({ kind: z.literal("queued"), reason: z.string() }),
       z.object({ kind: z.literal("replaced"), threadId: z.string() }),
       z.object({ kind: z.literal("replaced-draft-kept"), threadId: z.string(), reason: z.string() }),
+      z.object({ kind: z.literal("choose") }),
     ]),
+  },
+  chooserStart: {
+    input: targetSchema,
+    output: z.object({ providerId: z.string(), execution: executionSchema.required() }),
   },
 });
 
@@ -113,21 +118,33 @@ export default function plugin(bb: BbPluginApi) {
     return { kind: "replaced", threadId: spawned.id };
   }
 
+  async function loadDraft(target: DraftTarget): Promise<{ thread: Thread; message: QueuedMessage }> {
+    const thread = await bb.sdk.threads.get({ threadId: target.threadId });
+    if (thread.status !== "pending" || thread.archivedAt !== null || thread.deletedAt !== null || thread.originPluginId !== "held-drafts") {
+      throw new Error("This thread is no longer an unstarted Held Drafts draft.");
+    }
+    const message = findDraft(await bb.sdk.threads.queuedMessages.list({ threadId: target.threadId }));
+    if (message === null || message.id !== target.queuedMessageId || message.updatedAt !== target.updatedAt) {
+      throw new Error("The draft changed. Refresh the list and review it before sending.");
+    }
+    return { thread, message };
+  }
+
   bb.rpc.register(rpcContract, {
+    async chooserStart(target) {
+      const { thread, message } = await loadDraft(target);
+      return {
+        providerId: thread.providerId,
+        execution: startingExecution({ providerId: thread.providerId, message, catalogs: await loadCatalogs(thread) }),
+      };
+    },
     async runDraft({ execution, ...target }): Promise<RunResult> {
       if (sending.has(target.threadId)) {
         throw new Error("This draft is already being sent.");
       }
       sending.add(target.threadId);
       try {
-        const thread = await bb.sdk.threads.get({ threadId: target.threadId });
-        if (thread.status !== "pending" || thread.archivedAt !== null || thread.deletedAt !== null || thread.originPluginId !== "held-drafts") {
-          throw new Error("This thread is no longer an unstarted Held Drafts draft.");
-        }
-        const message = findDraft(await bb.sdk.threads.queuedMessages.list({ threadId: target.threadId }));
-        if (message === null || message.id !== target.queuedMessageId || message.updatedAt !== target.updatedAt) {
-          throw new Error("The draft changed. Refresh the list and review it before sending.");
-        }
+        const { thread, message } = await loadDraft(target);
         const request: RunRequest = execution === undefined
           ? { kind: "as-queued", catalogs: await loadCatalogs(thread) }
           : { kind: "pick", execution };
@@ -147,8 +164,8 @@ export default function plugin(bb: BbPluginApi) {
           }
           case "replace":
             return await replace(thread, message, plan.execution);
-          case "refuse":
-            throw new Error(plan.message);
+          case "choose":
+            return { kind: "choose" };
           default: {
             const exhaustive: never = plan;
             return exhaustive;

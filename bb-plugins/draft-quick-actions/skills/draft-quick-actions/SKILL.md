@@ -6,7 +6,8 @@ description: Explain or troubleshoot the Run draft and Run draft on… header bu
 # Draft quick actions {:#draft-quick-actions}
 
 This plugin adds **Run draft** and **Run draft on…** in four registrations
-that share one eligibility check and one `runDraft` RPC:
+that share one eligibility check, one `runDraft` RPC, and one `chooserStart`
+RPC for the dialog's starting model:
 
 - `draft-quick-actions/run-draft` is a thread menu entry. It appears in the
   thread header's **Thread actions** menu (`···`), sidebar row menus, and the
@@ -16,7 +17,8 @@ that share one eligibility check and one `runDraft` RPC:
 - `draft-quick-actions/run-draft-on` and
   `draft-quick-actions/run-draft-on-header` are the menu entry and header
   button for **Run draft on…**. Both open one dialog with BB's provider and
-  model picker.
+  model picker. BB 0.49 shows the two header buttons as one split button:
+  **Run draft** with an arrow that opens **Run draft on…**.
 
 ## Model choice {:#model-choice}
 
@@ -33,8 +35,9 @@ own provider.
 
 Plain **Run draft** on a message whose model the draft's provider does not
 offer moves the draft to the one other enabled provider that offers the model.
-With no such provider or several, it sends nothing and asks for
-**Run draft on…**. BB's own **Send now** always uses the draft's original
+With no such provider or several, it sends nothing and opens the
+**Run draft on…** dialog. The dialog starts on a provider that offers the
+queued model, preferring the draft's own provider. BB's own **Send now** always uses the draft's original
 provider, so it cannot run another provider's model.
 
 ## Approval {:#approval}

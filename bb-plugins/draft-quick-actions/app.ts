@@ -17,10 +17,24 @@ import type { RunResult, rpcContract } from "./server.ts";
 
 const describe = (cause: unknown) => cause instanceof Error ? cause.message : String(cause);
 
+let chooser: QueuedMessage | null = null;
+const chooserListeners = new Set<() => void>();
+function setChooser(next: QueuedMessage | null) {
+  chooser = next;
+  for (const listener of chooserListeners) listener();
+}
+function subscribeChooser(listener: () => void) {
+  chooserListeners.add(listener);
+  return () => { chooserListeners.delete(listener); };
+}
+
 function useReportResult() {
   const navigate = useBbNavigate();
-  return useCallback((result: RunResult) => {
+  return useCallback((result: RunResult, message: QueuedMessage) => {
     switch (result.kind) {
+      case "choose":
+        setChooser(message);
+        return;
       case "sent":
         toast.success("Draft sent");
         return;
@@ -43,17 +57,6 @@ function useReportResult() {
       }
     }
   }, [navigate]);
-}
-
-let chooser: QueuedMessage | null = null;
-const chooserListeners = new Set<() => void>();
-function setChooser(next: QueuedMessage | null) {
-  chooser = next;
-  for (const listener of chooserListeners) listener();
-}
-function subscribeChooser(listener: () => void) {
-  chooserListeners.add(listener);
-  return () => { chooserListeners.delete(listener); };
 }
 
 function useDraftActions({ threadIds }: { threadIds: readonly string[] }) {
@@ -118,7 +121,7 @@ function useDraftActions({ threadIds }: { threadIds: readonly string[] }) {
     pending.current.add(message.threadId);
     setSending(new Set(pending.current));
     try {
-      report(await rpc.call("runDraft", draftTarget(message)));
+      report(await rpc.call("runDraft", draftTarget(message)), message);
     } catch (cause) {
       toast.error("Could not send draft", { description: describe(cause) });
     } finally {
@@ -205,7 +208,6 @@ const styles = {
 } satisfies Record<string, CSSProperties>;
 
 function RunDraftOnDialog({ message }: { message: QueuedMessage }) {
-  const sdk = useSdk();
   const rpc = useRpc<typeof rpcContract>();
   const report = useReportResult();
   const { providers } = experimental_useProviders();
@@ -216,26 +218,21 @@ function RunDraftOnDialog({ message }: { message: QueuedMessage }) {
   const close = useCallback(() => setChooser(null), []);
 
   useEffect(() => {
-    const controller = new AbortController();
-    sdk.threads.get({ threadId: message.threadId, signal: controller.signal }).then(
-      (thread) => {
-        if (controller.signal.aborted) return;
-        setDraftProviderId(thread.providerId);
-        setValue({
-          providerId: thread.providerId,
-          model: message.model,
-          reasoningLevel: message.reasoningLevel,
-          serviceTier: message.serviceTier,
-        });
+    let cancelled = false;
+    rpc.call("chooserStart", draftTarget(message)).then(
+      (start) => {
+        if (cancelled) return;
+        setDraftProviderId(start.providerId);
+        setValue(start.execution);
       },
       (cause: unknown) => {
-        if (controller.signal.aborted) return;
+        if (cancelled) return;
         toast.error("Could not load the draft", { description: describe(cause) });
         close();
       },
     );
-    return () => controller.abort();
-  }, [sdk, message, close]);
+    return () => { cancelled = true; };
+  }, [rpc, message, close]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -249,7 +246,7 @@ function RunDraftOnDialog({ message }: { message: QueuedMessage }) {
     if (value === null || running) return;
     setRunning(true);
     try {
-      report(await rpc.call("runDraft", { ...draftTarget(message), execution: value }));
+      report(await rpc.call("runDraft", { ...draftTarget(message), execution: value }), message);
       close();
     } catch (cause) {
       toast.error("Could not run draft", { description: describe(cause) });

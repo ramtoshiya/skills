@@ -19,10 +19,11 @@ bb plugin install . --yes
 
 ## Approve from the thread header
 
-Open the draft's thread. In a window 768 CSS pixels wide or wider,
-**Run draft** and **Run draft on…** are buttons in the thread header, after
-the workspace's **Open** button. They need no hover, so they work with a
-mouse and on touch screens such as an iPad.
+Open the draft's thread. In a window 768 CSS pixels wide or wider, the
+thread header shows a **Run draft** button with an arrow beside it, after
+the workspace's **Open** button. The arrow opens a menu with
+**Run draft on…**. Neither needs hover, so they work with a mouse and on
+touch screens such as an iPad.
 
 On narrower screens, such as a phone, and in narrow split panes, BB moves
 header buttons into the header's **Thread actions** menu (`···`). Tap `···`
@@ -36,8 +37,10 @@ plugin does not set it.
 ## Run a draft on another model
 
 Choose **Run draft on…** to open a dialog with BB's provider and model
-picker. The picker starts at the draft's provider and the queued message's
-model. Pick a provider, model, and reasoning level, then choose **Run**.
+picker. The picker starts at the queued message's model, on the draft's
+provider when that provider offers the model and otherwise on the first
+enabled provider that does. When no provider offers it, the picker starts at
+the first model of the draft's provider. Pick a provider, model, and reasoning level, then choose **Run**.
 **Cancel**, the Escape key, or a click or tap outside the dialog closes it
 without sending. The dialog's buttons are at least 44 CSS pixels tall and
 need no hover.
@@ -68,8 +71,8 @@ A queued message can carry a model that the draft's provider does not
 offer. For such a draft, **Run draft** looks up which enabled providers
 offer the model. When exactly one other provider offers it, **Run draft**
 moves the draft to that provider as **Run draft on…** does. When no provider
-or several other providers offer it, nothing is sent and the error asks you
-to choose a model with **Run draft on…**.
+or several other providers offer it, nothing is sent and the
+**Run draft on…** dialog opens so you can choose.
 
 BB's own **Send now** in the Queue always sends on the draft's original
 provider. It cannot use another provider's model. Use **Run draft** or
