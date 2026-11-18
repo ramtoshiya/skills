@@ -78,7 +78,12 @@ English and include, in this order:
    user meant it, and how the worker proves it.
 6. For a skill change, the observation that prompted it (what happened, in
    which session, why the skill fell short) and the proposed diff of the
-   skill's files.
+   skill's files. When the skill comes from a fork listed in
+   `{{SKILLS_REPO}}/.github/upstream-forks.json`, first check whether its
+   upstream has commits the fork lacks, with
+   `gh api 'repos/<upstream>/compare/<upstreamBranch>...<fork owner>:<branch>'`,
+   and whether those commits change what the diff targets. If they do, say
+   so in the brief and to the user, who decides whether the fork syncs first.
 7. This authority paragraph, verbatim:
 
    > Sending this draft is the user's approval. You own the whole change:
