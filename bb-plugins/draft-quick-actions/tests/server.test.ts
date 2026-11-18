@@ -136,16 +136,36 @@ test("plain Run draft moves a draft whose model only another provider offers to 
   assert.equal(harness.inspection.sdk.callsTo("threads.queuedMessages.send").length, 0);
 });
 
-test("plain Run draft refuses a model that no provider or several other providers offer", async (t) => {
+test("plain Run draft asks for a choice when no provider or several other providers offer the model", async (t) => {
   for (const model of ["retired-model", "shared-model"]) {
     await t.test(model, async (t) => {
       const harness = await setup(t, { messages: [{ ...draft(), model }] });
-      await assert.rejects(harness.behavior.callRpc("runDraft", target), /Run draft on…/);
+      assert.deepEqual(await harness.behavior.callRpc("runDraft", target), { kind: "choose" });
       for (const call of ["threads.queuedMessages.send", "threads.queuedMessages.update", "threads.spawn", "threads.delete"]) {
         assert.equal(harness.inspection.sdk.callsTo(call).length, 0, call);
       }
     });
   }
+});
+
+test("the chooser starts on a provider that offers the draft's model", async (t) => {
+  const levels = { reasoningLevel: "high", serviceTier: "default" };
+  for (const [model, expected] of [
+    ["test-model", { providerId: "claude-code", model: "test-model" }],
+    ["gpt-6.2-sol", { providerId: "codex", model: "gpt-6.2-sol" }],
+    ["shared-model", { providerId: "codex", model: "shared-model" }],
+    ["retired-model", { providerId: "claude-code", model: "test-model" }],
+  ]) {
+    await t.test(model, async (t) => {
+      const harness = await setup(t, { messages: [{ ...draft(), model, ...levels }] });
+      assert.deepEqual(await harness.behavior.callRpc("chooserStart", target), {
+        providerId: "claude-code",
+        execution: { ...expected, ...levels },
+      });
+    });
+  }
+  const harness = await setup(t);
+  await assert.rejects(harness.behavior.callRpc("chooserStart", { ...target, updatedAt: 9 }), /changed/);
 });
 
 test("a draft without a recorded environment is not moved to another provider", async (t) => {

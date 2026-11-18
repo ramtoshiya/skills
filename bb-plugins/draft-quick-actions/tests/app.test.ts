@@ -128,20 +128,25 @@ test("queue events and reconnection update the button, and unmount disposes subs
   assert.deepEqual(disposed.sort(), ["realtime:connection", "thread:changed"]);
 });
 
-function renderChooser(t, registration, { runDraft = async () => ({ kind: "sent" }) } = {}) {
+const startOnDraft = async () => ({
+  providerId: "claude-code",
+  execution: { providerId: "claude-code", model: "test-model", reasoningLevel: "medium", serviceTier: "default" },
+});
+
+function renderChooser(t, registration, { runDraft = async () => ({ kind: "sent" }), chooserStart = startOnDraft } = {}) {
   const calls = [];
   const slot = renderSlot({
     component: () => createElement(Fragment, null, createElement(Row, { registration }), createElement(Overlay)),
   }, {}, {
     sdk: {
       subscribe: () => () => {},
-      threads: {
-        queue: { list: async () => [draft()] },
-        get: async ({ threadId }) => ({ id: threadId, providerId: "claude-code" }),
-      },
+      threads: { queue: { list: async () => [draft()] } },
     },
     providers: { status: "ready", providers: [{ id: "codex", displayName: "Codex" }] },
-    rpc: { runDraft: async (input) => { calls.push(input); return runDraft(input); } },
+    rpc: {
+      runDraft: async (input) => { calls.push(input); return runDraft(input); },
+      chooserStart: async (input) => { assert.deepEqual(input, target); return chooserStart(input); },
+    },
   });
   t.after(() => slot.lifecycle.unmount());
   const open = async () => {
@@ -164,6 +169,26 @@ for (const [surface, id] of [["menu", "run-draft-on"], ["header", "run-draft-on-
     assert.deepEqual(calls, []);
   });
 }
+
+test("the chooser starts where the server finds the draft's model and says the draft will move", async (t) => {
+  const { slot, open } = renderChooser(t, actions.get("run-draft-on"), {
+    chooserStart: async () => ({
+      providerId: "claude-code",
+      execution: { providerId: "codex", model: "gpt-6-luna", reasoningLevel: "medium", serviceTier: "default" },
+    }),
+  });
+  const dialog = await open();
+  assert.equal(slot.getByLabelText("Provider ID").value, "codex");
+  assert.equal(slot.getByLabelText("Model").value, "gpt-6-luna");
+  assert.match(dialog.textContent, /new Codex thread.*deletes this draft/);
+});
+
+test("plain Run draft opens the chooser when the server cannot tell which provider to use", async (t) => {
+  const { slot, calls } = renderChooser(t, action, { runDraft: async () => ({ kind: "choose" }) });
+  await act(async () => (await slot.findByRole("button", { name: "Run draft" })).click());
+  assert.ok(await slot.findByRole("dialog", { name: "Run draft on…" }));
+  assert.deepEqual(calls, [target]);
+});
 
 test("Run sends the picked model and opens the new thread when the draft moves to another provider", async (t) => {
   const { slot, calls, open } = renderChooser(t, actions.get("run-draft-on-header"), {
