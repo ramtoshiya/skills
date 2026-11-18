@@ -155,6 +155,7 @@ export default async function plugin(bb: BbPluginApi) {
             const result = await bb.sdk.threads.spawn({
               projectId,
               environment,
+              pluginMetadata: { environment },
               prompt: options.prompt,
               ...(options.title === undefined ? {} : { title: options.title }),
               ...(options.provider === undefined ? {} : { providerId: options.provider }),

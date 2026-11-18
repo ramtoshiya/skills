@@ -53,6 +53,10 @@ held row. **Send now** in the app and `bb thread queue send` skip every
 dispatch hook, so the message goes out and bb creates the environment at that
 moment. Later messages in the thread are not held.
 
+`bb draft create` also saves its environment request as `environment` in the
+thread's plugin metadata, because Draft Quick Actions needs it to move a draft
+to another provider and bb does not show it to plugins.
+
 ## Risks
 
 - The plugin relies on experimental bb plugin APIs (`experimental_hooks`,
