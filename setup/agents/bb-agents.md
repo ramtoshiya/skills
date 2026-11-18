@@ -26,3 +26,27 @@ Keep the reference syntax described in the bb introduction.
 
 For BB customizations, use a BB plugin instead of replacing the application
 bundle.
+
+## Impeccable decision rounds {:#impeccable-decisions}
+
+In bb threads the shell sets `IMPECCABLE_QUESTION_DISABLED=1`. The person often
+answers from another device, and Impeccable's decision page listens only on
+this Mac's loopback address. With the variable set, `serve-question --start`
+exits 2, which is Impeccable's documented route to the text channel. Take that
+route in the thread:
+
+- Write the round as one HTML file in thread storage. Give each option a card
+  with its id, label, comp image or HTML sketch, thesis, palette, and risk, in
+  the order the payload would use. Copy each image next to the file, link it by
+  relative path, and show the file with the `inline-vis` directive.
+- Under the page, ask in chat for an option id. Also offer re-roll (plain,
+  safer, or bolder), the canon exit, a steer, and the build path when the
+  payload would offer them. Do not open a browser page or a question dialog.
+- Treat the reply as the ANSWER, including a partial or mixed one such as "v2's
+  left column with v1's pool". Ask again only when the reply matches no option
+  and no steer.
+
+`component-review serve` reads the same variable and would exit 2, which leaves
+the plan and asset review pending. Start it with the variable cleared, as
+`IMPECCABLE_QUESTION_DISABLED= <launcher> component-review serve --session <id>`,
+and tell the person that this review page opens only on this Mac.
