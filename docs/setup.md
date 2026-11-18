@@ -633,10 +633,14 @@ itself calls it, the plugin tells the operator to write the brief and create
 the draft as `operator-handoff` describes, because only the operator knows why
 the skill fell short.
 
-After some turns, Hermes reviews the conversation in the background and may
-call `skill_manage`. Hermes never stores that review's messages, so the plugin
-keeps the reviewer's text from each of its model responses. When the review
-ends, the plugin starts one analyst thread for all of that review's calls:
+After some turns, Hermes reviews the conversation in the background. The
+operator profile asks the reviewer to propose skill changes only for an
+explicit standing correction from the user or a skill gap that caused a wrong
+result, a missed requirement, or substantial rework. The reviewer can finish
+without a proposal. Hermes never stores that review's messages, so the plugin
+keeps the reviewer's text from each of its model responses. If the reviewer
+calls `skill_manage`, the plugin starts one analyst thread for all of those
+calls after the review ends:
 
 - It writes an evidence packet to
   `~/.hermes/profiles/operator/skill-drafts/proposals/<id>/`. `evidence.md`
