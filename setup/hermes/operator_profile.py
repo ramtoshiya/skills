@@ -239,7 +239,11 @@ def bb_catalog_agent(profile: str, home: Path, packages: dict[str, Source], repo
     relative = home.relative_to(Path.home()).as_posix()
     roots = [{"path": f"{relative}/skills", "recursive": True}]
     roots += [{"path": f"{relative}/plugins/{name}/hermes/skills", "namePrefix": f"{name}:"} for name in sorted(packages)]
-    roots += [{"path": path, "recursive": True} for path in repo_skills]
+    # bb takes only roots relative to the home directory.
+    listed = [Path(path) for path in repo_skills if Path(path).is_relative_to(Path.home())]
+    roots += [{"path": path.relative_to(Path.home()).as_posix(), "recursive": True} for path in listed]
+    for path in sorted(set(map(Path, repo_skills)) - set(listed)):
+        print(f"hermes-operator: bb's skill menu cannot list {path}, which is outside your home. The operator still loads it")
     agents.append({**BB_AGENT, "args": ["-p", profile, "acp"], "nativeSkillRoots": {"user": roots}})
     run(bb, "plugin", "config", "provider-acp", "set", "customAgents", json.dumps(agents))
 

@@ -621,7 +621,8 @@ an entry whose id is `hermes-agent` in the ACP providers plugin's
 - Its skill menu adds the operator's `skills/` and each native plugin's
   `hermes/skills/` with the `<plugin>:` prefix. bb lists
   `humanize-korean:humanize-korean`, the name Hermes loads it by. It also
-  adds the trusted repositories' skill folders that the operator loads.
+  adds the trusted repositories' skill folders that the operator loads, when
+  they are inside your home folder, because bb takes only home-relative roots.
 - It sets reasoning through Hermes's `reasoning_effort` option.
 - It turns on manual compaction, which bb's shipped entry leaves off, so
   `bb thread compact` works for Hermes threads. Hermes runs the `/compact` it

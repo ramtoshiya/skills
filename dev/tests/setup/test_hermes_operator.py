@@ -28,6 +28,12 @@ if args[:3] == ["plugin", "config", "provider-acp"]:
     store = Path(os.environ["HOME"]) / "bb-provider-acp.json"
     values = json.loads(store.read_text()) if store.exists() else {{"customAgents": ""}}
     if args[3:4] == ["set"]:
+        # Like bb, refuse a skill root that is not relative to the user's home.
+        for agent in (json.loads(args[5]) if args[4] == "customAgents" else []):
+            for root in agent.get("nativeSkillRoots", {{}}).get("user", []):
+                path = root if isinstance(root, str) else root["path"]
+                if path.startswith("/") or ".." in path.split("/"):
+                    sys.exit("Roots must be relative paths without dot segments")
         values[args[4]] = args[5]
         store.write_text(json.dumps(values))
     else:
@@ -756,7 +762,7 @@ class OperatorProfileSetupTests(unittest.TestCase):
         self.assertEqual(bb_catalog(self.home), expected)
 
     def test_trusted_repository_skills_load_from_its_main_checkout(self):
-        project = self.tmp / "workspaces/contest"
+        project = self.home / "workspaces/contest"
         commit_repo(project, under(".hermes/skills", skill("planning")))
         worktree = self.tmp / "worktrees/thr_1/contest"
         git("worktree", "add", "-q", "-b", "thread", str(worktree), cwd=project)
