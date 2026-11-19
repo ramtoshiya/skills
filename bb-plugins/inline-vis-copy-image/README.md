@@ -94,4 +94,22 @@ leaves on the next press and that disabling the plugin restores every frame.
 It enables the plugin again when it ends. It does not read or write the
 clipboard, so confirm the copy itself in bb Desktop.
 
+`npm run verify:remount` checks that every inline-vis page still renders
+after bb shows it again. It needs the same two variables. It opens a thread
+in headless Chromium, switches to another thread and back 30 times, and
+reloads the page 5 times. After each visit it requires every frame's page
+to carry the plugin's script and to lay out at a nonzero height. It serves this
+checkout's `dist/app.js` in place of the plugin bundle that the server sends,
+so it tests a build without installing it. Pass `--served` to test the
+installed build instead.
+
+Pass the paths of two threads. The first thread's inline-vis HTML pages must
+each contain an element whose id is `m`, and all of them must fit in an
+1800 pixel high window. The second thread can be any other thread:
+
+```sh
+bb plugin build .
+npm run verify:remount -- /threads/thr_fixture /threads/thr_other
+```
+
 Tested with bb 0.49 and plugin SDK 0.6.132.

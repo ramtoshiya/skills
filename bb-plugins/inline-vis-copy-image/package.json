@@ -20,7 +20,8 @@
   "scripts": {
     "typecheck": "tsc",
     "test": "vitest run",
-    "verify:live": "node scripts/verify-live.mjs"
+    "verify:live": "node scripts/verify-live.mjs",
+    "verify:remount": "node scripts/verify-remount.mjs"
   },
   "devDependencies": {
     "@get-bb/plugin-sdk": "0.6.132",
