@@ -24,8 +24,13 @@ Separate a thread or message reference from adjacent text with spaces, including
 before Korean particles. For example: @thread:thr_abc123 에서 확인하세요.
 Keep the reference syntax described in the bb introduction.
 
-For BB customizations, use a BB plugin instead of replacing the application
-bundle.
+For BB customizations, use supported BB settings or plugins. For work on BB
+itself, never propose, draft, or use a BB application fork, a personal core
+patch, or an installed bundle patch unless the user explicitly requests that
+route. Approval of the desired behavior alone does not authorize it. You may
+investigate the core and SDK boundary read-only. If supported settings or
+plugins cannot deliver the behavior, state the limit and surface the upstream
+request or bug report route without creating a fork-backed draft.
 
 ## Impeccable decision rounds {:#impeccable-decisions}
 

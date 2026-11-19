@@ -546,6 +546,11 @@ other thread that is integrating the same branch. New scope, new authority, a
 shared-resource conflict that waiting does not resolve, or a failed safety
 check still goes to you first, and new implementation scope still starts as a
 draft.
+For BB customizations, the shared BB instructions and operator handoff direct
+agents to supported settings or plugins. An application fork, personal core
+patch, or installed bundle patch requires an explicit request for that route.
+If supported settings and plugins cannot deliver the behavior, the operator
+states the limit and surfaces the upstream request or bug report route.
 Before drafting, the operator asks in conversation when an unresolved choice
 would change the requested outcome or consequential change targets. It decides
 incidental implementation choices itself and reports the target of each draft.

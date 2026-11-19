@@ -50,6 +50,35 @@
       ]
     },
     {
+      "id": "bb-core-fork-needs-explicit-route",
+      "prompt": "I approve the desired change to how BB renders a message. Investigation found that supported settings and plugins cannot provide it. I have not requested a fork or core patch. Do not create or send a draft or post upstream. Explain the next step.",
+      "expected_output": "State the supported extension limit and surface the upstream request or bug report route without proposing a fork-backed draft.",
+      "assertions": [
+        "Do not propose a BB application fork, personal core patch, or installed bundle patch.",
+        "Do not create or send a fork-backed draft.",
+        "State the limit and surface the upstream request or bug report route."
+      ]
+    },
+    {
+      "id": "bb-plugin-customization",
+      "prompt": "Create a held draft to add a BB plugin command in my skills repository. The plugin SDK supports this command. Do not send the draft.",
+      "expected_output": "Create a held draft for the supported plugin change.",
+      "assertions": [
+        "Create a draft for the plugin change without requiring a BB app fork.",
+        "Do not send the draft."
+      ]
+    },
+    {
+      "id": "third-party-skill-fork-unaffected",
+      "prompt": "Create a held draft to correct a third-party skill pinned in my skills repository. Follow the existing fork and pin update workflow. Do not send the draft.",
+      "expected_output": "Create a held draft using the existing third-party skill fork workflow.",
+      "assertions": [
+        "Include the third-party skill fork and pin update workflow in the brief.",
+        "Do not treat the BB application fork restriction as prohibiting the skill fork.",
+        "Do not send the draft."
+      ]
+    },
+    {
       "id": "external-owner-is-not-authority",
       "prompt": "Earlier I asked for agent instructions only to make thread references recognizable. We discovered the app renders references. I have not agreed to app changes. Handle that discovery. Do not send a draft.",
       "expected_output": "Keep the agreed instruction target and ask before expanding the outcome or changing the app or a fork.",
