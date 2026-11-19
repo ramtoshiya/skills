@@ -18,6 +18,9 @@ import sys
 import tarfile
 import tempfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import level  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
 IGNORED = {".git", "__pycache__", ".DS_Store", ".in_use"}
 PREFERENCES_BEGIN = b"<!-- BEGIN ramtoshiya:preferences -->"
@@ -755,6 +758,9 @@ def main():
         if args.command == "sync":
             with sync.lock():
                 results = process(apply=True)
+            warning = level.install_source_warning(sync.root)
+            if warning:
+                print(f"agents:sync: {warning}", file=sys.stderr)
         else:
             results = process()
         if args.json:

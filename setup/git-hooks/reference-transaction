@@ -1,0 +1,16 @@
+#!/bin/sh
+[ "$1" = committed ] || exit 0
+[ -z "$RAMTOSHIYA_LEVEL" ] || exit 0
+refs=$(cat)
+# A rebase moves main while HEAD is detached, then reattaches HEAD to main.
+case "$refs" in
+  *" refs/heads/main"|*" refs/heads/main
+"*|*" refs/remotes/origin/main"|*" refs/remotes/origin/main
+"*|*" ref:refs/heads/main HEAD"|*" ref:refs/heads/main HEAD
+"*) ;;
+  *) exit 0 ;;
+esac
+level="$(dirname "$0")/../agents/level.py"
+uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' \
+  python -I "$level" sync >&2 || echo "main:sync failed. Run \`mise run main:status\` to see what is out of step" >&2
+exit 0

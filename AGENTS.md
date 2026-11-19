@@ -152,6 +152,13 @@ guard](docs/hooks.md) applies to your own shell commands here as well. Run this
 repository's Python with `uv run python`, as `npm test` does, because the hooks
 need Python 3.11 or newer and the system `python3` can be older.
 
+## Publishing {:#publishing}
+
+Push finished work that passes the checks above to `origin/main` of this
+repository without asking first. That push is the standing workflow, and the
+hook in `setup/git-hooks` then brings the shared checkout and the local
+installs level with it.
+
 ## Claims and checks {:#claims}
 
 Hand back work in this repository with the claim checklist that

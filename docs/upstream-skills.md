@@ -194,8 +194,8 @@ A loose copy of the same skill makes it load twice, as described in
 [Agent plugins](agent-pack.md).
 
 The Hermes operator profile gets the same skill selections, without the
-hooks, from the copies `mise run agents:sync` fetches. After a pin update, run
-`mise run agents:sync` and then `mise run hermes:operator`, as
+hooks, from the copies `mise run agents:sync` fetches. A pin update pushed to
+`origin/main` runs both installers through `main:sync`, as
 [Machine setup](setup.md) describes.
 
 ## Review updates locally
@@ -311,8 +311,9 @@ below after reviewing a synchronized fork. Deterministic tests run with
    version, not the marketplace's commit SHA.
 4. Change `sha` in the entry, and `path` if upstream moved the folder. That
    commit is the release.
-5. Run `mise run agents:sync` for managed installations, then reload or restart
-   each changed host and review Codex hook trust. For manual installations,
+5. Push the change to `origin/main`. For managed installations, `main:sync`
+   then runs `mise run agents:sync`. Reload or restart each changed host and
+   review Codex hook trust. For manual installations,
    reinstall where needed:
    - Claude Code: `claude plugin marketplace update ramtoshiya`, then
      `claude plugin update <entry>@ramtoshiya` and reload or restart.

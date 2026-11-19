@@ -56,7 +56,9 @@ the repository's pins and checks registered Claude profiles' common settings
 and instructions. `mise run agents:sync` reconciles Claude Code and Codex
 without replacing unrelated settings or instruction text outside
 its managed block. It installs all applicable marketplace entries and stops on
-local package modifications.
+local package modifications. After `mise run main:sync` runs once in the
+checkout, every change to `main` runs these installers, and
+`mise run main:status` reports anything still behind `origin/main`.
 [Agent plugins](docs/agent-pack.md) describes the managed scope, conflicts, and
 required restarts.
 

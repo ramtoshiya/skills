@@ -130,11 +130,11 @@ English and include, in this order:
    > repository's docs describe, and push there. A third-party skill in the
    > Hermes operator profile is pinned in `{{SKILLS_REPO}}`. Change its fork,
    > then update the pin as that repository's `docs/upstream-skills.md`
-   > describes and run `mise run agents:sync` there. If the change touches a
-   > skill installed in the Hermes operator profile, reinstall the profile's
-   > copies afterwards by running `mise run hermes:operator` in
-   > `{{SKILLS_REPO}}`. Report what you changed, the commits, and anything
-   > left undone.
+   > describes. A push to `origin/main` of `{{SKILLS_REPO}}` installs the
+   > change on this machine, including the Hermes operator profile's copies.
+   > Then run `mise run main:status` in `{{SKILLS_REPO}}`, which exits
+   > nonzero and names any install that did not follow. Report what you
+   > changed, the commits, and anything left undone.
 
 Leave out what the worker's checks or mode already enforce. Leave out
 instructions for events that have not happened yet. They belong in the brief

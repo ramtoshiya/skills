@@ -63,6 +63,91 @@ them without applying the machine setup. Loading the
 checkout puts installed tools on mise's activated `PATH` but declares no
 environment variables.
 
+## Keep installs level with origin/main
+
+Three things should hold the same commit: `origin/main`, `main` in the
+checkout you cloned, and what this machine installed from it. That checkout is
+the shared checkout. Worktrees made from it with `git worktree add` share its
+Git configuration and hooks. Turn the mechanism on once, from the shared
+checkout:
+
+```sh
+mise run main:sync
+mise run main:status
+```
+
+The first `main:sync` sets `core.hooksPath` in the repository's local Git
+configuration to the shared checkout's `setup/git-hooks`. It stops instead
+when `core.hooksPath` already points somewhere else. Add `-- --hermes` to also
+create the Hermes operator profile described below.
+
+```mermaid
+flowchart LR
+  commit["commit on main in the shared checkout"] --> hook
+  push["push to main from any worktree"] --> hook
+  fetch["fetch that moves origin/main"] --> hook
+  hook["reference-transaction hook"] --> sync["main:sync"]
+  sync --> git["fetch, then fast-forward or push main"]
+  git --> install["installers run from the shared checkout"]
+```
+
+From then on, Git runs `main:sync` whenever `main` or `origin/main` moves in
+any worktree of the repository. `main:sync` fetches `origin/main`, then
+fast-forwards the shared checkout to it or pushes the shared checkout's own new
+commits without force. Then it runs each installer from the shared checkout:
+`agents:sync`, `mise dotfiles apply`, and `hermes:operator` when the operator
+profile is installed. The command that moved the ref waits for the installers
+and shows their output. A failed install never fails that command, and its
+output names the failed step.
+
+`main:sync` changes nothing and prints `STOPPED` with the reason in these
+cases:
+
+- The shared checkout needs to move and has uncommitted or untracked changes.
+- The fast-forward would replace an ignored file, such as a local `.env`.
+- Its `main` and `origin/main` each have commits the other lacks.
+- It is on another branch.
+- The push of its own commits fails.
+- A commit or an edit lands in the shared checkout while the installers run.
+  The message names the install that may hold the edit. A new commit starts
+  its own run, which waits for this one and installs it.
+
+It never resets, stashes, rebases, or force pushes. It fetches and pushes
+`main` only, never tags. After you fix the cause,
+the next commit, push, or fetch runs it again. Discarding the edits that
+stopped it moves no ref, so run `mise run main:sync` yourself after that.
+During a rebase of the shared checkout's `main`, it does nothing until the
+rebase reattaches `main`, which runs it again.
+
+`main:status` makes no changes. It asks the remote for `main` with
+`git ls-remote`, then prints a row for `origin/main`, the shared checkout, each
+agent package and settings target, each `mise.toml` dotfile entry that is not
+applied, and the Hermes operator profile. It exits 1 and names the target when
+any of them is behind. A merge made on GitHub shows as not fetched until the
+next fetch or `main:sync` on this machine.
+
+The `agents:*` tasks and `hermes:operator` still run alone. `hermes:operator`
+reads the shared checkout even when you start it from another worktree. When
+the tree an installer reads is not `origin/main`, it prints a warning that
+names the gap, and `main:status` keeps reporting the gap until `main:sync`
+runs. Installing unpushed work for a test is possible this way and stays
+visible.
+
+| Install target | Installed by | Kept level by `main:sync` |
+| --- | --- | --- |
+| Claude Code and Codex plugin packages, Claude settings and instructions, the preferences block in Hermes `SOUL.md` files | `agents:sync` | Yes |
+| Dotfile entries in `mise.toml` | `mise dotfiles apply` | Yes |
+| Hermes operator profile | `hermes:operator` | Yes, once installed |
+| Bootstrap packages in `mise.toml` | `mise bootstrap` | No |
+| bb plugins under `bb-plugins/` | `bb plugin install` | No |
+| CLIs under `tools/` | Each CLI's install step | No |
+
+Claude Code reads the `ramtoshiya` and `ramtoshiya-cc` plugins straight from
+the shared checkout, so a fast-forward changes them at once. Codex and Hermes
+run copies, which the installers refresh. The Hermes profile also copies
+skills from the pstack-mode checkout. A change there shows as drift in
+`main:status` and installs at the next `main:sync`.
+
 ## Check GitHub Actions
 
 From the checkout, run:
@@ -536,9 +621,17 @@ After installation, the task runs `hermes -p operator sessions refresh-prompts`.
 Continuing sessions otherwise reuse their stored system prompts, even after
 SOUL.md or skill files change. Each session adopts the installed instructions
 on its next turn and keeps its history and session id. The refresh costs one
-prompt-cache miss per session, including after an unchanged install. A failed
-refresh fails the task rather than reporting that existing sessions are up to
-date. Run the same refresh command after changing prompt files by hand.
+prompt-cache miss for every stored session of the profile. A failed refresh
+fails the task rather than reporting that existing sessions are up to date.
+Run the same refresh command after changing prompt files by hand.
+
+The task records what it installed in
+`~/.local/state/ramtoshiya-agents/hermes-operator.json`, under
+`$XDG_STATE_HOME` when that is set. When neither its sources nor the installed
+files changed since that record, it skips the whole install, so the gateway
+reload and the prompt refresh do not run. Running sessions are then left
+alone. `--check` compares without installing and exits 1 with the reason when
+the profile is out of date.
 
 The auto-loaded `operator-handoff` skill requires a current thread query before
 reporting task status, execution environments, or work order. Corrections also
@@ -584,7 +677,8 @@ It changes nothing else in those homes. `mise run agents:settings:status`
 reports a missing or outdated block as drift. A profile without a `SOUL.md`
 is a conflict and is left alone, because Hermes writes its default `SOUL.md`
 only when the file is missing. Start Hermes once with that profile, then sync
-again. Run the sync after `hermes:operator` creates the profile.
+again. `mise run main:sync -- --hermes` runs the sync again after it creates
+the profile.
 
 ### Bundled skills
 
@@ -678,8 +772,9 @@ calls after the review ends:
   draft titled `Skill change: <skills>`, parented to the same operator thread.
   If the held-drafts plugin's `mode` is not `draft`, it creates no draft and
   reports the brief instead. A worker started by sending the draft makes the
-  change at the source, then runs `mise run hermes:operator` to refresh the
-  copies. A third-party skill is changed in its fork and the pin updated, as
+  change at the source and pushes it to `origin/main`. The push refreshes the
+  copies, as the section on keeping installs level describes. A third-party
+  skill is changed in its fork and the pin updated, as
   [Third-party skills](upstream-skills.md) describes.
 - When the analyst finishes, the operator reports its decision and archives
   it. The draft stays, because it is the analyst's sibling.
@@ -804,8 +899,9 @@ the edit within that file. It is not part of the path.
 
 The `agents:status` and `agents:sync` tasks manage agent packages and registered
 Claude settings and instructions. Package ownership records limit retirement
-to registrations they created. Run these tasks after changing marketplace pins
-or common policy. They do not run `mise bootstrap` or apply other dotfiles.
+to registrations they created. `main:sync` runs `agents:sync` after each change
+to `main`. Run the tasks yourself to check one host or plugin. They do not run
+`mise bootstrap` or apply other dotfiles.
 The bootstrap task invokes only `agents:settings:sync`, not package
 installation. [Agent plugins](agent-pack.md) describes package support,
 conflicts, state storage, and reload requirements.
@@ -837,4 +933,6 @@ Edit the file in `setup/` or the entry in `mise.toml`, then run
 apply just common Claude settings and instructions, run
 `mise run agents:settings:sync`. Check the result across registered profiles
 with `mise run agents:settings:status`, then use the fresh-session checks above
-for changed runtime behavior.
+for changed runtime behavior. Once the change reaches `origin/main`, the next
+`main:sync` on a machine applies its dotfile entries and agent settings there.
+It does not install bootstrap packages.

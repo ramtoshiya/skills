@@ -240,6 +240,8 @@ mise run agents:status
 mise run agents:sync
 ```
 
+Once `mise run main:sync` has run in the checkout, a Git hook runs `sync`
+after every change to `main`, as [Machine setup](setup.md) describes.
 `status` makes no configuration changes or source downloads. Native inventory
 commands may refresh their own metadata caches. The task exits nonzero for
 missing packages, outdated contents, settings drift, or conflicts. `sync`

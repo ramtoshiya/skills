@@ -790,6 +790,30 @@ class OperatorProfileSetupTests(unittest.TestCase):
         self.assertEqual(calls[-1], ["-p", "operator", "sessions", "refresh-prompts"])
         self.assertIn("Requested a system prompt refresh", output)
 
+    def test_unchanged_install_leaves_sessions_and_gateway_alone(self):
+        self.setup_profile()
+        (self.operator / "gateway-running").touch()
+        log = self.home / "hermes-calls.jsonl"
+        log.unlink()
+
+        output = self.setup_profile()
+
+        calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+        self.assertIn("left alone", output)
+        self.assertNotIn(["-p", "operator", "sessions", "refresh-prompts"], calls)
+        self.assertFalse((self.operator / "gateway-plugins.json").exists())
+
+    def test_changed_soul_refreshes_sessions(self):
+        self.setup_profile()
+        soul = self.operator / "SOUL.md"
+        soul.write_text(soul.read_text() + "\nA preference added by agents:sync.\n")
+
+        output = self.setup_profile()
+
+        calls = [json.loads(line) for line in (self.home / "hermes-calls.jsonl").read_text().splitlines()]
+        self.assertEqual(calls[-1], ["-p", "operator", "sessions", "refresh-prompts"])
+        self.assertIn("Requested a system prompt refresh", output)
+
     def test_prompt_refresh_failure_fails_install(self):
         self.env["FAIL_REFRESH"] = "1"
 
@@ -816,6 +840,8 @@ class OperatorProfileSetupTests(unittest.TestCase):
     def test_gateway_that_refuses_the_reload_fails_setup(self):
         self.setup_profile()
         (self.operator / "gateway-running").write_text("refuse")
+        hook = "setup/hermes/plugins/skill-drafts/__init__.py"
+        commit_repo(self.repo, {hook: (self.repo / hook).read_text() + "\n# changed\n"})
 
         result = subprocess.run([sys.executable, str(self.repo / "setup/hermes/operator_profile.py"),
                                  "--pstack", str(self.pstack)], env=self.env, capture_output=True, text=True)

@@ -60,6 +60,14 @@ zsh = true
 [tasks.bootstrap]
 depends = ["agents:settings:sync"]
 
+[tasks."main:status"]
+description = "Compare origin/main, the shared checkout's main, and every install, and exit 1 on a gap"
+run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/level.py status"
+
+[tasks."main:sync"]
+description = "Bring the shared checkout's main level with origin/main, then install from it"
+run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/level.py sync"
+
 [tasks."agents:status"]
 description = "Compare installed agent packages with this checkout"
 run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/sync.py status"

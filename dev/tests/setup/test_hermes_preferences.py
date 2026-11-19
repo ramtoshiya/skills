@@ -33,7 +33,7 @@ class HermesPreferencesTests(unittest.TestCase):
         self.home.mkdir()
         self.root = base / "repo"
         (self.root / "setup/agents").mkdir(parents=True)
-        for name in ("sync.py", "claude-settings.json", "claude-terminal-settings.json"):
+        for name in ("sync.py", "level.py", "claude-settings.json", "claude-terminal-settings.json"):
             shutil.copyfile(ROOT / "setup/agents" / name, self.root / "setup/agents" / name)
         self.source = self.root / "setup/agents/preferences.md"
         self.source.write_bytes(b"# Preferences\n\nCatch mistakes.\n")
