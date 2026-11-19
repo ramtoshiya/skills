@@ -136,6 +136,24 @@ test('captures the active caller and waits for its completion before proof and r
   await assert.rejects(readFile(join(fixture.dir, 'SENTINEL')), { code: 'ENOENT' });
 });
 
+test('compacts and resumes after steering and a child notice accepted by the current turn', async t => {
+  const events = recordedEvents();
+  events.before.splice(3, 0,
+    event(8, 'client/turn/requested', null, { requestId: 'creq_steer', initiator: 'agent',
+      source: 'tell', target: { kind: 'steer', expectedTurnId: 'caller' } }),
+    event(9, 'turn/input/accepted', 'caller', { clientRequestId: 'creq_steer' }),
+    event(10, 'client/turn/requested', null, { requestId: 'creq_child', initiator: 'system',
+      source: 'tell', systemMessageKind: 'child-completed', target: { kind: 'auto', expectedTurnId: 'caller' } }),
+    event(11, 'turn/input/accepted', 'caller', { clientRequestId: 'creq_child' }));
+  const fixture = await setup(t, events);
+  const result = await fixture.run();
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).resumeSent, true);
+  const calls = await fixture.calls();
+  assert.equal(calls.filter(call => call.args[1] === 'compact').length, 1);
+  assert.equal(calls.filter(call => call.args[1] === 'tell').length, 1);
+});
+
 test('proves compaction without resuming when requested', async t => {
   const fixture = await setup(t);
   const result = await fixture.run(['--no-resume']);
