@@ -28,6 +28,8 @@ RESEARCH_PROJECT = "proj_personal"
 # Hermes seeds these into every home, opted out or not, until the home's .bundled_manifest tracks
 # them as deleted. Mirrors ESSENTIAL_SKILLS in Hermes's agent/skill_utils.py.
 ESSENTIAL_SKILLS = ("hermes-agent",)
+# Where Hermes looks for a project's own skills. Mirrors PROJECT_SKILLS_SUBDIRS in agent/skill_utils.py.
+PROJECT_SKILL_DIRS = (".hermes/skills", ".agents/skills")
 # bb's shipped Hermes entry, minus the launch and skill roots that bb_catalog_agent sets. Manual
 # compaction is on because bb refuses `bb thread compact` for an entry without the flag.
 BB_AGENT = {"id": "hermes-agent", "displayName": "Hermes Agent", "command": "hermes",
@@ -210,7 +212,19 @@ def reload_gateway(profile: str) -> None:
         print(f"hermes-operator: the running gateway reloaded profile {profile}'s plugins")
 
 
-def bb_catalog_agent(profile: str, home: Path, packages: dict[str, Source]) -> None:
+def repo_skill_dirs(profile: str) -> list[str]:
+    """The skill folders of each repository in the profile's skills.trusted_project_dirs.
+
+    Hermes loads a trusted repository's skills only when the session's nearest .git is that
+    repository's root. bb runs threads in linked worktrees, whose root is never on the list, and a
+    worktree's branch may carry an older copy of a skill. Listing the trusted checkouts' folders in
+    skills.external_dirs loads their current skills in every session of the profile.
+    """
+    trusted = json.loads(run("hermes", "-p", profile, "config", "get", "skills.trusted_project_dirs", "--json"))
+    return [str(Path(os.path.expandvars(root)).expanduser() / sub) for root in trusted for sub in PROJECT_SKILL_DIRS]
+
+
+def bb_catalog_agent(profile: str, home: Path, packages: dict[str, Source], repo_skills: list[str]) -> None:
     """Point bb's Hermes provider at the profile: the process it launches and the skills its composer lists.
 
     bb's shipped Hermes entry launches the sticky profile and lists only the default home's skills.
@@ -225,6 +239,7 @@ def bb_catalog_agent(profile: str, home: Path, packages: dict[str, Source]) -> N
     relative = home.relative_to(Path.home()).as_posix()
     roots = [{"path": f"{relative}/skills", "recursive": True}]
     roots += [{"path": f"{relative}/plugins/{name}/hermes/skills", "namePrefix": f"{name}:"} for name in sorted(packages)]
+    roots += [{"path": path, "recursive": True} for path in repo_skills]
     agents.append({**BB_AGENT, "args": ["-p", profile, "acp"], "nativeSkillRoots": {"user": roots}})
     run(bb, "plugin", "config", "provider-acp", "set", "customAgents", json.dumps(agents))
 
@@ -319,6 +334,8 @@ def main() -> None:
 
     for key, value in CONFIG.items():
         run("hermes", "-p", profile, "config", "set", key, value)
+    repo_skills = repo_skill_dirs(profile)
+    run("hermes", "-p", profile, "config", "set", "skills.external_dirs", json.dumps(repo_skills))
     for plugin in (*PLUGINS, *sorted(packages)):
         run("hermes", "-p", profile, "plugins", "enable", plugin, "--no-allow-tool-override")
     reload_gateway(profile)
@@ -326,7 +343,7 @@ def main() -> None:
     # loses its bundled skills too.
     drop_bundled(profile, home, {skills_dir / name for name in managed})
     drop_bundled("default", default_home, set())
-    bb_catalog_agent(profile, home, packages)
+    bb_catalog_agent(profile, home, packages, repo_skills)
     print(run("hermes", "-p", profile, "sessions", "refresh-prompts").strip())
 
     others = sorted(p.parent.name for p in skills_dir.rglob("SKILL.md")

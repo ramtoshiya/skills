@@ -755,6 +755,28 @@ class OperatorProfileSetupTests(unittest.TestCase):
         self.assertEqual(set(runtime_skills(self.operator)), expected)
         self.assertEqual(bb_catalog(self.home), expected)
 
+    def test_trusted_repository_skills_load_from_its_main_checkout(self):
+        project = self.tmp / "workspaces/contest"
+        commit_repo(project, under(".hermes/skills", skill("planning")))
+        worktree = self.tmp / "worktrees/thr_1/contest"
+        git("worktree", "add", "-q", "-b", "thread", str(worktree), cwd=project)
+        commit_repo(project, {".hermes/skills/planning/SKILL.md": "---\nname: planning\ndescription: current\n---\n"})
+        self.setup_profile()
+        self.hermes("-p", "operator", "config", "set", "skills.trusted_project_dirs", json.dumps([str(project)]))
+
+        self.setup_profile()
+
+        skills = runtime_skills(self.operator)
+        self.assertEqual(skills["planning"], [project / ".hermes/skills/planning"])
+        self.assertIn("description: current", (skills["planning"][0] / "SKILL.md").read_text())
+        self.assertEqual(bb_catalog(self.home), set(skills))
+
+        self.hermes("-p", "operator", "config", "set", "skills.trusted_project_dirs", "[]")
+        self.setup_profile()
+
+        self.assertEqual(set(runtime_skills(self.operator)), self.expected())
+        self.assertEqual(bb_catalog(self.home), self.expected())
+
     def test_install_requests_prompt_refresh_for_continuing_sessions(self):
         output = self.setup_profile()
 

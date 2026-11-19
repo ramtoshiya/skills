@@ -509,6 +509,7 @@ Then it changes these files under `~/.hermes/profiles/operator/`:
 | `agent.disabled_toolsets` | `["file", "code_execution", "delegation"]` | No file reading or writing tools, no code execution, and no `delegate_task` subagents, which bb cannot show. The operator starts every worker as a bb thread instead. The terminal stays on for `bb` |
 | `skills.auto_load` | `["operator-handoff"]` | The handoff procedure is in every session |
 | `skills.project_discovery` | `true` | Project skills load only from trusted repositories |
+| `skills.external_dirs` | The `.hermes/skills` and `.agents/skills` folders of each repository in `skills.trusted_project_dirs` | Every operator session loads the trusted repositories' current skills, also in a bb worktree. Hermes alone loads them only when the session's nearest `.git` is the trusted checkout itself, and a worktree's branch can hold an older copy. After `hermes -p operator skills trust <path>` or `untrust`, run the task again |
 | `curator.enabled` | `false` | Hermes does not archive or merge skills on its own |
 | `memory.write_approval` | `false` | Hermes writes its built-in memory without asking. Memory limits stay at the defaults |
 | `compression.threshold_tokens` | `300000` | Hermes compresses a session on its own when a request reaches 300,000 tokens. The self-compact plugin reminds the agent to compact from 75% of this number |
@@ -614,7 +615,8 @@ an entry whose id is `hermes-agent` in the ACP providers plugin's
 - It starts `hermes -p operator acp`.
 - Its skill menu adds the operator's `skills/` and each native plugin's
   `hermes/skills/` with the `<plugin>:` prefix. bb lists
-  `humanize-korean:humanize-korean`, the name Hermes loads it by.
+  `humanize-korean:humanize-korean`, the name Hermes loads it by. It also
+  adds the trusted repositories' skill folders that the operator loads.
 - It sets reasoning through Hermes's `reasoning_effort` option.
 - It turns on manual compaction, which bb's shipped entry leaves off, so
   `bb thread compact` works for Hermes threads. Hermes runs the `/compact` it
