@@ -33,6 +33,10 @@ The plugin adds a script to each inline-vis page before the page first
 loads. A page that is already on screen when you enable or disable the plugin
 loads again once, which resets what you typed or scrolled in it.
 
+The app page loads the image again when you right-click it. If the image is
+large or the connection is slow, wait a moment before you choose
+**Copy Image**, because the item copies nothing until that load ends.
+
 After you copy, the first click on the same point of the image closes the
 plugin's invisible image and does not reach the page. Clicks anywhere else
 work as before.

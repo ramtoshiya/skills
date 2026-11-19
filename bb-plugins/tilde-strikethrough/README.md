@@ -25,12 +25,16 @@ The plugin needs no bb setting.
 | `v3~6 and then 8~10` | v3<del>6 and then 8</del>10 | v3~6 and then 8~10 |
 | `~~removed~~` | <del>removed</del> | <del>removed</del> |
 
-The plugin covers chat messages, which includes a reply while it streams. It
-does not change a message's stored text.
+The plugin applies to every Markdown block that bb renders in the app page.
+That includes a reply while it streams and a Markdown file shown inline in a
+message. It does not change a message's stored text.
 
 The plugin leaves a struck span as bb drew it in these cases:
 
-- The message wrote the span as a raw `<del>` HTML tag.
+- The message wrote the span as a raw `<del>` HTML tag. One exception exists.
+  If a single-tilde span with the same text follows the tag in the same
+  message, the plugin can pair the two, so the tag's text loses its line and
+  the single-tilde span keeps it.
 - The span's text differs from the message source, for example because the
   span contains an image or a mention that bb rewrote.
 
