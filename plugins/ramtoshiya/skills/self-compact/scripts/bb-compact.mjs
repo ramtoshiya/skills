@@ -45,6 +45,17 @@ function parseRun(rest) {
 const outcome = { compacted: false, phase: 'waiting-caller', resumeAttempted: false };
 let report = null;
 
+function prepareCommandSeq(history, turnId) {
+  const active = new Map();
+  for (const { seq, type, scope, data: { item } } of history) {
+    if (scope.turnId !== turnId || item?.type !== 'commandExecution' || !nonempty(item.id)) continue;
+    if (type === 'item/completed') active.delete(item.id);
+    if (type === 'item/started' && typeof item.command === 'string' &&
+        /\bbb-compact\.mjs["']?\s+prepare\s/.test(item.command)) active.set(item.id, seq);
+  }
+  return active.size === 1 ? active.values().next().value : 0;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const threadId = process.env.BB_THREAD_ID;
@@ -177,7 +188,22 @@ async function main() {
   }
 
   if (preparing) {
-    history.slice(start + 1).forEach(checkCaller);
+    const callerHistory = history.slice(start + 1);
+    const commandSeq = provider === PROVIDERS['claude-code'] ? prepareCommandSeq(callerHistory, caller.turnId) : 0;
+    const unaccepted = new Map();
+    for (const event of callerHistory) {
+      if (event.seq < commandSeq) {
+        if (event.type === 'client/turn/requested') {
+          unaccepted.set(event.data.requestId, event);
+          continue;
+        }
+        if (event.type === 'turn/input/accepted' && event.scope.turnId === caller.turnId) {
+          unaccepted.delete(event.data.clientRequestId);
+        }
+      }
+      checkCaller(event);
+    }
+    unaccepted.forEach(checkCaller);
     if (caller.completed || await threadState() !== 'active') fail('The invoking turn ended during preparation.');
     (await events()).forEach(checkCaller);
     if (caller.completed) fail('The invoking turn ended during preparation.');

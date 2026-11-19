@@ -136,6 +136,10 @@ test('captures the active caller and waits for its completion before proof and r
   await assert.rejects(readFile(join(fixture.dir, 'SENTINEL')), { code: 'ENOENT' });
 });
 
+const prepareCommand = event(16, 'item/started', 'caller', { item: {
+  id: 'tool_prepare', type: 'commandExecution', command: 'node "/skills/scripts/bb-compact.mjs" prepare "/tmp/handoff.md"',
+} });
+
 test('compacts and resumes after steering and a child notice accepted by the current turn', async t => {
   const events = recordedEvents();
   events.before.splice(3, 0,
@@ -145,6 +149,7 @@ test('compacts and resumes after steering and a child notice accepted by the cur
     event(10, 'client/turn/requested', null, { requestId: 'creq_child', initiator: 'system',
       source: 'tell', systemMessageKind: 'child-completed', target: { kind: 'auto', expectedTurnId: 'caller' } }),
     event(11, 'turn/input/accepted', 'caller', { clientRequestId: 'creq_child' }));
+  events.before.push(prepareCommand);
   const fixture = await setup(t, events);
   const result = await fixture.run();
   assert.equal(result.status, 0, result.stderr);
@@ -153,6 +158,27 @@ test('compacts and resumes after steering and a child notice accepted by the cur
   assert.equal(calls.filter(call => call.args[1] === 'compact').length, 1);
   assert.equal(calls.filter(call => call.args[1] === 'tell').length, 1);
 });
+
+for (const [name, requestSeq, acceptance] of [
+  ['was not accepted', 8, null],
+  ['was accepted into another turn', 8, event(9, 'turn/input/accepted', 'other', { clientRequestId: 'creq_steer' })],
+  ['was followed by acceptance of a different request', 8, event(9, 'turn/input/accepted', 'caller', { clientRequestId: 'creq_other' })],
+  ['was accepted after preparation started', 8, event(17, 'turn/input/accepted', 'caller', { clientRequestId: 'creq_steer' })],
+  ['arrived and was accepted during preparation', 17, event(18, 'turn/input/accepted', 'caller', { clientRequestId: 'creq_steer' })],
+]) {
+  test(`refuses preparation when steering ${name}`, async t => {
+    const events = recordedEvents();
+    events.before.push(prepareCommand, event(requestSeq, 'client/turn/requested', null, { requestId: 'creq_steer',
+      target: { kind: 'steer', expectedTurnId: 'caller' } }));
+    if (acceptance) events.before.push(acceptance);
+    events.before.sort((left, right) => left.seq - right.seq);
+    const fixture = await setup(t, events);
+    const result = fixture.prepare();
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stderr, /New work or a different turn/);
+    assert.equal(await readFile(fixture.note, 'utf8'), 'Continue the task.');
+  });
+}
 
 test('proves compaction without resuming when requested', async t => {
   const fixture = await setup(t);

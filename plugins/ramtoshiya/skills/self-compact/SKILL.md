@@ -64,15 +64,19 @@ or send more prompts to this thread during that time. Other threads can keep wor
 BB checks whether a thread is idle before accepting compaction, but its CLI has no atomic
 send-if-unchanged operation. A prompt arriving after the final check can still race the resume.
 
-First, prepare in the foreground. Use this skill's actual directory and the absolute handoff
-note path:
+First, prepare in a standalone foreground Bash call. Use this skill's actual directory and the
+absolute handoff note path:
 
 ```sh
 node "<skill-directory>/scripts/bb-compact.mjs" prepare "<handoff-note>"
 ```
 
-Preparation checks the thread and note and returns `launchSeq` and `turnId`. Pass those values
-to the background command so it can recognize this turn even if it starts after you stop:
+Preparation checks the thread and note and returns `launchSeq` and `turnId`. It allows earlier
+requests only if BB recorded their acceptance into this turn before the preparation command
+started. Do not wrap the command in a way that hides it from the BB log.
+
+Pass `launchSeq` and `turnId` to the background command so it can recognize this turn even if it
+starts after you stop:
 
 ```sh
 node "<skill-directory>/scripts/bb-compact.mjs" run "<handoff-note>" --launch-seq <launchSeq> --turn-id <turnId>

@@ -54,8 +54,10 @@ agent finishes its step and writes a handoff note first.
 - In BB a helper uses the installed `bb` CLI and Node.js to wait for the turn
   to end and request native compaction. It sends the resume only after the
   matching turn reports an actual compaction boundary and successful
-  completion. It supports the `claude-code` provider, which launches it as a
-  Bash background task with completion notifications. It also supports Hermes,
+  completion. In the `claude-code` provider, the agent launches the helper as a
+  Bash background task with completion notifications. The helper allows input
+  BB already accepted into the active turn before preparation. New input during
+  preparation still stops the helper. The helper also supports Hermes,
   which launches it through the profile's `self_compact` tool. For Hermes it
   also requires the one compaction that Hermes committed after the request,
   because BB reports a refused or empty `/compact` as finished too. Other
