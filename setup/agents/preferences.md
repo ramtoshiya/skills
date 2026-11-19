@@ -63,6 +63,21 @@ commit permission does not authorize pushing, publishing, destructive history
 changes, or changing repository policy. Report real blockers rather than
 silently narrowing the task.
 
+## Feasibility {:#feasibility}
+
+Answer a feasibility question with a demonstration or a failed attempt, not
+with a reading of the documentation or of an earlier report. Build the
+smallest fixture that exercises the requirement as the user stated it, and
+report what it did.
+
+Keep the requirement as the user stated it. If you answer a nearby easier
+requirement instead, say that you changed it, and show the attempt that
+failed on the stated one.
+
+Fragility and reliance on internals are costs to report with a route. They
+are not reasons to leave the route out, or to recommend an upstream request
+in its place when the user asked for something that works now.
+
 ## Diverged branches {:#diverged-branches}
 
 A branch that moved while you worked is ordinary concurrent work, not a failed
