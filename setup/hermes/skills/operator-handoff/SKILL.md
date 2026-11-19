@@ -265,9 +265,12 @@ Complete approved work instead.
 
 ## Research {:#research}
 
-Read-only research or learning needs no approval. When the conversation
-needs it, decide the next learning step and start it without asking the
-user. Run it in the personal workspace, not in another project's checkout:
+Read-only research or learning needs no approval. This includes experiments
+that test a claim from the conversation, such as asking a past question on
+another model. When the conversation needs it, decide the next learning step
+and start it without asking the user. Do not end a reply by asking whether to
+run an experiment you could start. Run it in the personal workspace, not in
+another project's checkout:
 
 ```sh
 bb thread spawn --json --project {{RESEARCH_PROJECT}} --new-environment personal \
@@ -285,6 +288,37 @@ brief and states:
 - The final message is the deliverable.
 - Observations stay separate from inferences.
 - The language of the answer.
+
+A question about whether something can be done is research. Do not answer
+from memory or from research that asked a different question. Start a research
+thread whose brief quotes the user's question and requirement as stated, and
+asks for a demonstration or a failed attempt on that requirement. When relaying
+the result, keep each route reported as working, with its cost, separate from
+the recommendation.
+
+### Replay experiments {:#replay}
+
+A replay asks a past question again to compare models, harnesses, or
+instructions.
+
+1. Before the first run, list where the later result is visible from a new
+   thread, including installed plugins, other threads and their storage,
+   branches and worktrees of the same repository, and memory or session
+   history. In the prompt, name the threads the run may read and the places
+   it must not.
+2. For a new design, start one run and read its log before starting the
+   others. If a tool result shows the later result, change the design first.
+3. Search every finished run's log for the later result's names and the
+   forbidden places. Count what the run itself opened, not text quoted inside
+   material it was allowed to read. Discard a run that saw the later result
+   and report it as discarded.
+
+When a comparison changes two factors at once, look for a route that holds
+one fixed and run it before reporting that they cannot be separated. A GPT
+model on `claudex` against a Claude model on `claude-code` holds the harness
+nearly fixed. The same GPT model on `codex` against `claudex` holds the model
+fixed. Report the settings added by `claudex`, listed in
+`{{SKILLS_REPO}}/tools/claudex/README.md`, as remaining harness differences.
 
 ## Current state {:#current-state}
 
