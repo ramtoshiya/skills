@@ -20,6 +20,7 @@ HOOK_VARIABLES = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX", "G
                   "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG_PARAMETERS",
                   "GIT_CONFIG_COUNT")
 OPERATOR_PROFILE = "operator"
+BB_PLUGINS = "bb-plugins"
 
 
 class Stop(Exception):
@@ -104,6 +105,119 @@ def install_source_warning(path):
     return None
 
 
+def state_dir():
+    return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "ramtoshiya-agents"
+
+
+class BbPlugins:
+    """bb plugins installed from the shared checkout's bb-plugins, rebuilt when their tree changes.
+
+    bb neither rebuilds a path plugin on reload nor stamps its build with the source it read, so the tree each
+    install read is recorded here.
+    """
+
+    def __init__(self, shared):
+        self.shared = shared
+        self.record_file = state_dir() / "bb-plugins.json"
+
+    def bb(self, *args):
+        result = subprocess.run(["bb", *args], capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                                env=environment(), timeout=600)
+        if result.returncode:
+            raise Stop(f"`bb {' '.join(args[:3])}` failed: {(result.stderr or result.stdout).strip()}")
+        return result.stdout
+
+    def records(self):
+        try:
+            return json.loads(self.record_file.read_text())
+        except (OSError, ValueError):
+            return {}
+
+    def record(self, plugin_id, tree):
+        records = {**self.records(), plugin_id: tree}
+        self.record_file.parent.mkdir(parents=True, exist_ok=True)
+        self.record_file.write_text(json.dumps(records, indent=2, sort_keys=True) + "\n")
+
+    def home(self, plugin_id):
+        return self.shared / BB_PLUGINS / plugin_id
+
+    def tree(self, plugin_id):
+        return git(self.shared, "rev-parse", f"HEAD:{BB_PLUGINS}/{plugin_id}")
+
+    def from_this_repository(self):
+        """Return (plugin, installed from the shared checkout) for each path plugin this repository provides."""
+        worktrees = [Path(line.removeprefix("worktree ")).resolve() for line in
+                     git(self.shared, "worktree", "list", "--porcelain").splitlines() if line.startswith("worktree ")]
+        ours = []
+        for plugin in json.loads(self.bb("plugin", "list", "--json"))["plugins"]:
+            if not plugin["source"].startswith("path:"):
+                continue
+            source = Path(plugin["source"].removeprefix("path:")).resolve()
+            if source == self.home(plugin["id"]).resolve():
+                ours.append((plugin, True))
+            elif (self.home(plugin["id"]) / "package.json").is_file() or any(
+                    source.is_relative_to(tree) for tree in worktrees):
+                ours.append((plugin, False))
+        return ours
+
+    def status_rows(self):
+        if shutil.which("bb") is None:
+            return [row("bb", "plugins", "absent", "bb not on PATH")]
+        try:
+            plugins = self.from_this_repository()
+            records = self.records()
+            rows = []
+            for plugin, shared in plugins:
+                name = f"plugin:{plugin['id']}"
+                if not shared:
+                    move = (f"Move it with `bb plugin install path:{self.home(plugin['id'])} --yes`"
+                            if (self.home(plugin["id"]) / "package.json").is_file()
+                            else f"{BRANCH} has no {BB_PLUGINS}/{plugin['id']}")
+                    rows.append(row("bb", name, "drift",
+                                    f"runs {plugin['source'].removeprefix('path:')}, not the shared checkout. {move}"))
+                elif plugin["id"] not in records:
+                    rows.append(row("bb", name, "drift", "no record of the tree it was built from"))
+                elif records[plugin["id"]] != self.tree(plugin["id"]):
+                    rows.append(row("bb", name, "drift", "built from an older tree than the shared checkout"))
+                else:
+                    rows.append(row("bb", name, "ok", f"built from {self.home(plugin['id'])}"))
+            return rows or [row("bb", "plugins", "ok", f"none installed from {BB_PLUGINS}")]
+        except (Stop, ValueError, KeyError, subprocess.SubprocessError) as error:
+            return [row("bb", "plugins", "conflict", str(error))]
+
+    def active_providers(self):
+        threads = json.loads(self.bb("thread", "list", "--include-hidden", "--json"))
+        return {thread["providerId"] for thread in threads if thread.get("status") == "active"}
+
+    def sync(self):
+        failed = []
+        try:
+            plugins = [plugin for plugin, shared in self.from_this_repository() if shared]
+            for plugin in plugins:
+                tree = self.tree(plugin["id"])
+                if self.records().get(plugin["id"]) == tree:
+                    continue
+                # A reinstall restarts the provider's worker and with it every turn on that provider.
+                busy = set(plugin.get("providerIds") or []) & self.active_providers()
+                if busy:
+                    print(f"main:sync: postponed {plugin['id']}, which a running {', '.join(sorted(busy))} turn uses. "
+                          f"Run `mise run main:sync` after it finishes", file=sys.stderr)
+                    failed.append(plugin["id"])
+                    continue
+                try:
+                    self.bb("plugin", "install", f"path:{self.home(plugin['id'])}", "--yes")
+                except Stop as error:
+                    print(f"main:sync: {error}", file=sys.stderr)
+                    failed.append(plugin["id"])
+                    continue
+                self.record(plugin["id"], tree)
+                print(f"main:sync: reinstalled the bb plugin {plugin['id']}", file=sys.stderr)
+        except (Stop, ValueError, KeyError, subprocess.SubprocessError) as error:
+            print(f"main:sync: {error}", file=sys.stderr)
+            return False
+        return not failed
+
+
 def remote_head(shared):
     output = git(shared, "ls-remote", "--exit-code", REMOTE, f"refs/heads/{BRANCH}", timeout=60)
     return output.split()[0]
@@ -151,7 +265,7 @@ class Installers:
                             detail[-1] if detail else ""))
         else:
             rows.append(row("hermes", f"profile:{OPERATOR_PROFILE}", "absent", "not installed on this machine"))
-        return rows
+        return rows + BbPlugins(self.shared).status_rows()
 
     def steps(self, hermes, extra):
         agents = ("agents:sync", [*self.python, str(self.shared / "setup/agents/sync.py"), "sync"])
@@ -159,10 +273,12 @@ class Installers:
         operator = ("hermes:operator", [*self.python, str(self.shared / "setup/hermes/operator_profile.py"), *extra])
         steps = [agents, *([dotfiles] if shutil.which("mise") else [])]
         if self.hermes_installed():
-            return [*steps, operator]
-        if hermes:
+            steps = [*steps, operator]
+        elif hermes:
             preferences_for_the_new_profile_soul = [agents, operator]
-            return [*steps, operator, *preferences_for_the_new_profile_soul]
+            steps = [*steps, operator, *preferences_for_the_new_profile_soul]
+        if shutil.which("bb"):
+            steps.append(("bb plugins", BbPlugins(self.shared).sync))
         return steps
 
 
@@ -191,7 +307,7 @@ def status(shared):
 
 @contextmanager
 def locked():
-    state = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "ramtoshiya-agents"
+    state = state_dir()
     state.mkdir(parents=True, exist_ok=True)
     with (state / "level.lock").open("w") as stream:
         try:
@@ -262,7 +378,7 @@ def sync(shared, hermes, extra):
         for name, command in installers.steps(hermes, extra):
             stop_unless_still_at_target(shared, target, previous)
             print(f"main:sync: {name}", file=sys.stderr)
-            if installers.run(command, capture=False).returncode:
+            if not (command() if callable(command) else installers.run(command, capture=False).returncode == 0):
                 failed.append(name)
             previous = name
         stop_unless_still_at_target(shared, target, previous)

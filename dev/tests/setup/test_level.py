@@ -37,6 +37,7 @@ class LevelTests(unittest.TestCase):
             "PATH": os.pathsep.join([str(bin_dir), *sorted(tools), "/usr/bin", "/bin"]),
             "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
             "UV_PYTHON_INSTALL_DIR": uv_python_dir(), "UV_CACHE_DIR": str(self.tmp / "uv-cache"),
+            "CALLS": str(self.tmp / "bb-calls.jsonl"),
         }
         commit_repo(self.home / "workspaces/pstack-mode", {"plugins/pstack-mode/mode.md": "# Mode\n", **under(
             "plugins/pstack-mode/skills", {k: v for s in PSTACK_ALLOWED for k, v in skill(s).items()})})
@@ -227,6 +228,61 @@ class LevelTests(unittest.TestCase):
         self.assertIn("left alone", result.stdout)
         self.assertNotIn("only in the worktree", self.installed.read_text())
         self.assertEqual(self.status()[0], 0)
+
+    def push_bb_plugin(self, text):
+        (self.worktree / "bb-plugins/demo").mkdir(parents=True, exist_ok=True)
+        self.commit(self.worktree, "bb-plugins/demo/package.json", text)
+        return self.run_git(self.worktree, "push", "-q", "origin", "HEAD:main")
+
+    def bb_installs(self):
+        calls = Path(self.env["CALLS"])
+        lines = calls.read_text().splitlines() if calls.exists() else []
+        return [call["args"] for call in map(json.loads, lines) if call["args"][:2] == ["plugin", "install"]]
+
+    def install_bb_plugin(self, source):
+        (self.home / "bb-plugins.json").write_text(json.dumps(
+            [{"id": "demo", "source": f"path:{source}", "providerIds": ["demo-agent"]}]))
+
+    def set_turn(self, status):
+        (self.home / "bb-threads.json").write_text(json.dumps([{"id": "thr_2", "providerId": "demo-agent",
+                                                                 "status": status}]))
+
+    def test_bb_plugin_from_the_shared_checkout_is_reinstalled_when_no_turn_uses_it(self):
+        self.push_bb_plugin('{"name": "demo"}\n')
+        self.install_bb_plugin(self.shared / "bb-plugins/demo")
+        code, rows = self.status()
+        self.assertEqual(code, 1)
+        self.assertIn("no record", rows[("bb", "plugin:demo")]["detail"])
+
+        self.set_turn("active")
+        push = self.push_bb_plugin('{"name": "demo", "version": "2"}\n')
+
+        self.assertEqual(push.returncode, 0)
+        self.assertIn("postponed demo", push.stderr)
+        self.assertEqual(self.bb_installs(), [])
+        self.assertEqual(self.status()[1][("bb", "plugin:demo")]["status"], "drift")
+
+        self.set_turn("idle")
+        self.assertEqual(self.level("sync").returncode, 0)
+
+        self.assertEqual(self.bb_installs(), [["plugin", "install", f"path:{self.shared}/bb-plugins/demo", "--yes"]])
+        code, rows = self.status()
+        self.assertEqual(code, 0, rows)
+        self.assertEqual(rows[("bb", "plugin:demo")]["status"], "ok")
+
+    def test_bb_plugin_running_from_a_copy_is_reported_and_left_where_it_is(self):
+        self.push_bb_plugin('{"name": "demo"}\n')
+        copy = self.tmp / "preserved/demo"
+        self.install_bb_plugin(copy)
+
+        self.assertEqual(self.level("sync").returncode, 0)
+
+        self.assertEqual(self.bb_installs(), [])
+        code, rows = self.status()
+        self.assertEqual(code, 1)
+        self.assertIn(f"bb plugin install path:{self.shared}/bb-plugins/demo --yes",
+                      rows[("bb", "plugin:demo")]["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -43,6 +43,19 @@ elif args[:3] == ["provider", "models", "claude-code"]:
     print(json.dumps([{{"id": i, "supportedReasoningEfforts": efforts}} for i in (
         "claude-sonnet-5-5", "claude-opus-4-8", "claude-opus-5-5", "claude-opus-5", "claude-opus-5-5[1m]",
         "claude-opus-4-1-20250805")]))
+elif args[:2] == ["plugin", "list"]:
+    store = Path(os.environ["HOME"]) / "bb-plugins.json"
+    print(json.dumps({{"plugins": json.loads(store.read_text()) if store.exists() else []}}))
+elif args[:2] == ["plugin", "install"]:
+    store = Path(os.environ["HOME"]) / "bb-plugins.json"
+    path = args[2].removeprefix("path:")
+    plugins = json.loads(store.read_text()) if store.exists() else []
+    previous = next((p for p in plugins if p["id"] == Path(path).name), {{}})
+    plugins = [p for p in plugins if p["id"] != Path(path).name]
+    store.write_text(json.dumps([*plugins, {{**previous, "id": Path(path).name, "source": "path:" + path}}]))
+elif args[:2] == ["thread", "list"]:
+    store = Path(os.environ["HOME"]) / "bb-threads.json"
+    print(store.read_text() if store.exists() else "[]")
 elif args[:2] == ["thread", "spawn"]:
     if os.environ.get("FAIL_SPAWN"):
         sys.exit("HTTP 500: server down")

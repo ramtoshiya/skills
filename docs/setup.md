@@ -95,8 +95,9 @@ From then on, Git runs `main:sync` whenever `main` or `origin/main` moves in
 any worktree of the repository. `main:sync` fetches `origin/main`, then
 fast-forwards the shared checkout to it or pushes the shared checkout's own new
 commits without force. Then it runs each installer from the shared checkout:
-`agents:sync`, `mise dotfiles apply`, and `hermes:operator` when the operator
-profile is installed. The command that moved the ref waits for the installers
+`agents:sync`, `mise dotfiles apply`, `hermes:operator` when the operator
+profile is installed, and `bb plugin install` for each bb plugin described
+below. The command that moved the ref waits for the installers
 and shows their output. A failed install never fails that command, and its
 output names the failed step.
 
@@ -122,7 +123,8 @@ rebase reattaches `main`, which runs it again.
 `main:status` makes no changes. It asks the remote for `main` with
 `git ls-remote`, then prints a row for `origin/main`, the shared checkout, each
 agent package and settings target, each `mise.toml` dotfile entry that is not
-applied, and the Hermes operator profile. It exits 1 and names the target when
+applied, the Hermes operator profile, and each bb plugin from this
+repository. It exits 1 and names the target when
 any of them is behind. A merge made on GitHub shows as not fetched until the
 next fetch or `main:sync` on this machine.
 
@@ -139,7 +141,7 @@ visible.
 | Dotfile entries in `mise.toml` | `mise dotfiles apply` | Yes |
 | Hermes operator profile | `hermes:operator` | Yes, once installed |
 | Bootstrap packages in `mise.toml` | `mise bootstrap` | No |
-| bb plugins under `bb-plugins/` | `bb plugin install` | No |
+| bb plugins under `bb-plugins/` | `bb plugin install` | Yes, when installed from the shared checkout |
 | CLIs under `tools/` | Each CLI's install step | No |
 
 Claude Code reads the `ramtoshiya` and `ramtoshiya-cc` plugins straight from
@@ -147,6 +149,22 @@ the shared checkout, so a fast-forward changes them at once. Codex and Hermes
 run copies, which the installers refresh. The Hermes profile also copies
 skills from the pstack-mode checkout. A change there shows as drift in
 `main:status` and installs at the next `main:sync`.
+
+bb neither rebuilds a path plugin on `bb plugin reload` nor records which
+source a build read. `main:sync` therefore runs `bb plugin install --yes` for
+each plugin installed from `bb-plugins/<id>` in the shared checkout whose
+folder changed since its last install there. It records the installed Git tree
+in `~/.local/state/ramtoshiya-agents/bb-plugins.json`, so a plugin with no
+record yet installs once on the next run. A reinstall restarts the plugin's
+provider worker. While a turn on that provider is running, `main:sync`
+postpones the plugin and reports it as a failed step. Run `mise run main:sync`
+after the turn finishes.
+
+`main:status` reports a bb plugin as drift when bb runs it from anywhere else.
+That covers a worktree of this repository and the `preserved-source` copy bb
+makes when it removes a worktree a plugin was installed from. The row names the
+`bb plugin install path:<shared checkout>/bb-plugins/<id> --yes` command that
+moves it and keeps its settings. `main:sync` never moves a plugin by itself.
 
 ## Check GitHub Actions
 
