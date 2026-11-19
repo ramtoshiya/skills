@@ -559,9 +559,14 @@ choice would change the requested outcome or consequential change targets. It
 decides incidental implementation choices itself and reports the target of
 each worker.
 Finding a different owner does not by itself authorize changing that target.
-A choice you already gave a direction on is not incidental. When evidence leads
-the operator away from that direction, it asks you before it briefs or
-redirects a worker.
+A direction you set changes only after the operator asks you with evidence. A
+direction nobody decided may run as a proposal experiment that changes no
+default route until you decide. A direction you rejected stays out of briefs
+and worker messages unless the operator raises it again as a question with new
+evidence. Before relaying a worker's claim that a step is required or that
+something does not exist, the operator checks it against the goal and what is
+already known. The operator writes no files, so a worker writes any image page
+into the operator's thread storage for the operator to show in chat.
 The [operator verification cases](../dev/evals/hermes-operator/cases.json)
 exercise these distinctions in live Hermes sessions. These are behavioral
 checks, separate from the installer's deterministic prompt-refresh tests.

@@ -72,13 +72,27 @@ evidence changes the intended outcome or target, return that decision to the
 user before implementation at the new target. Continue authorized in-scope work
 and split off work only when it is genuinely independent and unblocked.
 
-A direction the user gave in conversation, such as which screen or route a
-feature reads its data from, holds until the user changes it or explicitly
-leaves the choice to you. Your own announcement that you will pick after a test
-does not leave it to you. When evidence leads you to recommend something else,
-report the evidence and your recommendation, and ask before you brief or
-redirect any worker on it. A "tell me if you disagree" after dispatch is not
-asking, because the worker is already building on your version.
+Treat each direction by what the user said about it:
+
+- A direction the user set, such as which screen a feature reads its data
+  from, is followed and improved. Change it only after you ask with the
+  evidence. Your announcement that you will pick after a test does not leave
+  the choice to you, and a "tell me if you disagree" after dispatch is not
+  asking.
+- A direction nobody has decided may be tried. Label the work a proposal
+  experiment: its result comes back to the user as a proposal and changes no
+  default route and no other worker's instructions until the user decides.
+- A direction the user rejected stays out of briefs and worker messages,
+  including as a fallback, an extra measurement, or encouragement. Raise it
+  again only with new evidence, as a question that says it was rejected and
+  why you raise it again.
+
+Rejected directions came back in these cases:
+
+- Small-icon card reading stayed the recognizer's default after the user said
+  it was not needed.
+- The user rejected settling カスタマイズ from the card tooltip. To save time,
+  the operator told the driver to measure the tooltip route anyway.
 
 ## Write the brief {:#brief}
 
@@ -129,19 +143,13 @@ you write when the event happens.
 When you pass on a user's instruction that leaves something to judgment, state
 its intent and leave each case to the worker. This applies to a brief and to a
 later message to a running worker. Keep the user's example as an example.
-Turning an instruction to allow prompts into a rule for one prompt can lead a
-worker to hard-code that case instead of exercising judgment.
 
 Decide small implementation choices within the agreed outcome yourself, such
 as an input format or a default. Write them into the brief and list them for
-the user when you report the worker. A choice the user already gave a direction
-on is not small, even when you would call it a default, the user phrased the
-direction as a question, or you agreed to test it first. Departing from it
-needs the user's answer, as Clarify the outcome describes. Historical
+the user when you report the worker. A choice the user already set or rejected
+is not small, as Clarify the outcome describes. Historical
 backfill, compatibility promises, and a different change target can change the
-outcome and are not automatically minor choices. Investigate questions the
-domain answers and ask the user about decisions that change the outcome or
-consequential scope.
+outcome and are not automatically minor choices.
 
 When a pending product decision blocks part of the work, split off the part
 that does not depend on it and hand it over now. Ask only about the blocked
@@ -149,16 +157,13 @@ part.
 
 When the work delivers a web UI or server that the user will open, the
 expected result says that it keeps running after the worker finishes, how to
-restart it, and that it opens from another of the user's devices. A worker
-that verifies and then stops the server leaves the user with a dead URL. A
-request from this Mac to its own Tailscale address proves only the binding.
+restart it, and that it opens from another of the user's devices.
 
 ## Choose the route {:#route}
 
 Every worker, draft, and research thread names its provider, model, and
-reasoning level. Without them bb falls back to remembered or default settings
-that are not a row of the routing policy. Load the `worker-routing` skill once
-per session and follow it as the session that delegates:
+reasoning level. Load the `worker-routing` skill once per session and follow
+it as the session that delegates:
 
 - Pick the row from its model table by the work the thread owns. An
   implementation worker runs the whole task under its mode, including design,
@@ -328,25 +333,31 @@ linked message (`#msg=<seq>`) with
 
 Handling a result includes archiving the child once it is finished, so
 finished workers do not pile up in the sidebar. Do this in the same turn,
-without waiting for the user to ask for cleanup. Archiving keeps the
-conversation history. It also archives every descendant of the child and
-retires its environment, and bb removes a managed worktree from disk after a
-grace window. The branch and its commits stay, but uncommitted changes are
-lost.
+without waiting for the user to ask for cleanup. Archiving also archives the
+child's descendants, and bb removes a managed worktree after a grace window.
+Its commits stay, and its uncommitted changes are lost.
 
 1. Read the whole output, as above.
-2. Query the child now, not from a notification or an earlier reply:
+2. Check each claim you will relay that something does not exist, that a step
+   is required or has no alternative, or that one thing caused another.
+   Compare it with the worker's reported check, with what the user's goal
+   needs, and with what the conversation and domain already establish. If the
+   check covers less than the claim or the claim conflicts with what is known,
+   send it back to the worker. Relay a claim you cannot test as the worker's
+   unchecked claim. Example: a recognizer worker reported that choosing the
+   固定 stage item needs a season id that no capture shows. The season sets
+   that item, so no capture ever needed to read it, and it was not open work.
+3. Query the child now, not from a notification or an earlier reply:
    `bb thread show <threadId> --json` and
    `bb thread queue list <threadId> --json`. List its descendants with
    `bb thread list --parent-thread <threadId> --include-hidden --json`,
    repeat for each descendant's children, and query each unarchived
    descendant the same way.
-3. Keep the child unless every check passes:
+4. Keep the child unless every check passes:
    - The output reports the task finished. A question, an approval request, a
      blocker, an error, or a partial result is not finished.
    - The child and every unarchived descendant have `thread.status` `idle`
-     and an empty queue. An idle thread with an empty queue is not enough by
-     itself. The output must also report the task finished.
+     and an empty queue.
    - For the child and each descendant whose `environment.isGitRepo` is
      true, `bb git status <environmentId> --json` reports
      `hasUncommittedChanges: false`. A personal workspace is not a Git
@@ -357,30 +368,16 @@ lost.
      review of its diff, a follow-up message to the child, or an integration
      step that runs in that checkout. When the output says its commits are not
      pushed or merged yet and the brief required that, keep the child.
-4. Tell the user what the result says and anything they will need from it
+5. Tell the user what the result says and anything they will need from it
    later, such as commits, links, and unfinished items. When the unfinished
    part is within the approved brief, continue it in the same turn as
-   Complete approved work describes.
-   Before relaying a worker's claim that something does not exist, that a step
-   is required or has no alternative, or that one thing caused another,
-   compare it with the worker's reported check and what the conversation and
-   domain already establish. If the check covers less than the claim or the
-   claim conflicts with what is known, send it back to the worker. If you
-   cannot test the claim, relay it as the worker's unchecked claim. The user
-   reads your relay as your own judgment.
-   When a result depends on what the user can judge by eye, show images in
-   the relay. Examples include recognition accuracy, UI states, screenshots,
-   and image comparisons. When requesting such work, ask the worker to keep
-   comparison images in a path its cleanup will preserve. Copy the images to
-   `reports/<topic>/` in this thread's storage, write an `index.html` with
-   captions, and show it in bb chat with
-   `::inline-vis{source="thread-storage" file="reports/<topic>/index.html"}`.
-   Thread storage is `$BB_THREAD_STORAGE` when set, or
-   `~/.bb/thread-storage/$BB_THREAD_ID/` otherwise.
-5. Run `bb thread archive <threadId>`. Then run
+   Complete approved work describes. When the user judges the result by eye,
+   such as recognition accuracy, UI states, or screenshots, show the images
+   as Show images describes.
+6. Run `bb thread archive <threadId>`. Then run
    `bb thread show <threadId> --json` and check that `thread.archivedAt` is
    set.
-6. In the same reply, name each child you archived. Name each child you kept,
+7. In the same reply, name each child you archived. Name each child you kept,
    with the check it failed.
 
 When a result shows that the harness misbehaved, such as a worker that skipped
@@ -395,6 +392,20 @@ Archive only children of this thread whose result you handled in this
 conversation, or your own superseded held drafts as Create the draft
 describes. Leave other threads alone, even finished ones. To archive a kept
 child later, run these steps again. Never delete a thread.
+
+## Show images {:#show-images}
+
+bb shows an HTML page inside your reply. You write no files, so:
+
+- For your own diagram or chart, write the page in the reply as a fenced
+  block whose language is `inline-vis`. It holds self-contained HTML and
+  cannot load local files.
+- For a worker's images, the brief asks the worker to write a page with the
+  images and captions, as its `inline-vis` skill describes, into
+  `~/.bb/thread-storage/<your thread id>/reports/<topic>/index.html`. Use
+  `$BB_THREAD_ID` for your thread id. Show it with
+  `::inline-vis{source="thread-storage" file="reports/<topic>/index.html"}`
+  on its own line.
 
 ## Complete approved work {:#approved-work}
 
