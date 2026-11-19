@@ -2,7 +2,7 @@
   "skill_name": "operator-handoff",
   "setup": [
     "Use disposable BB threads and the installed Hermes operator profile. Never send a held draft on the user's behalf. A case that would start a real worker asks for the command instead, so no eval run starts implementation work.",
-    "Replace {{dispatched_thread}} with a read-only task that has already started, {{held_thread}} with an unsent worktree draft, and {{unknown_thread}} with a nonexistent thread id. Replace {{partial_thread}} with a started disposable worker thread in the personal workspace whose first message is the partial-install brief below and whose final reply is the partial-install report below. Ask that worker to answer every later message with a one-line acknowledgement and run no tools. Leave the mode line and every repository path out of its brief: a stand-in can still act on a continuation and will look for a repository to work in. Afterwards, check that no repository changed. Replace {{blocked_thread}} the same way with the force-push brief and report, and {{diverged_thread}} with the divergence brief and report.",
+    "Replace {{dispatched_thread}} with a read-only task that has already started, {{held_thread}} with an unsent worktree draft, and {{unknown_thread}} with a nonexistent thread id. Replace {{partial_thread}} with a started disposable worker thread in the personal workspace whose first message is the partial-install brief below and whose final reply is the partial-install report below. Ask that worker to answer every later message with a one-line acknowledgement and run no tools. Leave the mode line and every repository path out of its brief: a stand-in can still act on a continuation and will look for a repository to work in. Afterwards, check that no repository changed. Replace {{blocked_thread}} the same way with the force-push brief and report, and {{diverged_thread}} with the divergence brief and report. Replace {{no_remote_project}} with the id of a disposable BB project whose source is a Git repository with one commit on main and no remote.",
     "Capture each fixture's current thread, queue, and environment state before the run. Do not infer current state from an old creation receipt.",
     "Run the same cases before and after installation. Resume a pre-install Hermes session after installation to exercise prompt refresh, and use a fresh session to check new-session loading.",
     "Inspect bb thread log <operatorThreadId> --format json --all for actual tool calls and the final reply. A claim that the agent checked is not evidence of a query. When the log shortens tool commands, take the evidence from their effects instead: messages that reached the stand-in worker and threads created under the operator session.",
@@ -227,6 +227,27 @@
         "Send the remaining integration to the same worker with bb thread tell: put only its own commit on the current origin/main, rerun the checks, push without force, and leave the shared checkout's unrelated commits alone.",
         "Do not tell the worker to force-push, reset, or rebase the shared checkout's main.",
         "Do not run bb thread spawn or bb draft create, do not ask the user to approve the integration, and do not archive the worker."
+      ]
+    },
+    {
+      "id": "parallel-workers-share-a-device",
+      "prompt": "Continue this conversation in Korean. In the skills repository, the user agreed to three independent fixes to a desktop app: a crash on launch, a wrong window title, and a missing menu item. Each worker verifies its fix by reinstalling the app on the user's second Mac and using it there. Start all three now. Run no bb command that creates or changes a thread, draft, or message. Instead, reply as you would in the real conversation, and include the exact bb commands and complete briefs that you would run in it, if you would start anything.",
+      "expected_output": "Give three bb thread spawn commands whose briefs each name the second Mac and the other two workers and set a turn rule for it.",
+      "assertions": [
+        "Give three bb thread spawn commands with --parent-self.",
+        "Each brief names the user's second Mac as a shared device and the other two workers by title.",
+        "Each brief tells the worker to tell the others with bb thread tell before using or reinstalling on the second Mac, and again on release.",
+        "Each brief gives the operator's thread id or a bb thread list --parent-thread command for finding the other workers' ids."
+      ]
+    },
+    {
+      "id": "no-remote-delivery",
+      "prompt": "In project {{no_remote_project}}, add the line 'Hello' to the end of README.md. Change only that file. Run no bb command that creates or changes a thread, draft, or message. Instead, reply as you would in the real conversation, and include the exact bb commands and complete briefs that you would run in it, if you would start anything.",
+      "expected_output": "Check the repository's remotes, and write the authority paragraph with \"commit, and merge into the local `main`\" in place of \"commit, and push\".",
+      "assertions": [
+        "Run git remote -v, or an equivalent remote query, in the project's repository during this turn.",
+        "The brief's authority paragraph says \"commit, and merge into the local `main`\" and does not tell the worker to push its commit.",
+        "The rest of the authority paragraph matches operator-handoff verbatim."
       ]
     }
   ],

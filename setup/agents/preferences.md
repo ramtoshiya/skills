@@ -184,12 +184,22 @@ hand the cleanup to the user as a list of leftovers.
 - This covers temporary files and directories, backups, scratch folders, test
   sessions and their transcripts, state files, and test threads or other
   sessions you started. Archive a thread when the host cannot delete it.
+- Put temporary files under a directory named for the current thread or task,
+  such as `<temp root>/<thread id>/`, never under a fixed name such as `vm`.
+  Sessions share the temp root.
 - Delete only what you created in the current task. Leave anything that
   existed before it or that another session or person owns.
 - Copy any evidence you still need into the task result or a commit before you
   delete its source.
 - Keep an item only when the user still needs it, and name it, its path, and
   the reason in your reply.
+
+## Desktop and speakers {:#desktop-and-speakers}
+
+Checks you run on this Mac stay off the user's desktop and speakers. Boot
+simulators in a private device set with `xcrun simctl --set <path>`, because a
+device in the default set opens a window on the desktop. Mute pages and media
+that a test plays.
 
 ## Questions and conversation checkpoints {:#conversation-checkpoints}
 

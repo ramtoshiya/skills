@@ -136,6 +136,10 @@ English and include, in this order:
    > nonzero and names any install that did not follow. Report what you
    > changed, the commits, and anything left undone.
 
+   When `git remote -v` in the owning repository prints nothing, replace
+   "commit, and push" with "commit, and merge into the local `main`" and keep
+   the rest verbatim.
+
 Leave out what the worker's checks or mode already enforce. Leave out
 instructions for events that have not happened yet. They belong in the brief
 you write when the event happens.
@@ -158,6 +162,14 @@ part.
 When the work delivers a web UI or server that the user will open, the
 expected result says that it keeps running after the worker finishes, how to
 restart it, and that it opens from another of the user's devices.
+
+When you start workers that run at the same time and verify on the same
+device, such as an app on another Mac, each brief names that device and the
+other workers by title, and sets a turn rule. Before using the device or
+reinstalling there, the worker tells the others with `bb thread tell`, and
+tells them again on release. A reinstall counts as a turn. The brief gives
+your thread id, so the worker finds the others' ids with
+`bb thread list --parent-thread <your thread id> --json`.
 
 ## Choose the route {:#route}
 
