@@ -39,7 +39,13 @@ def commit(repo, message):
     return git(repo, 'rev-parse', 'HEAD')
 
 
-def wait_for(fn, timeout=12):
+# A request to the review server waits while a scan holds the store lock, and the HTTP tests
+# rescan every second. On a loaded machine a scan held the lock for over 4 seconds. This bound
+# only stops a hung server. It is not an expected response time.
+SERVER_GUARD = 60
+
+
+def wait_for(fn, timeout=SERVER_GUARD):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
@@ -304,7 +310,7 @@ if 'to do script ' in script:
             data = json.dumps(data).encode()
         request = urllib.request.Request(self.origin + path, data=data, headers=headers)
         try:
-            with urllib.request.urlopen(request, timeout=5) as response:
+            with urllib.request.urlopen(request, timeout=SERVER_GUARD) as response:
                 return response.status, response.read().decode()
         except urllib.error.HTTPError as exc:
             with exc:
