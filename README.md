@@ -18,6 +18,7 @@ preferences, so fork the repository and edit it before you run it.
 | `draft-quick-actions` bb plugin | Sends an eligible Held Drafts message from a thread header button that works on touch screens, or from a sidebar play button | [README](bb-plugins/draft-quick-actions/README.md) |
 | `sidebar-model-label` bb plugin | Shows each thread's model beside its title without adding a second row | [README](bb-plugins/sidebar-model-label/README.md) |
 | `inline-vis-copy-image` bb plugin | Makes bb Desktop's Copy Image menu item work on images inside inline visualizations | [README](bb-plugins/inline-vis-copy-image/README.md) |
+| `tilde-strikethrough` bb plugin | Strikes through chat text only between double tildes, so ranges such as `v3~6` keep their tildes | [README](bb-plugins/tilde-strikethrough/README.md) |
 | `claudex-native` bb plugin | Adds a Claudex provider using a locally generated, hash-verified bb bridge | [README](bb-plugins/claudex-native/README.md) |
 | `sidecar` | A macOS command that connects an iPad as a Sidecar display, and an iPad shortcut that runs it over SSH | [README](tools/sidecar/README.md) |
 | `claudex` | Runs Claude Code with GPT models discovered from a [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) server | [README](tools/claudex/README.md) |
