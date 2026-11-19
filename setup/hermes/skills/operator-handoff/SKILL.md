@@ -299,7 +299,7 @@ the recommendation.
 ### Replay experiments {:#replay}
 
 A replay asks a past question again to compare models, harnesses, or
-instructions.
+instructions. The later result is what happened after the original question.
 
 1. Before the first run, list where the later result is visible from a new
    thread, including installed plugins, other threads and their storage,
@@ -314,11 +314,12 @@ instructions.
    and report it as discarded.
 
 When a comparison changes two factors at once, look for a route that holds
-one fixed and run it before reporting that they cannot be separated. A GPT
-model on `claudex` against a Claude model on `claude-code` holds the harness
-nearly fixed. The same GPT model on `codex` against `claudex` holds the model
-fixed. Report the settings added by `claudex`, listed in
-`{{SKILLS_REPO}}/tools/claudex/README.md`, as remaining harness differences.
+one fixed and run it before reporting that they cannot be separated. `claudex`
+runs GPT models in Claude Code. A GPT model on `claudex` against a Claude
+model on `claude-code` holds the harness nearly fixed. The same GPT model on
+`codex` against `claudex` holds the model fixed. Report the settings added by
+`claudex`, listed in `{{SKILLS_REPO}}/tools/claudex/README.md`, as remaining
+harness differences.
 
 ## Current state {:#current-state}
 
