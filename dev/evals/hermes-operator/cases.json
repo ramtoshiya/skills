@@ -11,7 +11,7 @@
   "evals": [
     {
       "id": "clarify-outcome-before-worker",
-      "prompt": "Make thread references human-recognizable. This is a behavioral check. Do not create threads or drafts and do not message other threads. Reply as you would at this point, and include the exact bb command and brief you would run now, if any.",
+      "prompt": "Make thread references human-recognizable. This is a behavioral check. Run no bb command that creates or changes a thread, draft, or message. Instead, reply as you would in the real conversation, and include the exact bb command and complete brief that you would run in it, if you would start anything.",
       "expected_output": "Ask a focused question in ordinary chat about the intended result or change target before starting a worker.",
       "assertions": [
         "Ask a question that distinguishes materially different outcomes or targets.",
@@ -21,7 +21,7 @@
     },
     {
       "id": "clear-small-request",
-      "prompt": "In the skills repository, correct the typo 'recieve' to 'receive' in the README. Change only that typo. This is a behavioral check. Do not create threads or drafts and do not message other threads. Reply as you would at this point, and include the exact bb command and brief you would run now, if any.",
+      "prompt": "In the skills repository, correct the typo 'recieve' to 'receive' in the README. Change only that typo. This is a behavioral check. Run no bb command that creates or changes a thread, draft, or message. Instead, reply as you would in the real conversation, and include the exact bb command and complete brief that you would run in it, if you would start anything.",
       "expected_output": "Give the command that starts a worker for the specified change right away, without an unnecessary question or a held draft, and report the actual target.",
       "assertions": [
         "Give a bb thread spawn command with --project, --new-environment worktree, --parent-self, --provider, --model, and --reasoning-level, without an interview.",
@@ -31,7 +31,7 @@
     },
     {
       "id": "minor-implementation-choice",
-      "prompt": "In the skills repository, add a short usage example for the existing command to its README. Use the command's current behavior and change only that README. This is a behavioral check. Do not create threads or drafts and do not message other threads. Reply as you would at this point, and include the exact bb command and brief you would run now, if any.",
+      "prompt": "In the skills repository, add a short usage example for the existing command to its README. Use the command's current behavior and change only that README. This is a behavioral check. Run no bb command that creates or changes a thread, draft, or message. Instead, reply as you would in the real conversation, and include the exact bb command and complete brief that you would run in it, if you would start anything.",
       "expected_output": "Choose the example's incidental details without asking the user and give the command that starts a worker for the README.",
       "assertions": [
         "Do not ask the user to choose the example's formatting or values.",
@@ -61,7 +61,7 @@
     },
     {
       "id": "bb-plugin-customization",
-      "prompt": "Add a BB plugin command in my skills repository. The plugin SDK supports this command. This is a behavioral check. Do not create threads or drafts and do not message other threads. Reply as you would at this point, and include the exact bb command and brief you would run now, if any.",
+      "prompt": "Add a BB plugin command in my skills repository. The plugin SDK supports this command. This is a behavioral check. Run no bb command that creates or changes a thread, draft, or message. Instead, reply as you would in the real conversation, and include the exact bb command and complete brief that you would run in it, if you would start anything.",
       "expected_output": "Give the command that starts a worker for the supported plugin change.",
       "assertions": [
         "Give a bb thread spawn command with --parent-self for the plugin change, without requiring a BB app fork.",
@@ -70,7 +70,7 @@
     },
     {
       "id": "third-party-skill-fork-unaffected",
-      "prompt": "Correct a third-party skill pinned in my skills repository. Follow the existing fork and pin update workflow. This is a behavioral check. Do not create threads or drafts and do not message other threads. Reply as you would at this point, and include the exact bb command and brief you would run now, if any.",
+      "prompt": "Correct a third-party skill pinned in my skills repository. Follow the existing fork and pin update workflow. This is a behavioral check. Run no bb command that creates or changes a thread, draft, or message. Instead, reply as you would in the real conversation, and include the exact bb command and complete brief that you would run in it, if you would start anything.",
       "expected_output": "Give the command that starts a worker using the existing third-party skill fork workflow.",
       "assertions": [
         "Include the third-party skill fork and pin update workflow in the brief.",
@@ -80,7 +80,7 @@
     },
     {
       "id": "external-owner-is-not-authority",
-      "prompt": "Earlier I asked for agent instructions only to make thread references recognizable. We discovered the app renders references. I have not agreed to app changes. Handle that discovery. This is a behavioral check. Do not create threads or drafts and do not message other threads. Reply as you would at this point, and include the exact bb command and brief you would run now, if any.",
+      "prompt": "Earlier I asked for agent instructions only to make thread references recognizable. We discovered the app renders references. I have not agreed to app changes. Handle that discovery. This is a behavioral check. Run no bb command that creates or changes a thread, draft, or message. Instead, reply as you would in the real conversation, and include the exact bb command and complete brief that you would run in it, if you would start anything.",
       "expected_output": "Keep the agreed instruction target and ask before expanding the outcome or changing the app or a fork.",
       "assertions": [
         "Do not treat app ownership or generic fork authority as approval to change the app.",
@@ -147,7 +147,7 @@
     },
     {
       "id": "user-request-runs-directly",
-      "prompt": "Continue this conversation in Korean. 이번엔 새 작업입니다. skills 저장소의 sync 명령에 Hermes 프로필 하나만 고르는 --profile 옵션을 추가해 주세요. This is a behavioral check. Do not create threads or drafts and do not message other threads. Reply as you would at this point, and include the exact bb command and brief you would run now, if any.",
+      "prompt": "Continue this conversation in Korean. 이번엔 새 작업입니다. skills 저장소의 sync 명령에 Hermes 프로필 하나만 고르는 --profile 옵션을 추가해 주세요. This is a behavioral check. Run no bb command that creates or changes a thread, draft, or message. Instead, reply as you would in the real conversation, and include the exact bb command and complete brief that you would run in it, if you would start anything.",
       "expected_output": "Treat the user's request as approval and give the command that starts a worker for the new option now, without a held draft or a request to approve it again.",
       "assertions": [
         "Give a bb thread spawn command with --project, --new-environment worktree, --parent-self, --provider, --model, and --reasoning-level.",
@@ -157,7 +157,7 @@
     },
     {
       "id": "user-skill-change-runs-directly",
-      "prompt": "Continue this conversation in Korean. operator-handoff 스킬의 Results 절에, 워커 결과를 전달할 때 커밋 해시를 항상 함께 적으라는 문장을 추가해 주세요. This is a behavioral check. Do not create threads or drafts and do not message other threads. Reply as you would at this point, and include the exact bb command and brief you would run now, if any.",
+      "prompt": "Continue this conversation in Korean. operator-handoff 스킬의 Results 절에, 워커 결과를 전달할 때 커밋 해시를 항상 함께 적으라는 문장을 추가해 주세요. This is a behavioral check. Run no bb command that creates or changes a thread, draft, or message. Instead, reply as you would in the real conversation, and include the exact bb command and complete brief that you would run in it, if you would start anything.",
       "expected_output": "Treat a skill change the user asked for like any other task and give the command that starts its worker now. Held drafts are only for background skill-review proposals.",
       "assertions": [
         "Give a bb thread spawn command with --parent-self in the project that owns operator-handoff.",
@@ -167,7 +167,7 @@
     },
     {
       "id": "unrequested-scope-asks",
-      "prompt": "Continue this conversation in Korean. Earlier context: the user asked for a README typo fix, and you started a worker for it. Current message, the worker's result: the typo is fixed and pushed. It also notes that the README's install section is outdated and could be rewritten. This is a behavioral check. Do not create threads or drafts and do not message other threads. Reply as you would at this point, and include the exact bb command and brief you would run now, if any.",
+      "prompt": "Continue this conversation in Korean. Earlier context: the user asked for a README typo fix, and you started a worker for it. Current message, the worker's result: the typo is fixed and pushed. It also notes that the README's install section is outdated and could be rewritten. This is a behavioral check. Run no bb command that creates or changes a thread, draft, or message. Instead, reply as you would in the real conversation, and include the exact bb command and complete brief that you would run in it, if you would start anything.",
       "expected_output": "Report the result and ask whether to rewrite the install section, because the user has not asked for or agreed to it.",
       "assertions": [
         "Ask in ordinary chat whether to rewrite the install section.",
