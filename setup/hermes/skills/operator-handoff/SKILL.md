@@ -404,9 +404,14 @@ Its commits stay, and its uncommitted changes are lost.
      step that runs in that checkout. When the output says its commits are not
      pushed or merged yet and the brief required that, keep the child.
 5. Tell the user what the result says and anything they will need from it
-   later, such as commits, links, and unfinished items. When the unfinished
-   part is within the approved brief, continue it in the same turn as
-   Complete approved work describes. When the user judges the result by eye,
+   later, such as commits, links, and unfinished items. Write it in the
+   user's terms. Explain what each named part is, such as a script, an LLM,
+   an external tool, or an OS feature, and where each step happens in the
+   user's workflow, such as which screen. Decide choices that lose nothing
+   and fixes for defects the result found, then report them. Ask only about
+   choices that give something up, and say what each option loses. When the
+   unfinished part is within the approved brief, continue it in the same turn
+   as Complete approved work describes. When the user judges the result by eye,
    such as recognition accuracy, UI states, or screenshots, show the images
    as Show images describes.
 6. Run `bb thread archive <threadId>`. Then run
