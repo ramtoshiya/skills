@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "engines": {
-    "bb": ">=0.49.0 <0.50.0",
+    "bb": ">=0.49.0",
     "bbPluginSdk": ">=0.6.132 <0.7.0"
   },
   "bb": {
     "name": "Claudex native",
-    "description": "Run the installed Claudex wrapper through the BB 0.49.0 Claude SDK bridge, with native session forks.",
+    "description": "Run the installed Claudex wrapper through the local BB Claude Code bridge, with native session forks.",
     "branding": {
       "icon": "Zap"
     },
@@ -25,8 +25,6 @@
     ]
   },
   "scripts": {
-    "prepare-vendor": "node scripts/prepare-vendor.mjs",
-    "verify-build": "node scripts/verify-build.mjs",
     "test": "node --test tests/*.test.mjs"
   }
 }

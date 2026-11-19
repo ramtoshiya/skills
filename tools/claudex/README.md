@@ -124,8 +124,8 @@ you want the same preferences and plugins. claudex selects the proxy and models
 for each launch, so routing does not require a separate configuration directory.
 
 In bb, the [claudex-native plugin](../../bb-plugins/claudex-native/README.md)
-adds a dedicated Claudex provider. It generates the provider bridge from a
-hash-verified local bb installation and uses `~/.local/bin/claudex`.
+adds a dedicated Claudex provider. It bundles the Claude Code bridge from
+that bb installation and runs `~/.local/bin/claudex` in its own worker.
 
 In T3 Code, set the Claude provider's `Binary path` to `claudex` or the
 absolute path to the installed `~/.local/bin/claudex`. To override an inherited
