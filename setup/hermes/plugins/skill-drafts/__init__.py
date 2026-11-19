@@ -40,7 +40,8 @@ BACKGROUND_REVIEW = "background_review"
 
 FOREGROUND_BLOCK = (
     "Not applied. Skills are never changed with skill_manage here. Write the brief yourself with "
-    "your observation and create the held draft as the operator-handoff skill describes.")
+    "your observation and start the worker as the operator-handoff skill describes once the user "
+    "agrees to the change.")
 QUEUED_BLOCK = (
     "Not applied. This proposal is recorded. When this review ends, a separate agent reviews it "
     "with your messages from this review and decides whether to draft the change for the user's "

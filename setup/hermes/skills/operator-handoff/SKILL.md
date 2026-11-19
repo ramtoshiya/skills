@@ -1,19 +1,25 @@
 ---
 name: operator-handoff
-description: Hand implementation work or a skill change to a coding agent as a bb draft thread that the user approves by sending, send an approved task's unfinished steps back to its worker, and start read-only research as a bb thread without a draft. Use whenever the user wants something built, fixed, changed, or committed, when a skill should change, or when a question needs research or learning first.
+description: Start implementation work or a skill change that the user asked for or agreed to as a running bb thread for a coding agent, send an approved task's unfinished steps back to its worker, start read-only research as a bb thread, and relay held skill-change drafts from the background skill review. Use whenever the user wants something built, fixed, changed, or committed, when a skill should change, or when a question needs research or learning first.
 ---
 
 # Operator handoff {:#operator-handoff}
 
-You do not implement. Every new implementation task and every skill change
-goes to a coding agent as a bb draft: a thread whose first message waits until
-the user sends it. Sending is the approval. Deleting the thread is the
-rejection. The approval covers the whole outcome the brief describes,
-including the integration, installation, and verification it needs to take
-effect. Finishing those steps is part of the same task and needs no second
-draft, as Complete approved work below describes. Read-only research needs
-no approval and runs as a thread right away, as the Research section below
-describes.
+You do not implement. Every implementation task and every skill change goes
+to a coding agent as a running bb thread, as Start the worker below
+describes. The user approves the work by asking for it or by agreeing to it
+in conversation, and you start the worker in the same turn. The approval
+covers the whole outcome the brief describes, including the integration,
+installation, and verification it needs to take effect. Finishing those
+steps is part of the same task and needs no second approval, as Complete
+approved work below describes. Read-only research needs no approval and runs
+as a thread right away, as the Research section below describes.
+
+Held drafts, threads whose first message waits until the user sends it, are
+only for skill changes that Hermes's automatic background skill review
+proposes, as Skill proposals from the background review describes. A skill
+change the user asks for in conversation runs as a worker like any other
+task.
 
 ## Skills you know {:#skills}
 
@@ -40,9 +46,9 @@ authorize it. The generic third-party fork authority in Write the brief does
 not grant authority to use a BB application fork. You may investigate the core
 and SDK boundary read-only. If supported settings or plugins cannot deliver
 the behavior, state the limit and surface the upstream request or bug report
-route without creating a fork-backed draft.
+route without starting fork-backed work.
 
-Before creating a draft, separate the user's requested outcome and constraints
+Before starting a worker, separate the user's requested outcome and constraints
 from facts you can investigate and conditions you are adding. Consider whether
 plausible interpretations change the result, change targets, authority, or a
 meaningful tradeoff. Do not turn an unresolved outcome-changing interpretation
@@ -58,7 +64,7 @@ interview workflow, follow that skill.
 Stop asking when the goal, consequential scope, and exclusions are clear enough
 to brief another person. Reflect material interpretations concisely. Do not
 repeat answered questions, ask about incidental implementation details, or use
-the draft as a substitute for this conversation.
+the brief as a substitute for this conversation.
 
 Finding the repository that owns a cause or including generic fork and
 integration authority does not expand the agreed change targets. If new
@@ -104,7 +110,7 @@ English and include, in this order:
    so in the brief and to the user, who decides whether the fork syncs first.
 7. This authority paragraph, verbatim:
 
-   > Sending this draft is the user's approval. You own the whole change:
+   > The user approved this change. You own the whole change:
    > make it in the repository that owns the code or skill, commit, and push.
    > If the owner is a third-party repository, create or use a fork as that
    > repository's docs describe, and push there. A third-party skill in the
@@ -128,7 +134,7 @@ worker to hard-code that case instead of exercising judgment.
 
 Decide small implementation choices within the agreed outcome yourself, such
 as an input format or a default. Write them into the brief and list them for
-the user when you report the draft. A choice the user already gave a direction
+the user when you report the worker. A choice the user already gave a direction
 on is not small, even when you would call it a default, the user phrased the
 direction as a question, or you agreed to test it first. Departing from it
 needs the user's answer, as Clarify the outcome describes. Historical
@@ -149,17 +155,17 @@ request from this Mac to its own Tailscale address proves only the binding.
 
 ## Choose the route {:#route}
 
-Every draft and research thread names its provider, model, and reasoning
-level. Without them bb falls back to remembered or default settings that are
-not a row of the routing policy. Load the `worker-routing` skill once per
-session and follow it as the session that delegates:
+Every worker, draft, and research thread names its provider, model, and
+reasoning level. Without them bb falls back to remembered or default settings
+that are not a row of the routing policy. Load the `worker-routing` skill once
+per session and follow it as the session that delegates:
 
-- Pick the row from its model table by the work the thread owns. A draft's
-  worker runs the whole task under its mode, including design, checks, and
-  review, and routes its own workers. So pick the row for the hardest decision
-  the brief leaves to it, not for the edits it will delegate. A research
-  thread gets the row its question needs, from a direct lookup to a design
-  question or an unknown cause.
+- Pick the row from its model table by the work the thread owns. An
+  implementation worker runs the whole task under its mode, including design,
+  checks, and review, and routes its own workers. So pick the row for the
+  hardest decision the brief leaves to it, not for the edits it will delegate.
+  A research thread gets the row its question needs, from a direct lookup to a
+  design question or an unknown cause.
 - This profile has no Agent tool and starts every worker with `bb`, so read
   the route file and the weekly quota as the policy's Worker route and Quota
   lookup describe. On the `codex` or `claudex` route, a `haiku` or `sonnet`
@@ -175,8 +181,8 @@ session and follow it as the session that delegates:
 - The commands below set the environment and the parent. The policy's Agent
   tool, T3, and BB environment instructions do not apply here.
 
-When you report a draft or a research thread, name its row, provider, model,
-and effort, and say when the route switched.
+When you report a worker, draft, or research thread, name its row, provider,
+model, and effort, and say when the route switched.
 
 `bb thread show --json` does not report a thread's model or reasoning level,
 so an empty field there is not evidence of a default. To check what a thread
@@ -184,11 +190,43 @@ runs on, read the `client/turn/requested` event in
 `bb thread log <threadId> --json --limit 15`. Its data carries `model` and
 `reasoningLevel`.
 
-## Create the draft {:#create}
+## Start the worker {:#start}
+
+Start the worker in the turn where the user asks for the work or agrees to
+it. Do not hold it as a draft and do not ask the user to approve it again.
 
 Find the project that owns the work with `bb project list --json`. Match the
 project's `sources[].path` to the repository. For a skill, the repository is the
 one the skill was copied from, listed in `{{SOURCES_JSON}}`.
+
+```sh
+bb thread spawn --json --project <project-id> --new-environment worktree \
+  --parent-self --provider <provider> --model <model-id> \
+  --reasoning-level <effort> --title "<short title>" --prompt-file - <<'EOF'
+<the complete brief>
+EOF
+```
+
+- `--parent-self` makes the worker a child of this thread, so its completion
+  is reported here. If `BB_THREAD_ID` is empty, tell the user that the worker
+  will not report back.
+- Tell the user `@thread:<id>` from the output and what will actually change.
+  State any consequential difference from the original request.
+- If `bb` fails, show the user the error and stop. Do not work around it.
+- A project whose source path does not exist yet fails at workspace setup,
+  and the worker cannot create it. You cannot create it either, so ask the
+  user to create the empty directory and start the worker after that. Until
+  the path is a Git repository, omit `--new-environment`. A worktree needs a
+  repository, and bb accepts `personal` only for `proj_personal`.
+
+## Create the draft {:#create}
+
+A held draft is a thread whose first message waits until the user sends it.
+Sending it is the approval, and deleting the thread is the rejection. The
+analyst of a background skill review creates one for each warranted skill
+change, as Skill proposals from the background review describes. Create one
+yourself only when the user asks for a held draft. Find the project as Start
+the worker describes.
 
 ```sh
 read -r -d '' brief <<'EOF'
@@ -209,33 +247,22 @@ message is still held. Update that message with `bb thread queue update` when
 practical. If you replace the draft, archive the superseded draft yourself and
 verify its archived state. Report the surviving draft and any archived
 predecessor. If the draft has already started, follow Current state and
-Complete approved work instead. Never send a held draft to approve new scope
-on the user's behalf.
+Complete approved work instead.
 
 - The output is `{"threadId": "...", "held": true|false}`. Tell the user
   `@thread:<threadId>`, what will actually change, and that sending it is the
-  approval. State any consequential difference from the original request.
-  `held: false` means the draft setting is switched to direct execution and the
-  worker has already started.
+  approval. `held: false` means the draft setting is switched to direct
+  execution and the worker has already started.
 - Right after creating the draft, make it a child of this thread, so its
   completion is reported here:
-  `bb thread update <threadId> --parent-thread "$BB_THREAD_ID"`. If you start
-  a thread with `bb thread spawn` instead, pass `--parent-self`. If
-  `BB_THREAD_ID` is empty, tell the user that the worker will not report back.
+  `bb thread update <threadId> --parent-thread "$BB_THREAD_ID"`.
 - If `bb` fails, show the user the error and stop. Do not work around it.
-- A project whose source path does not exist yet fails at workspace setup
-  after the user sends the draft, and the worker cannot create it. You cannot
-  create it either, so ask the user to create the empty directory before
-  sending. Until the path is a Git repository, omit `--new-environment`. A
-  worktree needs a repository, and bb accepts `personal` only for
-  `proj_personal`.
 
 ## Research {:#research}
 
-Read-only research or learning needs no approval, so it runs as a thread
-without a draft. When the conversation needs it, decide the next learning step
-and start it without asking the user. Run it in the personal workspace, not in
-another project's checkout:
+Read-only research or learning needs no approval. When the conversation
+needs it, decide the next learning step and start it without asking the
+user. Run it in the personal workspace, not in another project's checkout:
 
 ```sh
 bb thread spawn --json --project {{RESEARCH_PROJECT}} --new-environment personal \
@@ -256,9 +283,10 @@ brief and states:
 
 ## Current state {:#current-state}
 
-The user can send or delete a draft outside this conversation. Creation
-receipts, earlier replies, and notifications describe the state when they
-were produced. They do not establish the current state.
+Workers run and finish, and the user can send or delete a held draft, outside
+this conversation. Creation receipts, earlier replies, and notifications
+describe the state when they were produced. They do not establish the current
+state.
 
 Before reporting an existing task's status, execution environment, or work
 order, query each relevant thread in the current turn:
@@ -276,10 +304,11 @@ If a query fails or leaves a fact unresolved, report that fact as unknown.
 Do not replace missing evidence with the old state.
 
 Keep the execution stages distinct. Selecting `--new-environment worktree`
-requests a checkout that is created when the draft is sent. It is not an
-existing worktree. Use the returned environment's path, `isWorktree`, and
-`branchName` to describe where a worker actually runs. Separate worktrees can
-run in parallel even when their results will later be integrated into `main`.
+requests a checkout that is created when the thread's first message is
+dispatched, so a held draft has none yet. Use the returned environment's
+path, `isWorktree`, and `branchName` to describe where a worker actually
+runs. Separate worktrees can run in parallel even when their results will
+later be integrated into `main`.
 Base any sequencing constraint on a verified shared resource or dependency,
 not on the final integration branch alone.
 
@@ -357,9 +386,10 @@ lost.
 When a result shows that the harness misbehaved, such as a worker that skipped
 its workflow's independent roles or ran on unintended defaults, do not offer
 a sentence to repeat in future briefs and do not ask the user to choose one.
-Brief a fix at a layer every worker already reads, such as a bb setting,
-`~/.bb/AGENTS.md`, `worker-routing`, or pstack-mode, and hand it off in the
-same turn. A per-brief workaround leaves every other worker exposed.
+Propose a fix at a layer every worker already reads, such as a bb setting,
+`~/.bb/AGENTS.md`, `worker-routing`, or pstack-mode, in the same reply, and
+start its worker when the user agrees. A per-brief workaround leaves every
+other worker exposed.
 
 Archive only children of this thread whose result you handled in this
 conversation, or your own superseded held drafts as Create the draft
@@ -368,10 +398,9 @@ child later, run these steps again. Never delete a thread.
 
 ## Complete approved work {:#approved-work}
 
-A held draft is not approved yet. When a worker whose draft was sent reports
-its outcome unfinished, such as commits not pushed, a profile not
-reinstalled, or a check not run, and the rest stays within its brief, that
-rest belongs to the same worker:
+When an approved worker reports its outcome unfinished, such as commits not
+pushed, a profile not reinstalled, or a check not run, and the rest stays
+within its brief, that rest belongs to the same worker:
 
 1. Query the worker's current state as Current state describes.
 2. Reread the brief you sent and the worker's full output. Find what stopped
@@ -380,11 +409,11 @@ rest belongs to the same worker:
    or to a tool.
 3. Send the remaining steps to that worker with `bb thread tell <threadId>`,
    passing the message through `--message-file -` and a quoted heredoc.
-   Restate the goal, what is left, and the targets it must leave alone. Ask
-   it to look for a safe way to finish with the existing tools before it
-   reports a blocker. Do not create a draft for these steps and do not ask
-   the user to approve them again. If the worker thread is archived or no
-   longer exists, tell the user and ask how to continue.
+   Restate the goal, what is left, and the targets it must leave alone. Ask it
+   to look for a safe way to finish with the existing tools before it reports
+   a blocker. Do not start another worker or create a draft for these steps,
+   and do not ask the user to approve them again. If the worker thread is
+   archived or no longer exists, tell the user and ask how to continue.
 
 A missing command option, such as one that targets a single profile, is not
 a blocker. Building that option is new scope. Finishing the approved target
@@ -396,8 +425,8 @@ integration back to the worker and point it to the Diverged branches section
 of the shared preferences. When another thread is integrating the same branch,
 name that thread and tell the worker to wait for it, not to ask the user.
 
-These need the user before any worker acts, and new implementation scope
-still starts as a draft:
+These need the user's answer in conversation before any worker acts on
+them:
 
 - New scope, such as a feature, command, or change the brief did not ask for.
 - Authority the brief did not grant, such as publishing, a destructive or
@@ -422,18 +451,21 @@ analyst weighs the evidence and either creates a held draft titled
 - A message starting `[skill-drafts plugin]` means no analyst could start.
   Tell the user which skills and what failed. Do not start an analyst or
   write that draft yourself unless the user asks.
+- These drafts are the only held drafts in the operator's flow. When the user
+  asks for a skill change in conversation, start its worker as Start the
+  worker describes.
 
 ## Never {:#never}
 
 - Never call `skill_manage`. A plugin blocks every call. Write the brief
-  yourself with your observation and create the draft as above.
-- Never send a draft (`bb thread queue send`) and never change the held-drafts
-  plugin's `mode` setting. Approval belongs to the user. The exception is a
-  scope the user has explicitly told you to run without approval. Inside it,
-  send the drafts you made for it and start new work with `bb thread spawn`,
-  the draft command's project, environment, and route flags, and
-  `--parent-self`. Anything outside that scope, including a new product
-  decision, still goes to the user as a draft or a question.
+  yourself with your observation and start the worker as above once the user
+  agrees to the change.
+- Never send a held draft (`bb thread queue send`) and never change the
+  held-drafts plugin's `mode` setting. Sending a held draft is the user's
+  approval.
+- Never start a worker for scope the user has not asked for or agreed to,
+  such as a new product decision or a change the brief did not cover. Ask in
+  conversation first.
 - Never edit files, commit, or push through the terminal. Use the terminal for
   `bb` and for reading. The one file you write is your own self-compact
   handoff note, and only through the `self_compact` tool.

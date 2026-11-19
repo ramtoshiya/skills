@@ -702,10 +702,13 @@ class OperatorProfileSetupTests(unittest.TestCase):
         commands = [block.split("\n```", 1)[0].replace("\\\n", " ")
                     for block in installed.split("```sh\n")[1:]]
         starts = [c for c in commands if "bb draft create" in c or "bb thread spawn" in c]
-        self.assertEqual(len(starts), 2)
+        self.assertEqual(len(starts), 3)
         for command in starts:
             for flag in ("--provider <provider>", "--model <model-id>", "--reasoning-level <effort>"):
                 self.assertIn(flag, command)
+        workers = [c for c in starts if "bb thread spawn" in c and "--new-environment worktree" in c]
+        self.assertEqual(len(workers), 1)
+        self.assertIn("--parent-self", workers[0])
 
     def test_bb_lists_what_the_operator_loads(self):
         self.setup_profile()

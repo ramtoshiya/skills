@@ -453,11 +453,13 @@ line to stderr and lets the call go ahead. Each clock is a file under
 `mise run hermes:operator` sets up a [Hermes Agent](https://github.com/NousResearch/hermes-agent)
 profile named `operator` for conversation only. You talk to it in a bb thread
 with the `acp-hermes-agent` provider. It remembers, discusses, and writes
-briefs. Every new implementation task and every skill change goes to a coding
-agent as a bb draft thread, which you approve by sending it and reject by
-deleting it. Sending approves the whole outcome, including the integration,
-installation, and verification it needs, so the operator sends unfinished
-steps back to the same worker instead of drafting them again.
+briefs. When you ask for an implementation task or a skill change, or agree to
+one in conversation, the operator starts a coding agent on it as a running bb
+thread under the operator's thread. Your agreement approves the whole outcome,
+including the integration, installation, and verification it needs, so the
+operator sends unfinished steps back to the same worker instead of asking
+again. Held drafts, which wait until you send them, are only for skill changes
+that Hermes's automatic background skill review proposes.
 `mise bootstrap` does not run this task.
 
 It needs:
@@ -471,7 +473,7 @@ It needs:
   `mise run agents:sync` fetches. The task stops and says so when one is
   missing.
 - bb with the [held-drafts](../bb-plugins/held-drafts/README.md) plugin, which
-  provides `bb draft create`.
+  provides `bb draft create` for background skill-review proposals.
 
 The profile gets every skill that Claude Code or Codex gets from
 `.claude-plugin/marketplace.json`: both of this repository's plugins,
@@ -536,24 +538,25 @@ date. Run the same refresh command after changing prompt files by hand.
 
 The auto-loaded `operator-handoff` skill requires a current thread query before
 reporting task status, execution environments, or work order. Corrections also
-recheck the factual premises of the earlier advice. Draft creation receipts
-are snapshots, and a requested worktree does not exist until the draft is sent.
+recheck the factual premises of the earlier advice. Creation receipts are
+snapshots, and a held draft's requested worktree does not exist until the draft
+is sent.
 Separate worktrees allow parallel work even when both results target `main`.
 When an approved worker stops short, the operator checks the brief it sent,
 says whether its own brief imposed the stop, and sends the rest back to that
 worker. A diverged branch also goes back to the worker, which waits for any
 other thread that is integrating the same branch. New scope, new authority, a
 shared-resource conflict that waiting does not resolve, or a failed safety
-check still goes to you first, and new implementation scope still starts as a
-draft.
+check still goes to you first.
 For BB customizations, the shared BB instructions and operator handoff direct
 agents to supported settings or plugins. An application fork, personal core
 patch, or installed bundle patch requires an explicit request for that route.
 If supported settings and plugins cannot deliver the behavior, the operator
 states the limit and surfaces the upstream request or bug report route.
-Before drafting, the operator asks in conversation when an unresolved choice
-would change the requested outcome or consequential change targets. It decides
-incidental implementation choices itself and reports the target of each draft.
+Before starting a worker, the operator asks in conversation when an unresolved
+choice would change the requested outcome or consequential change targets. It
+decides incidental implementation choices itself and reports the target of
+each worker.
 Finding a different owner does not by itself authorize changing that target.
 A choice you already gave a direction on is not incidental. When evidence leads
 the operator away from that direction, it asks you before it briefs or
@@ -637,9 +640,10 @@ entry on the ACP providers plugin's settings page.
 
 The installed skills are copies, so a local edit would drift from its source.
 The `skill-drafts` plugin blocks every `skill_manage` call. When the operator
-itself calls it, the plugin tells the operator to write the brief and create
-the draft as `operator-handoff` describes, because only the operator knows why
-the skill fell short.
+itself calls it, the plugin tells the operator to write the brief and start a
+worker as `operator-handoff` describes once you agree to the change, because
+only the operator knows why the skill fell short. A skill change you ask for in
+conversation runs the same way, without a draft.
 
 After some turns, Hermes reviews the conversation in the background. The
 operator profile asks the reviewer to propose skill changes only for an
@@ -681,10 +685,12 @@ draft. A gateway that stops during a review loses that review's proposals.
 The skill files never change in any of these cases.
 
 For other work, the `operator-handoff` skill tells Hermes how to write a brief
-and create the draft. Hermes passes each draft and research thread a provider,
-model, and reasoning level chosen by the `worker-routing` policy, so bb does
-not fall back to its remembered or default settings. Drafts are held while the held-drafts plugin's `mode`
-setting is `draft`. Setting it to `direct` sends new drafts immediately.
+and start the worker with `bb thread spawn --parent-self` in a new worktree.
+Hermes passes each worker, draft, and research thread a provider, model, and
+reasoning level chosen by the `worker-routing` policy, so bb does not fall
+back to its remembered or default settings. Drafts are held while the
+held-drafts plugin's `mode` setting is `draft`. Setting it to `direct` sends
+new drafts immediately.
 
 When a child thread reports back, the skill has Hermes read the full output
 and then archive the child in the same turn, so finished workers leave the
@@ -715,9 +721,9 @@ token. It unsets `BB_PROJECT_ID`, `BB_ENVIRONMENT_ID`, and `BB_THREAD_STORAGE`,
 because the `bb` CLI finds them from the thread id.
 
 With `BB_THREAD_ID` set, `bb status` names the operator's thread. The
-`operator-handoff` skill parents each draft to it with
-`bb thread update <id> --parent-thread "$BB_THREAD_ID"`, so the operator
-receives each worker's completion message.
+`operator-handoff` skill starts each worker with `--parent-self` and parents
+each held draft with `bb thread update <id> --parent-thread "$BB_THREAD_ID"`,
+so the operator receives each worker's completion message.
 
 The plugin reads the server list from the gateway's in-memory session state,
 which Hermes does not document for plugins. If `bb status` in an operator
