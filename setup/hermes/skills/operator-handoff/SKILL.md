@@ -56,6 +56,14 @@ evidence changes the intended outcome or target, return that decision to the
 user before implementation at the new target. Continue authorized in-scope work
 and split off work only when it is genuinely independent and unblocked.
 
+A direction the user gave in conversation, such as which screen or route a
+feature reads its data from, holds until the user changes it or explicitly
+leaves the choice to you. Your own announcement that you will pick after a test
+does not leave it to you. When evidence leads you to recommend something else,
+report the evidence and your recommendation, and ask before you brief or
+redirect any worker on it. A "tell me if you disagree" after dispatch is not
+asking, because the worker is already building on your version.
+
 ## Write the brief {:#brief}
 
 The worker sees only the brief, so it must stand on its own. Write it in
@@ -110,10 +118,14 @@ worker to hard-code that case instead of exercising judgment.
 
 Decide small implementation choices within the agreed outcome yourself, such
 as an input format or a default. Write them into the brief and list them for
-the user when you report the draft. Historical backfill, compatibility
-promises, and a different change target can change the outcome and are not
-automatically minor choices. Investigate questions the domain answers and ask
-the user about decisions that change the outcome or consequential scope.
+the user when you report the draft. A choice the user already gave a direction
+on is not small, even when you would call it a default, the user phrased the
+direction as a question, or you agreed to test it first. Departing from it
+needs the user's answer, as Clarify the outcome describes. Historical
+backfill, compatibility promises, and a different change target can change the
+outcome and are not automatically minor choices. Investigate questions the
+domain answers and ask the user about decisions that change the outcome or
+consequential scope.
 
 When a pending product decision blocks part of the work, split off the part
 that does not depend on it and hand it over now. Ask only about the blocked

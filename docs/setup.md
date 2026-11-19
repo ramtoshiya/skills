@@ -550,6 +550,9 @@ Before drafting, the operator asks in conversation when an unresolved choice
 would change the requested outcome or consequential change targets. It decides
 incidental implementation choices itself and reports the target of each draft.
 Finding a different owner does not by itself authorize changing that target.
+A choice you already gave a direction on is not incidental. When evidence leads
+the operator away from that direction, it asks you before it briefs or
+redirects a worker.
 The [operator verification cases](../dev/evals/hermes-operator/cases.json)
 exercise these distinctions in live Hermes sessions. These are behavioral
 checks, separate from the installer's deterministic prompt-refresh tests.
