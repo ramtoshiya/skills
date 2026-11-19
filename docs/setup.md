@@ -174,6 +174,9 @@ The shared instructions distinguish missing configuration and invalid or incompa
 tools from an absent installation. They direct agents to inspect documented trusted
 locations and report unresolved searches before concluding a prerequisite is missing.
 
+For feasibility questions, the shared instructions ask agents to demonstrate or
+attempt the stated requirement and report fragile routes with their costs.
+
 The coding-agent instructions authorize local commits of completed, validated
 task-owned changes on the current branch, including the default branch. They
 protect unrelated changes and respect explicit no-commit requests. Tasks that
