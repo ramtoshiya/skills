@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, mkdtempSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -60,8 +60,13 @@ test("installer refuses to overwrite an unrelated command", t => {
 test("large stdin warns and continues to validate the room link", t => {
   const home = mkdtempSync(join(tmpdir(), "excalidraw-stdin-"));
   t.after(() => rmSync(home, { recursive: true, force: true }));
+  // Read stdin from a file. spawnSync's input option streams it through a socket, and with 5 MB
+  // that write occasionally stalled forever on macOS while the child waited for more input.
+  writeFileSync(join(home, "stdin"), " ".repeat(5_000_001));
+  const stdin = openSync(join(home, "stdin"), "r");
+  t.after(() => closeSync(stdin));
   const result = spawnSync(process.execPath, [join(root, "tools/excalidraw-board/excalidraw-board.mjs"), "room", "import", "--name", "example", "--stdin"], {
-    env: testEnv(home), input: " ".repeat(5_000_001), encoding: "utf8",
+    env: testEnv(home), stdio: [stdin, "pipe", "pipe"], encoding: "utf8",
   });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /warning: excalidraw-board stdin input is 5000001 bytes, over the soft limit of 5000000 bytes/);
