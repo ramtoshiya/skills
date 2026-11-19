@@ -317,6 +317,15 @@ lost.
    claim conflicts with what is known, send it back to the worker. If you
    cannot test the claim, relay it as the worker's unchecked claim. The user
    reads your relay as your own judgment.
+   When a result depends on what the user can judge by eye, show images in
+   the relay. Examples include recognition accuracy, UI states, screenshots,
+   and image comparisons. When requesting such work, ask the worker to keep
+   comparison images in a path its cleanup will preserve. Copy the images to
+   `reports/<topic>/` in this thread's storage, write an `index.html` with
+   captions, and show it in bb chat with
+   `::inline-vis{source="thread-storage" file="reports/<topic>/index.html"}`.
+   Thread storage is `$BB_THREAD_STORAGE` when set, or
+   `~/.bb/thread-storage/$BB_THREAD_ID/` otherwise.
 5. Run `bb thread archive <threadId>`. Then run
    `bb thread show <threadId> --json` and check that `thread.archivedAt` is
    set.
