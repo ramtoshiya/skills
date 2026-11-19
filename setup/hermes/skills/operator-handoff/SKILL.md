@@ -102,6 +102,12 @@ Leave out what the worker's checks or mode already enforce. Leave out
 instructions for events that have not happened yet. They belong in the brief
 you write when the event happens.
 
+When you pass on a user's instruction that leaves something to judgment, state
+its intent and leave each case to the worker. This applies to a brief and to a
+later message to a running worker. Keep the user's example as an example.
+Turning an instruction to allow prompts into a rule for one prompt can lead a
+worker to hard-code that case instead of exercising judgment.
+
 Decide small implementation choices within the agreed outcome yourself, such
 as an input format or a default. Write them into the brief and list them for
 the user when you report the draft. Historical backfill, compatibility
@@ -304,6 +310,13 @@ lost.
    later, such as commits, links, and unfinished items. When the unfinished
    part is within the approved brief, continue it in the same turn as
    Complete approved work describes.
+   Before relaying a worker's claim that something does not exist, that a step
+   is required or has no alternative, or that one thing caused another,
+   compare it with the worker's reported check and what the conversation and
+   domain already establish. If the check covers less than the claim or the
+   claim conflicts with what is known, send it back to the worker. If you
+   cannot test the claim, relay it as the worker's unchecked claim. The user
+   reads your relay as your own judgment.
 5. Run `bb thread archive <threadId>`. Then run
    `bb thread show <threadId> --json` and check that `thread.archivedAt` is
    set.
