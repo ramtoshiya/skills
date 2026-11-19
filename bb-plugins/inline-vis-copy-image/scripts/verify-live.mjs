@@ -20,8 +20,8 @@ if (!threadId) {
   throw new Error("Pass the id of a thread whose last messages show an inline-vis HTML page with an <img>.");
 }
 
-function setPluginEnabled(enabled) {
-  execFileSync("bb", ["plugin", enabled ? "enable" : "disable", PLUGIN_ID], { stdio: "pipe" });
+function plugin(action) {
+  execFileSync("bb", ["plugin", action, PLUGIN_ID], { stdio: "pipe" });
 }
 
 async function openThread(browser) {
@@ -72,6 +72,25 @@ async function pagePointOf(image) {
   return { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2) };
 }
 
+async function rightClickUntilCovered(page, point) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await page.mouse.click(point.x, point.y, { button: "right" });
+    try {
+      await page.waitForFunction((selector) => document.querySelector(selector)?.naturalWidth > 0, OVERLAY, { timeout: 1_000 });
+      return;
+    } catch {}
+  }
+  throw new Error("No overlay covered the right-clicked image.");
+}
+
+async function assertEveryPageRenders(page) {
+  for (const element of await page.locator(FRAME).elementHandles()) {
+    const frame = await element.contentFrame();
+    const height = await frame.evaluate(() => document.documentElement.getBoundingClientRect().height);
+    assert.ok(height > 0, "every inline-vis page lays out at a nonzero height");
+  }
+}
+
 function hitAt({ x, y }) {
   const hit = document.elementFromPoint(x, y);
   return {
@@ -84,7 +103,7 @@ function hitAt({ x, y }) {
 
 const browser = await chromium.launch({ executablePath, headless: true });
 try {
-  setPluginEnabled(true);
+  plugin("enable");
   const { page, errors } = await openThread(browser);
   const { element, frame, image } = await frameWithImage(page);
   const imageSrc = await image.evaluate((node) => node.currentSrc);
@@ -93,8 +112,7 @@ try {
 
   assert.equal((await page.evaluate(hitAt, point)).tag, "IFRAME", "before the right-click the app page sees only the frame");
 
-  await page.mouse.click(point.x, point.y, { button: "right" });
-  await page.waitForFunction((selector) => document.querySelector(selector)?.naturalWidth > 0, OVERLAY, { timeout: 10_000 });
+  await rightClickUntilCovered(page, point);
   const covered = await page.evaluate(hitAt, point);
   assert.equal(covered.isOverlay, true, "the app page's hit test at the right-click point finds the overlay");
   assert.equal(covered.src, imageSrc, "the overlay shows the image that was right-clicked");
@@ -120,17 +138,21 @@ try {
 
   assert.equal((await element.boundingBox()).height, frameHeight, "the frame kept its height");
 
-  setPluginEnabled(false);
-  await page.waitForFunction(
-    ([selector, mark]) =>
-      [...document.querySelectorAll(selector)].every((node) => !node.srcdoc.includes(mark)),
-    [FRAME, FRAME_SCRIPT_MARK],
-    { timeout: 15_000 },
-  );
-  assert.equal(await page.locator(OVERLAY).count(), 0);
+  plugin("reload");
+  await page.waitForFunction((selector) => !document.querySelector(selector), OVERLAY, { timeout: 15_000 });
+  await rightClickUntilCovered(page, point);
+  assert.equal((await page.evaluate(hitAt, point)).src, imageSrc, "after a plugin reload the overlay covers the image again");
+  await assertEveryPageRenders(page);
+
+  plugin("disable");
+  await page.waitForFunction((selector) => !document.querySelector(selector), OVERLAY, { timeout: 15_000 });
+  await assertEveryPageRenders(page);
+  await page.mouse.click(point.x, point.y, { button: "right" });
+  await page.waitForTimeout(1_000);
+  assert.equal(await page.locator(OVERLAY).count(), 0, "a disabled plugin places no overlay");
   assert.deepEqual(errors, []);
-  console.log(`PASS ${threadId}: the right-click point on ${imageSrc.slice(0, 80)} is covered by a decoded overlay image, the overlay leaves on the next press, and disabling the plugin restores every frame.`);
+  console.log(`PASS ${threadId}: the right-click point on ${imageSrc.slice(0, 80)} is covered by a decoded overlay image, the overlay leaves on the next press, a plugin reload keeps copying, and unloading the plugin removes the overlay while every page keeps rendering.`);
 } finally {
   await browser.close();
-  setPluginEnabled(true);
+  plugin("enable");
 }

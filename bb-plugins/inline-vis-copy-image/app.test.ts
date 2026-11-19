@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { loadPluginApp, mountPluginContentScripts } from "@get-bb/plugin-sdk/testing/app";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { withFrameScript } from "./frame-script";
 
 const OVERLAY = "[data-inline-vis-copy-image-overlay]";
+const SCRIPT = "<script data-inline-vis-copy-image>";
 const PAGE = "<!doctype html><img src='chart.png'>";
 const FRAME_BOX = { left: 100, top: 150, width: 400, height: 300 };
 const mounted: { dispose(): Promise<void> }[] = [];
@@ -36,6 +36,9 @@ async function start() {
   return scripts;
 }
 
+const loaded = (frame: HTMLIFrameElement) => frame.dispatchEvent(new Event("load"));
+const observed = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 function receive(source: Window | null, data: unknown) {
   window.dispatchEvent(new MessageEvent("message", { source, data }));
 }
@@ -52,22 +55,46 @@ function rightClickImage(frame: HTMLIFrameElement, x = 60, y = 40) {
 const overlays = () => [...document.querySelectorAll<HTMLImageElement>(OVERLAY)];
 
 describe("inline vis copy image", () => {
-  it("adds its script to a frame that is already on the page", async () => {
+  it("adds its script to a frame on the page only after bb's page has loaded, once", async () => {
     const frame = addInlineVisFrame();
-
     await start();
+    expect(frame.srcdoc).toBe(PAGE);
 
-    expect(frame.srcdoc).toBe(withFrameScript(PAGE));
+    loaded(frame);
+    expect(frame.srcdoc).toContain(PAGE + SCRIPT);
+
+    const once = frame.srcdoc;
+    loaded(frame);
+    expect(frame.srcdoc).toBe(once);
   });
 
-  it("adds its script to a frame bb renders later and again when bb rewrites the page", async () => {
+  it("waits for the next load when bb renders a frame or writes a new page into it", async () => {
     await start();
 
     const frame = addInlineVisFrame();
-    await vi.waitFor(() => expect(frame.srcdoc).toBe(withFrameScript(PAGE)));
+    await observed();
+    expect(frame.srcdoc).toBe(PAGE);
+    loaded(frame);
+    expect(frame.srcdoc).toContain(PAGE + SCRIPT);
 
     frame.srcdoc = "<p>next</p>";
-    await vi.waitFor(() => expect(frame.srcdoc).toBe(withFrameScript("<p>next</p>")));
+    await observed();
+    expect(frame.srcdoc).toBe("<p>next</p>");
+    loaded(frame);
+    expect(frame.srcdoc).toContain("<p>next</p>" + SCRIPT);
+  });
+
+  it("leaves a page alone that already carries the script, as after a plugin reload", async () => {
+    const frame = addInlineVisFrame();
+    const first = await start();
+    loaded(frame);
+    const injected = frame.srcdoc;
+    await first.lifecycle.dispose();
+
+    await start();
+    loaded(frame);
+
+    expect(frame.srcdoc).toBe(injected);
   });
 
   it("leaves other frames alone", async () => {
@@ -76,6 +103,7 @@ describe("inline vis copy image", () => {
     document.body.append(other);
 
     await start();
+    loaded(other);
 
     expect(other.srcdoc).toBe(PAGE);
   });
@@ -149,14 +177,19 @@ describe("inline vis copy image", () => {
     expect(overlays()).toEqual([]);
   });
 
-  it("restores the page and removes the overlay when bb disposes the plugin", async () => {
-    const frame = addInlineVisFrame();
+  it("removes the overlay on unload without reloading a page or adding the script later", async () => {
+    const shown = addInlineVisFrame();
+    const loading = addInlineVisFrame("<p>loading</p>");
     const scripts = await start();
-    rightClickImage(frame);
+    loaded(shown);
+    const injected = shown.srcdoc;
+    rightClickImage(shown);
 
     await scripts.lifecycle.dispose();
+    loaded(loading);
 
     expect(overlays()).toEqual([]);
-    expect(frame.srcdoc).toBe(PAGE);
+    expect(shown.srcdoc).toBe(injected);
+    expect(loading.srcdoc).toBe("<p>loading</p>");
   });
 });

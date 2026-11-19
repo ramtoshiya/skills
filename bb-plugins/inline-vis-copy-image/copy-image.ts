@@ -1,5 +1,5 @@
 import { parseFrameMessage } from "./frame-message";
-import { withFrameScript, withoutFrameScript } from "./frame-script";
+import { hasFrameScript, withFrameScript } from "./frame-script";
 
 const PRIVATE_INLINE_VIS_FRAME = "[data-inline-vis-frame] iframe[srcdoc]";
 export const OVERLAY_ATTRIBUTE = "data-inline-vis-copy-image-overlay";
@@ -20,10 +20,12 @@ export function mountCopyImage(document: Document, signal: AbortSignal): void {
   const inlineVisFrames = () =>
     document.querySelectorAll<HTMLIFrameElement>(PRIVATE_INLINE_VIS_FRAME);
 
-  function addFrameScripts() {
+  // Chromium leaves a frame blank if its srcdoc changes before the first load.
+  const awaitingBbPageLoad = new WeakSet<HTMLIFrameElement>();
+
+  function deferScriptUntilBbPageLoads() {
     for (const frame of inlineVisFrames()) {
-      const srcdoc = withFrameScript(frame.srcdoc);
-      if (srcdoc !== frame.srcdoc) frame.srcdoc = srcdoc;
+      if (!hasFrameScript(frame.srcdoc)) awaitingBbPageLoad.add(frame);
     }
   }
 
@@ -76,24 +78,30 @@ export function mountCopyImage(document: Document, signal: AbortSignal): void {
     { capture: true, signal },
   );
 
-  const observer = new view.MutationObserver(addFrameScripts);
+  document.addEventListener(
+    "load",
+    (event) => {
+      const frame = event.target;
+      if (!(frame instanceof view.HTMLIFrameElement) || !awaitingBbPageLoad.delete(frame)) return;
+      frame.srcdoc = withFrameScript(frame.srcdoc);
+    },
+    { capture: true, signal },
+  );
+
+  const observer = new view.MutationObserver(deferScriptUntilBbPageLoads);
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
     attributes: true,
     attributeFilter: ["srcdoc"],
   });
-  addFrameScripts();
+  deferScriptUntilBbPageLoads();
 
   signal.addEventListener(
     "abort",
     () => {
       observer.disconnect();
       removeOverlay();
-      for (const frame of inlineVisFrames()) {
-        const srcdoc = withoutFrameScript(frame.srcdoc);
-        if (srcdoc !== frame.srcdoc) frame.srcdoc = srcdoc;
-      }
     },
     { once: true },
   );

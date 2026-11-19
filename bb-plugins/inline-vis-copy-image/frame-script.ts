@@ -13,10 +13,10 @@ export const FRAME_SCRIPT = `(function () {
 
 const SCRIPT_TAG = `<script data-inline-vis-copy-image>${FRAME_SCRIPT}</script>`;
 
-export function withFrameScript(srcdoc: string): string {
-  return srcdoc.endsWith(SCRIPT_TAG) ? srcdoc : srcdoc + SCRIPT_TAG;
+export function hasFrameScript(srcdoc: string): boolean {
+  return srcdoc.endsWith(SCRIPT_TAG);
 }
 
-export function withoutFrameScript(srcdoc: string): string {
-  return srcdoc.endsWith(SCRIPT_TAG) ? srcdoc.slice(0, -SCRIPT_TAG.length) : srcdoc;
+export function withFrameScript(srcdoc: string): string {
+  return srcdoc + SCRIPT_TAG;
 }

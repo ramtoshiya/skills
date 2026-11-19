@@ -29,9 +29,11 @@ choose **Copy Image**. bb copies the image at its original size.
 | An inline-vis page opened in the side panel | Not covered |
 | An image that the app page renders itself, such as one in a Markdown file shown inline | Not changed by the plugin |
 
-The plugin adds a script to each inline-vis page before the page first
-loads. A page that is already on screen when you enable or disable the plugin
-loads again once, which resets what you typed or scrolled in it.
+The plugin adds a script to each inline-vis page right after bb's page has
+loaded, so every page loads a second time. A page that is already on screen
+when you enable the plugin gets the script the next time bb shows it, for
+example after you switch threads and come back. Disabling the plugin leaves
+pages on screen as they are.
 
 The app page loads the image again when you right-click it. If the image is
 large or the connection is slow, wait a moment before you choose
@@ -47,17 +49,21 @@ bb Desktop's **Copy Image** asks the app page for the image at the pointer.
 An inline-vis page lives in a sandboxed frame, so the app page finds the
 frame there and no image.
 
-The plugin's content script appends a small script to each inline-vis frame's
-`srcdoc`. When you right-click an image, that script sends the image's URL
-and the pointer position to the app page. The content script then places a
-transparent 16 pixel `<img>` with the same URL in the app page, exactly under
-the pointer. **Copy Image** now finds that image and copies it. The next
-pointer press removes it.
+The plugin's content script appends a small script to each inline-vis
+frame's `srcdoc` once the frame has loaded the page that bb wrote. Chromium,
+which bb Desktop runs on, can leave a frame blank when its `srcdoc` changes
+before that first load. When you right-click an image, that script sends the
+image's URL and the pointer position to the app page. The content script
+then places a transparent 16 pixel `<img>` with the same URL in the app page,
+exactly under the pointer. **Copy Image** now finds that image and copies
+it. The next pointer press removes it.
 
-The content script accepts a message only from a frame it added the script
-to. It accepts only `http:`, `https:`, and `data:image/` URLs and a position
+The content script accepts a message only from an inline-vis frame. It
+accepts only `http:`, `https:`, and `data:image/` URLs and a position
 inside the frame, and it loads the image without a referrer. Disabling the
-plugin removes the added script and the image.
+plugin removes the image and stops listening. A page on screen keeps the
+added script until bb shows it again, and nothing reads the script's
+messages in the meantime.
 
 ## Risks
 
@@ -90,8 +96,9 @@ npm run verify:live -- thr_example
 
 The check right-clicks the image and confirms that the app page's hit test at
 that point finds a decoded copy of the image. It then confirms that the copy
-leaves on the next press and that disabling the plugin restores every frame.
-It enables the plugin again when it ends. It does not read or write the
+leaves on the next press. It reloads the plugin and confirms that the copy
+still works, then disables it and confirms that the copy is gone and every
+page still renders. It enables the plugin again when it ends. It does not read or write the
 clipboard, so confirm the copy itself in bb Desktop.
 
 `npm run verify:remount` checks that every inline-vis page still renders
@@ -112,4 +119,4 @@ bb plugin build .
 npm run verify:remount -- /threads/thr_fixture /threads/thr_other
 ```
 
-Tested with bb 0.49 and plugin SDK 0.6.132.
+Tested with bb 0.50.1 and plugin SDK 0.6.132.

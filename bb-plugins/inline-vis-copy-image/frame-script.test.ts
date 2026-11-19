@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { parseFrameMessage } from "./frame-message";
-import { FRAME_SCRIPT, withFrameScript, withoutFrameScript } from "./frame-script";
+import { FRAME_SCRIPT } from "./frame-script";
 
 const FRAME_SIZE = { width: 400, height: 300 };
 
@@ -83,19 +83,5 @@ describe("frame message", () => {
     ["another sender's message", { jsonrpc: "2.0", method: "inline-vis/height" }],
   ])("rejects %s", (_name, message) => {
     expect(parseFrameMessage(message, FRAME_SIZE)).toBeNull();
-  });
-});
-
-describe("frame document", () => {
-  const page = "<!doctype html><p>chart</p>";
-
-  it("adds the script once and removes it again", () => {
-    const withScript = withFrameScript(page);
-
-    expect(withScript).not.toBe(page);
-    expect(withScript.startsWith(page)).toBe(true);
-    expect(withFrameScript(withScript)).toBe(withScript);
-    expect(withoutFrameScript(withScript)).toBe(page);
-    expect(withoutFrameScript(page)).toBe(page);
   });
 });
