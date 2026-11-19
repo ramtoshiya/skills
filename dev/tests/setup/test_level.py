@@ -12,6 +12,11 @@ from test_hermes_operator import FAKE_BB, FAKE_HERMES, PSTACK_ALLOWED, commit_re
 ROOT = Path(__file__).resolve().parents[3]
 HANDOFF = "setup/hermes/skills/operator-handoff/SKILL.md"
 LEVEL = "setup/agents/level.py"
+FAKE_NPM = f"""#!{sys.executable}
+import json, os, sys
+with open(os.environ["CALLS"], "a") as log:
+    log.write(json.dumps({{"args": ["npm", *sys.argv[1:], os.getcwd()]}}) + "\\n")
+"""
 
 
 def uv_python_dir():
@@ -26,7 +31,7 @@ class LevelTests(unittest.TestCase):
         self.home = self.tmp / "home"
         bin_dir = self.tmp / "bin"
         bin_dir.mkdir()
-        for name, script in {"hermes": FAKE_HERMES, "bb": FAKE_BB}.items():
+        for name, script in {"hermes": FAKE_HERMES, "bb": FAKE_BB, "npm": FAKE_NPM}.items():
             (bin_dir / name).write_text(script)
             (bin_dir / name).chmod(0o755)
         bundled = self.tmp / "bundled"
@@ -231,13 +236,15 @@ class LevelTests(unittest.TestCase):
 
     def push_bb_plugin(self, text):
         (self.worktree / "bb-plugins/demo").mkdir(parents=True, exist_ok=True)
+        (self.worktree / "bb-plugins/demo/package-lock.json").write_text("{}\n")
+        self.git(self.worktree, "add", "bb-plugins/demo/package-lock.json")
         self.commit(self.worktree, "bb-plugins/demo/package.json", text)
         return self.run_git(self.worktree, "push", "-q", "origin", "HEAD:main")
 
-    def bb_installs(self):
+    def install_calls(self):
         calls = Path(self.env["CALLS"])
         lines = calls.read_text().splitlines() if calls.exists() else []
-        return [call["args"] for call in map(json.loads, lines) if call["args"][:2] == ["plugin", "install"]]
+        return [call["args"] for call in map(json.loads, lines) if call["args"][:2] in (["plugin", "install"], ["npm", "ci"])]
 
     def install_bb_plugin(self, source):
         (self.home / "bb-plugins.json").write_text(json.dumps(
@@ -259,13 +266,15 @@ class LevelTests(unittest.TestCase):
 
         self.assertEqual(push.returncode, 0)
         self.assertIn("postponed demo", push.stderr)
-        self.assertEqual(self.bb_installs(), [])
+        self.assertEqual(self.install_calls(), [])
         self.assertEqual(self.status()[1][("bb", "plugin:demo")]["status"], "drift")
 
         self.set_turn("idle")
         self.assertEqual(self.level("sync").returncode, 0)
 
-        self.assertEqual(self.bb_installs(), [["plugin", "install", f"path:{self.shared}/bb-plugins/demo", "--yes"]])
+        home = f"{self.shared}/bb-plugins/demo"
+        self.assertEqual(self.install_calls(), [["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund", home],
+                                              ["plugin", "install", f"path:{home}", "--yes"]])
         code, rows = self.status()
         self.assertEqual(code, 0, rows)
         self.assertEqual(rows[("bb", "plugin:demo")]["status"], "ok")
@@ -277,7 +286,7 @@ class LevelTests(unittest.TestCase):
 
         self.assertEqual(self.level("sync").returncode, 0)
 
-        self.assertEqual(self.bb_installs(), [])
+        self.assertEqual(self.install_calls(), [])
         code, rows = self.status()
         self.assertEqual(code, 1)
         self.assertIn(f"bb plugin install path:{self.shared}/bb-plugins/demo --yes",

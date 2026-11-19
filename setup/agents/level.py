@@ -185,6 +185,15 @@ class BbPlugins:
         except (Stop, ValueError, KeyError, subprocess.SubprocessError) as error:
             return [row("bb", "plugins", "conflict", str(error))]
 
+    def install_dependencies(self, plugin_id):
+        """Install the lockfile's packages, which the bb build bundles from node_modules."""
+        if not (self.home(plugin_id) / "package-lock.json").is_file():
+            return
+        result = subprocess.run(["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], cwd=self.home(plugin_id),
+                                capture_output=True, text=True, stdin=subprocess.DEVNULL, env=environment(), timeout=600)
+        if result.returncode:
+            raise Stop(f"`npm ci` failed in {self.home(plugin_id)}: {(result.stderr or result.stdout).strip()}")
+
     def active_providers(self):
         threads = json.loads(self.bb("thread", "list", "--include-hidden", "--json"))
         return {thread["providerId"] for thread in threads if thread.get("status") == "active"}
@@ -205,6 +214,7 @@ class BbPlugins:
                     failed.append(plugin["id"])
                     continue
                 try:
+                    self.install_dependencies(plugin["id"])
                     self.bb("plugin", "install", f"path:{self.home(plugin['id'])}", "--yes")
                 except Stop as error:
                     print(f"main:sync: {error}", file=sys.stderr)

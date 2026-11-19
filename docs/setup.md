@@ -151,9 +151,11 @@ skills from the pstack-mode checkout. A change there shows as drift in
 `main:status` and installs at the next `main:sync`.
 
 bb neither rebuilds a path plugin on `bb plugin reload` nor records which
-source a build read. `main:sync` therefore runs `bb plugin install --yes` for
-each plugin installed from `bb-plugins/<id>` in the shared checkout whose
-folder changed since its last install there. It records the installed Git tree
+source a build read. `main:sync` therefore reinstalls each plugin installed
+from `bb-plugins/<id>` in the shared checkout whose folder changed since its
+last install there. It runs `npm ci --ignore-scripts` first when the folder has
+a `package-lock.json`, because the bb build bundles packages from
+`node_modules`, and then `bb plugin install --yes`. It records the installed Git tree
 in `~/.local/state/ramtoshiya-agents/bb-plugins.json`, so a plugin with no
 record yet installs once on the next run. A reinstall restarts the plugin's
 provider worker. While a turn on that provider is running, `main:sync`
