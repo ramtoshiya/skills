@@ -42,7 +42,7 @@ async function wheelIntoView(page, element) {
   await page.mouse.move(width / 2, height / 2);
   for (let attempt = 0; attempt < 20; attempt++) {
     const box = await element.boundingBox();
-    if (box.y >= TOP_MARGIN_PX && box.y <= height / 2) return;
+    if (box.y >= TOP_MARGIN_PX && box.y + box.height <= height) return;
     await page.mouse.wheel(0, box.y - TOP_MARGIN_PX * 2);
     await page.waitForTimeout(400);
   }
