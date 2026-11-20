@@ -235,8 +235,7 @@ The hook cannot start a compaction. It identifies BB, T3 Code, or Paseo from
 the host's thread or agent id and directs the agent to the matching skill
 instructions. In BB with Claude Code, a background helper waits for the turn
 to end, requests native compaction, and verifies the actual compaction boundary
-and successful turn before sending the resume. In T3 Code the agent queues
-`/compact` and a resume message to its own thread. Paseo Desktop has a separate
+and successful turn before sending the resume. Paseo Desktop has a separate
 background helper. [Agent plugins](agent-pack.md) describes their requirements
 and concurrency limits. Other hosts keep the note current and use Claude
 Code's automatic compaction.

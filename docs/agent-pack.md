@@ -22,7 +22,7 @@ does not run the hooks.
 | `mermaid-check` | Runs the Mermaid parser over diagrams before the agent delivers them | Node.js. The first run downloads `@mermaid-js/mermaid-cli` 12.0.0 through `npx` |
 | `read-x` | Reads public X posts, threads, profiles, and searches through the mdfromx HTTP API | HTTP access to [mdfromx](https://mdfromx.com/) and curl |
 | `reorganize-commits` | Rewrites the current branch's commits into reviewable chunks. Runs only when you invoke it | Git |
-| `self-compact` | Compacts the conversation at a boundary the agent picks and resumes from a handoff note without you | T3 Code, BB with Claude Code or Hermes, or macOS Paseo Desktop. Node.js and the `bb` CLI in BB |
+| `self-compact` | Compacts the conversation at a boundary the agent picks and resumes from a handoff note without you | BB with Claude Code or Hermes, or macOS Paseo Desktop. Node.js and the `bb` CLI in BB |
 | `stable-refs` | Gives documents and plans permanent identifiers that survive edits | Nothing |
 | `worker-routing` | Supplies the shared model, effort, provider, quota, urgency, retry, and escalation policy that agents follow when they start workers, and a `newest-model` script that prints the model to pass for each family | BB for cross-provider workers, and for Claude workers when the host hides Claude Code's own subagent tools. Elsewhere, the host's agent tool. `jq`, and the `bb` CLI for the `claudex` catalog |
 
@@ -49,8 +49,6 @@ of the compaction window. In Claude Code the reminder comes from the
 profile's self-compact plugin, described in [Machine setup](setup.md). The
 agent finishes its step and writes a handoff note first.
 
-- In T3 Code the agent queues `/compact` and a resume message to its own
-  thread, so the work continues without you.
 - In BB a helper uses the installed `bb` CLI and Node.js to wait for the turn
   to end and request native compaction. It sends the resume only after the
   matching turn reports an actual compaction boundary and successful
