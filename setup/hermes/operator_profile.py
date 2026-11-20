@@ -50,6 +50,7 @@ CONFIG = {
     "curator.enabled": "false",
     "memory.write_approval": "false",
     "compression.threshold_tokens": "300000",
+    "hooks.output_spill.max_chars": "32000",
 }
 
 

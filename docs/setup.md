@@ -631,6 +631,7 @@ Then it changes these files under `~/.hermes/profiles/operator/`:
 | `curator.enabled` | `false` | Hermes does not archive or merge skills on its own |
 | `memory.write_approval` | `false` | Hermes writes its built-in memory without asking. Memory limits stay at the defaults |
 | `compression.threshold_tokens` | `300000` | Hermes compresses a session on its own when a request reaches 300,000 tokens. The self-compact plugin reminds the agent to compact from 75% of this number |
+| `hooks.output_spill.max_chars` | `32000` | A plugin's per-turn context up to 32,000 characters reaches the model whole. Hermes's default of 10,000 would save the self-compact plugin's restore of a bb session's first message, about 16,000 characters, to a file and leave the model only its first and last 500 characters, which cuts out the bb instructions |
 
 Running the task again replaces the copies it manages, removes skills that
 the marketplace no longer selects, and leaves memories, sessions,

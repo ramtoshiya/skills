@@ -694,6 +694,7 @@ class OperatorProfileSetupTests(unittest.TestCase):
         self.assertEqual(settings["agent.disabled_toolsets"], ["file", "code_execution", "delegation"])
         self.assertFalse(settings["memory.write_approval"])
         self.assertEqual(settings["compression.threshold_tokens"], 300000)
+        self.assertEqual(settings["hooks.output_spill.max_chars"], 32000)
         self.assertEqual(settings["plugins.enabled"], ["skill-drafts", "bb-thread-env", "self-compact", "korean-pack"])
         self.assertTrue((self.operator / "plugins/self-compact/plugin.yaml").is_file())
         handoff = (skills["operator-handoff"][0] / "SKILL.md").read_text()
