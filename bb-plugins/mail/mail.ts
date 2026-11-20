@@ -115,19 +115,43 @@ export function nestLogicalParent(metadata: unknown): string | null {
 }
 
 export const INBOX_REASON = "Mail inbox: delivered when this thread's next turn starts.";
+export const BUSY_REASON = "Mail: delivered when this thread's current turn ends, as a turn of its own.";
 
 export type DispatchDecision = { action: "proceed" } | { action: "wait"; reason: string };
 
 export const INBOX_SUBMISSION = { kind: "inbox" } as const;
 
+/**
+ * bb's ACP bridge steers a running turn by cancelling it and sending the message again. Hermes discards a
+ * cancelled turn that has not started yet, so a message steered in at that moment takes the user's message with it.
+ */
+export function steersByCancel(providerId: string): boolean {
+  return providerId.startsWith("acp-");
+}
+
+/** The attempt on which a held message may pass. Claude Code and Codex inject it into the running turn. ACP threads start a turn for it. */
+function releaseAttempt(providerId: string): DispatchFacts["attempt"] {
+  return steersByCancel(providerId) ? "start-turn" : "join-turn";
+}
+
+/** The thread event after which mail releases the thread's held messages. */
+export function releaseEvent(providerId: string): "thread.active" | "thread.idle" {
+  return steersByCancel(providerId) ? "thread.idle" : "thread.active";
+}
+
+export type Initiator = "user" | "agent" | "system";
+
 export interface DispatchFacts {
   attempt: "join-turn" | "start-turn";
+  initiator: Initiator | "mixed";
   experimental_submission: { pluginId: string } | null;
   queuedMessages: ReadonlyArray<QueueRow>;
+  thread: { providerId: string };
 }
 
 export interface QueueRow {
   id: string;
+  initiator: Initiator;
   waitingOn: { kind: string; pluginId?: string } | null;
 }
 
@@ -138,13 +162,21 @@ export function heldByMail(row: QueueRow, mailPluginId: string): boolean {
 export interface InboxMemory {
   /** Rows mail held. bb passes the submission marker only on a message's first attempt, and a row released into a turn that ended first comes back without mail's wait. */
   held: ReadonlySet<string>;
-  /** Held rows that were waiting when the recipient's current turn started, so they may join it. */
+  /** Held rows that were waiting when mail's release event for the recipient fired, so they may pass on the recipient's release attempt. */
   releasable: ReadonlySet<string>;
 }
 
+function involvesUser(facts: DispatchFacts): boolean {
+  return facts.initiator === "user" || facts.queuedMessages.some((row) => row.initiator === "user");
+}
+
 export function inboxDecision(facts: DispatchFacts, mailPluginId: string, memory: InboxMemory): DispatchDecision {
+  const { providerId } = facts.thread;
+  if (steersByCancel(providerId) && facts.attempt === "join-turn" && !involvesUser(facts)) {
+    return { action: "wait", reason: BUSY_REASON };
+  }
   const waits = (row: QueueRow) =>
-    (heldByMail(row, mailPluginId) || memory.held.has(row.id)) && !(facts.attempt === "join-turn" && memory.releasable.has(row.id));
+    (heldByMail(row, mailPluginId) || memory.held.has(row.id)) && !(facts.attempt === releaseAttempt(providerId) && memory.releasable.has(row.id));
   const inbox =
     facts.queuedMessages.length > 0 ? facts.queuedMessages.every(waits) : facts.experimental_submission?.pluginId === mailPluginId;
   return inbox ? { action: "wait", reason: INBOX_REASON } : { action: "proceed" };

@@ -17,6 +17,7 @@ import {
   nestLogicalParent,
   parseSelector,
   parseTag,
+  releaseEvent,
   tagKey,
   tagsOf,
   waitState,
@@ -75,13 +76,16 @@ export default function plugin(bb: BbPluginApi) {
     }
   });
 
-  bb.events.on("thread.active", ({ thread }) =>
-    guard("thread.active", async () => {
-      const held = await bb.sdk.threads.queue.list({ waitHolder: `plugin:${bb.pluginId}`, threadId: thread.id });
-      for (const row of held) inbox.releasable.add(row.id);
-      if (held.length > 0) await bb.experimental_hooks.recheck("message.dispatch");
-    }),
-  );
+  for (const event of ["thread.active", "thread.idle"] as const) {
+    bb.events.on(event, ({ thread }) =>
+      guard(event, async () => {
+        if (releaseEvent(thread.providerId) !== event) return;
+        const held = await bb.sdk.threads.queue.list({ waitHolder: `plugin:${bb.pluginId}`, threadId: thread.id });
+        for (const row of held) inbox.releasable.add(row.id);
+        if (held.length > 0) await bb.experimental_hooks.recheck("message.dispatch");
+      }),
+    );
+  }
 
   async function currentRow(row: Row): Promise<Row | null> {
     const rows = await bb.sdk.threads.queuedMessages.list({ threadId: row.threadId });
