@@ -55,14 +55,19 @@ the current one, so it does not interrupt work in progress.
 
 bb steers a running ACP thread, such as Hermes (`acp-*` providers), by
 cancelling its turn and sending the message again. Hermes discards a cancelled
-turn that has not started yet, so a message steered in right after the user's
-turn starts takes the user's message with it. For these recipients mail never
-lets a message join a running turn. While the recipient is working, mail holds
-every message that did not come from a user, whether sent with `bb mail send`,
-`bb mail send --wake`, `bb thread tell`, or a bb notice. When the recipient goes
-idle, mail releases them and they start a turn of their own. Mail never holds
-or reorders a user's message. Claude Code and Codex threads keep the behavior
-above.
+turn that has not started yet, so a message steered in right after a turn
+starts takes that turn's message with it. For these recipients mail never lets
+a message join a running turn. While the recipient is working, mail holds every
+message, whether sent with `bb mail send`, `bb mail send --wake`,
+`bb thread tell`, a bb notice, or typed by the user. When the recipient goes
+idle, mail releases the held messages in the order they arrived, and each one
+starts a turn of its own. N held messages take N turns. bb never cancels the
+running turn for them. Claude Code and Codex threads keep the behavior above,
+and a user's message there still joins the running turn.
+
+To interrupt a running ACP turn, press Send now on the user's queued message,
+which bypasses mail and steers by cancelling the turn, or press Stop. A user's
+message sent with `--mode queue` waits for the turn to end as before.
 
 An inbox message for an idle ACP thread also waits until a turn has started
 and ended, so it does not start a turn on its own.
@@ -156,13 +161,13 @@ before the child's latest turn started.
 - `parent=` follows nest's metadata. A thread moved with
   `bb thread update --parent-thread` keeps any logical parent nest recorded.
 
-- A user's message that arrives as mail releases a held message to an ACP
-  thread can still lose to it. If bb sends the release first, the user's
-  message cancels that turn before it starts, and Hermes discards the user's
-  message. Mail cannot see this race.
-- A user's message sent into a running ACP turn cancels the turn, as it does
-  without mail. Mail releases held messages when the cancelled turn goes idle,
-  and they can reach the thread before the user's resent message does.
+- A user's message sent to a running ACP thread waits for the turn to end,
+  with no way to reach the agent sooner except Send now or Stop.
+- The compaction hold above applies to a user's message too. After a turn that
+  scheduled a self-compaction, the message waits until the resume turn ends.
+- Send now on a held message sends it at once and cancels the running turn.
+  If that turn has not started yet, Hermes discards the cancelled turn and the
+  message with it.
 
 ## bb internals and experimental APIs
 
