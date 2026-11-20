@@ -129,12 +129,10 @@ export function steersByCancel(providerId: string): boolean {
   return providerId.startsWith("acp-");
 }
 
-/** The attempt on which a held message may pass. Claude Code and Codex inject it into the running turn. ACP threads start a turn for it. */
 function releaseAttempt(providerId: string): DispatchFacts["attempt"] {
   return steersByCancel(providerId) ? "start-turn" : "join-turn";
 }
 
-/** The thread event after which mail releases the thread's held messages. */
 export function releaseEvent(providerId: string): "thread.active" | "thread.idle" {
   return steersByCancel(providerId) ? "thread.idle" : "thread.active";
 }
@@ -162,7 +160,6 @@ export function heldByMail(row: QueueRow, mailPluginId: string): boolean {
 export interface InboxMemory {
   /** Rows mail held. bb passes the submission marker only on a message's first attempt, and a row released into a turn that ended first comes back without mail's wait. */
   held: ReadonlySet<string>;
-  /** Held rows that were waiting when mail's release event for the recipient fired, so they may pass on the recipient's release attempt. */
   releasable: ReadonlySet<string>;
 }
 
