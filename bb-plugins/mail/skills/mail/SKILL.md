@@ -14,7 +14,10 @@ wakes the recipient, as `bb mail send --wake` does.
 Without `--wake` the message waits in the recipient's inbox. It starts no
 turn and arrives when the recipient's next turn starts. If the recipient is
 working, it waits for the turn after the current one. With `--wake` it
-starts a turn now, or joins the running one.
+starts a turn now, or joins the running one. A Hermes thread (an `acp-*`
+provider) never takes a joined message, because bb would cancel its running
+turn. Mail holds every agent message, with or without `--wake`, until the
+recipient goes idle, and it then starts a turn of its own.
 
 ```sh
 bb mail send <thread> --message "FYI: main moved to 3d34cff."

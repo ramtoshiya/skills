@@ -86,7 +86,8 @@ for that turn. A command receipt, a closed `contextCompaction` item, or an assis
 does not prove compaction. It sends the handoff instruction through `tell --mode queue` only
 after proof and a final idle check.
 
-Pending interactions, queued work before the request, another request, missing proof, or failure
+Pending interactions, queued work before the request (messages that the mail plugin holds in the
+inbox do not count), another request, missing proof, or failure
 stop the helper and keep the note. Messages that queue while compaction runs, and turns they
 start after BB records the compaction turn as completed, do not fail a proven compaction. Read the background error before deciding how to continue. Do not retry a
 send automatically, because its delivery can be uncertain. A queued resume receipt reports a

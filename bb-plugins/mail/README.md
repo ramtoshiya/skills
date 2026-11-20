@@ -51,6 +51,27 @@ adds it to the recipient's next turn when that turn starts, whatever starts
 it. A message sent while the recipient is working waits for the turn after
 the current one, so it does not interrupt work in progress.
 
+### ACP threads
+
+bb steers a running ACP thread, such as Hermes (`acp-*` providers), by
+cancelling its turn and sending the message again. Hermes discards a cancelled
+turn that has not started yet, so a message steered in right after the user's
+turn starts takes the user's message with it. For these recipients mail never
+lets a message join a running turn. While the recipient is working, mail holds
+every message that did not come from a user, whether sent with `bb mail send`,
+`bb mail send --wake`, `bb thread tell`, or a bb notice. When the recipient goes
+idle, mail releases them and they start a turn of their own. Mail never holds
+or reorders a user's message. Claude Code and Codex threads keep the behavior
+above.
+
+An inbox message for an idle ACP thread also waits until a turn has started
+and ended, so it does not start a turn on its own.
+
+### Self-compaction
+
+Held inbox messages count in `queuedMessageCount`, but the self-compact helper
+does not treat them as queued work, so they do not stop a compaction.
+
 Mail marks an inbox message with a plugin submission when it sends it, and
 remembers which queued messages it is holding. That memory lives in the
 running plugin. If mail restarts while a message is held, that message can
@@ -122,12 +143,20 @@ before the child's latest turn started.
 - `parent=` follows nest's metadata. A thread moved with
   `bb thread update --parent-thread` keeps any logical parent nest recorded.
 
+- A user's message that arrives as mail releases a held message to an ACP
+  thread can still lose to it. If bb sends the release first, the user's
+  message cancels that turn before it starts, and Hermes discards the user's
+  message. Mail cannot see this race.
+- A user's message sent into a running ACP turn cancels the turn, as it does
+  without mail. Mail releases held messages when the cancelled turn goes idle,
+  and they can reach the thread before the user's resent message does.
+
 ## bb internals and experimental APIs
 
 A bb update can change any of these:
 
 - Experimental plugin APIs: `experimental_hooks.on("message.dispatch")`,
-  its `experimental_submission` field, and `experimental_hooks.recheck` for
+  its `experimental_submission`, `attempt`, and `initiator` fields, and `experimental_hooks.recheck` for
   the inbox,
   `threads.experimental_listPluginMetadata` for tags and nest's logical
   parents, and the `waitHolder` filter of `threads.queue.list`.

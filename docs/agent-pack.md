@@ -60,7 +60,9 @@ agent finishes its step and writes a handoff note first.
   also requires the one compaction that Hermes committed after the request,
   because BB reports a refused or empty `/compact` as finished too. Other
   providers, pending work, interactions, and missing proof keep the handoff
-  note and stop the helper. Messages that queue after the compaction request
+  note and stop the helper. Queued work before the request stops it, but
+  messages that the mail bb plugin holds in a thread's inbox do not count.
+  Messages that queue after the compaction request
   do not stop it. A queued resume receipt reports uncertain delivery
   and its queue id. The helper needs exclusive control of the thread. Do not
   send new prompts until it finishes. The CLI cannot atomically send only if

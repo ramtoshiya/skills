@@ -9,6 +9,7 @@ const DEADLINE_MS = 300_000;
 const CALL_TIMEOUT_MS = 15_000;
 const POLL_MS = 500;
 const LEDGER_GRACE_MS = 2_000;
+const MAIL_PLUGIN_ID = 'mail';
 
 // BB reports any ACP end_turn as a finished compaction, and Hermes ends a noop or refused /compress
 // with end_turn too, so Hermes also needs the committed compaction that its self-compact plugin
@@ -44,6 +45,15 @@ function parseRun(rest) {
 
 const outcome = { compacted: false, phase: 'waiting-caller', resumeAttempted: false };
 let report = null;
+
+// The mail plugin holds inbox messages until the thread's next turn or until it goes idle. They are
+// not work the thread owes, so they do not count as queued work.
+async function queuedWork(bb, threadId, thread) {
+  if (thread.queuedMessageCount === 0) return 0;
+  const rows = await bb(['thread', 'queue', 'list', threadId]);
+  if (!Array.isArray(rows) || rows.length !== thread.queuedMessageCount || !rows.every(isObject)) return null;
+  return rows.filter(row => !(row.waitingOn?.kind === 'plugin' && row.waitingOn.pluginId === MAIL_PLUGIN_ID)).length;
+}
 
 function prepareCommandSeq(history, turnId) {
   const active = new Map();
@@ -101,7 +111,7 @@ async function main() {
     const thread = show?.thread;
     if (!isObject(thread) || thread.id !== threadId || !Object.hasOwn(PROVIDERS, thread.providerId) ||
         !['active', 'starting', 'idle'].includes(thread.status) ||
-        !Number.isInteger(thread.queuedMessageCount) || (!queued && thread.queuedMessageCount !== 0) ||
+        !Number.isInteger(thread.queuedMessageCount) || (!queued && await queuedWork(bb, threadId, thread) !== 0) ||
         thread.archivedAt !== null || thread.deletedAt !== null) {
       fail(`The thread must be an unarchived thread of a supported provider (${Object.keys(PROVIDERS).join(', ')}) with no queued work or error.`);
     }
@@ -354,7 +364,7 @@ async function sendFailureNotice(error) {
   try {
     const thread = (await bb(['thread', 'show', threadId], undefined, late))?.thread;
     const interactions = await bb(['thread', 'interactions', 'list', threadId], undefined, late);
-    if (thread?.status !== 'idle' || thread.queuedMessageCount !== 0 || !Array.isArray(interactions) ||
+    if (thread?.status !== 'idle' || await queuedWork(bb, threadId, thread) !== 0 || !Array.isArray(interactions) ||
         interactions.some(item => ['pending', 'resolving'].includes(item?.status))) return false;
     const text = `Self-compaction did not complete: ${error.message} No retry was made. The handoff note is kept at ${JSON.stringify(note)}. Read it with the self_compact tool's read action, continue the task, and schedule compaction again only at a later natural boundary.`;
     const delivery = await bb(['thread', 'tell', threadId, '--mode', 'queue', '--message-file', '-'], text, late);
