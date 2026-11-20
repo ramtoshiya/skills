@@ -4,7 +4,7 @@ import plugin from "./server";
 
 type Host = ReturnType<typeof createFakePluginHost>;
 type Row = ReturnType<typeof makeQueueEntry>;
-type Sent = { threadId: string; senderThreadId?: string; originPluginId?: string; text: string };
+type Sent = { threadId: string; senderThreadId?: string; inbox: boolean; text: string };
 
 const THREADS = {
   ROOT: { projectId: "proj_a", parentThreadId: null, providerId: "claude-code", status: "idle" },
@@ -79,15 +79,17 @@ function start(options: { mailTags?: Record<string, Record<string, true>>; event
           sent.push({
             threadId: args.threadId,
             senderThreadId: args.senderThreadId,
-            originPluginId: args.originPluginId ?? undefined,
+            inbox: args.pluginSubmission?.pluginId === "mail",
             text: first && first.type === "text" ? first.text : "",
           });
           return { delivery: "sent" } as never;
         },
         output: async () => ({ output: options.output ?? "DONE: 42" }) as never,
         events: {
-          list: async ({ threadId, types }) =>
-            (events[threadId] ?? []).filter((event) => !types || types.includes((event as { type: string }).type as never)) as never,
+          list: async ({ threadId, types, limit }) => {
+            if (Number(limit) > 100) throw new Error("HTTP 400: Thread event limit cannot exceed 100");
+            return (events[threadId] ?? []).filter((event) => !types || types.includes((event as { type: string }).type as never)) as never;
+          },
         },
         queuedMessages: {
           list: async ({ threadId }) => [...rows.values()].filter((row) => row.threadId === threadId) as never,
@@ -130,24 +132,31 @@ afterEach(async () => {
 });
 
 describe("inbox", () => {
+  const inbox = { pluginId: "mail", data: { kind: "inbox" } };
+  const heldByMail = { id: "held", waitingOn: { kind: "plugin" as const, pluginId: "mail", reason: "inbox" } };
   it.each([
-    ["holds a mail message that would start a turn", { attempt: "start-turn", originPluginId: "mail" }, "wait"],
-    ["lets a mail message join a running turn", { attempt: "join-turn", originPluginId: "mail" }, "proceed"],
-    ["leaves other senders alone", { attempt: "start-turn", originPluginId: null }, "proceed"],
+    ["holds an inbox message that would start a turn", { attempt: "start-turn", experimental_submission: inbox }, "wait"],
+    ["lets an inbox message join a running turn", { attempt: "join-turn", experimental_submission: inbox }, "proceed"],
+    ["starts a turn for a --wake message, which bb also marks as sent by mail", { attempt: "start-turn", originPluginId: "mail" }, "proceed"],
+    ["keeps holding an inbox message when bb re-attempts it", { attempt: "start-turn", queuedMessages: [heldByMail] }, "wait"],
+    ["starts the turn when a wake message is drained with held inbox messages", { attempt: "start-turn", queuedMessages: [heldByMail, { id: "wake", waitingOn: null }] }, "proceed"],
+    ["leaves other senders alone", { attempt: "start-turn" }, "proceed"],
   ] as const)("%s", async (_name, facts, action) => {
     const { harness } = start();
     const hook = harness.registrations.hooks["message.dispatch"]!;
-    const decision = await hook(makeMessageDispatchHookContext({ ...facts, queuedMessages: [{ originPluginId: facts.originPluginId }] }));
+    const decision = await hook(makeMessageDispatchHookContext(facts as never));
     expect(decision.action).toBe(action);
   });
 
-  it("starts the turn when a wake message is queued behind a held inbox message", async () => {
+  it("keeps holding an inbox message that a running turn ended before it was delivered", async () => {
     const { harness } = start();
     const hook = harness.registrations.hooks["message.dispatch"]!;
-    const decision = await hook(
-      makeMessageDispatchHookContext({ attempt: "start-turn", queuedMessages: [{ originPluginId: "mail" }, { originPluginId: null }] }),
-    );
-    expect(decision.action).toBe("proceed");
+    await hook(makeMessageDispatchHookContext({ attempt: "join-turn", queuedMessages: [heldByMail] }));
+    const retried = await hook(makeMessageDispatchHookContext({ attempt: "start-turn", queuedMessages: [{ id: "held", waitingOn: null }] }));
+    expect(retried.action).toBe("wait");
+    await harness.emitThreadEvent("message.dispatched", { entry: makeQueueEntry({ id: "held" }) });
+    const later = await hook(makeMessageDispatchHookContext({ attempt: "start-turn", queuedMessages: [{ id: "held", waitingOn: null }] }));
+    expect(later.action).toBe("proceed");
   });
 
   it("lets the message through when reading the context throws", async () => {
@@ -176,8 +185,8 @@ describe("bb mail send", () => {
     expect((await harness.runCli(["send", "WORKER", "--message", "fyi"], { threadId: "LEAD" })).exitCode).toBe(0);
     expect((await harness.runCli(["send", "WORKER", "--wake", "--message", "now"], { threadId: "LEAD" })).exitCode).toBe(0);
     expect(sent).toEqual([
-      { threadId: "WORKER", senderThreadId: "LEAD", originPluginId: "mail", text: "fyi" },
-      { threadId: "WORKER", senderThreadId: "LEAD", originPluginId: undefined, text: "now" },
+      { threadId: "WORKER", senderThreadId: "LEAD", inbox: true, text: "fyi" },
+      { threadId: "WORKER", senderThreadId: "LEAD", inbox: false, text: "now" },
     ]);
   });
 
@@ -364,7 +373,7 @@ describe("built-in notices", () => {
     }
     expect(deleted).toEqual(["row_1"]);
     expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({ threadId: "LEAD", senderThreadId: "WORKER", originPluginId: undefined });
+    expect(sent[0]).toMatchObject({ threadId: "LEAD", senderThreadId: "WORKER", inbox: false });
     expect(sent[0]!.text).toContain('"Summary line"');
     expect(sent[0]!.text).toContain("4,001-character");
     expect(sent[0]!.text).toContain("bb thread output WORKER");

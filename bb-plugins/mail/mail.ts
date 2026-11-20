@@ -118,19 +118,34 @@ export const INBOX_REASON = "Mail inbox: delivered when this thread's next turn 
 
 export type DispatchDecision = { action: "proceed" } | { action: "wait"; reason: string };
 
+export const INBOX_SUBMISSION = { kind: "inbox" } as const;
+
 export interface DispatchFacts {
   attempt: "join-turn" | "start-turn";
-  originPluginId: string | null;
-  queuedMessages: ReadonlyArray<{ originPluginId: string | null }>;
+  experimental_submission: { pluginId: string } | null;
+  queuedMessages: ReadonlyArray<QueueRow>;
 }
 
-export function inboxDecision(facts: DispatchFacts, mailPluginId: string): DispatchDecision {
-  const fromMail =
+export interface QueueRow {
+  id: string;
+  waitingOn: { kind: string; pluginId?: string } | null;
+}
+
+export function heldByMail(row: QueueRow, mailPluginId: string): boolean {
+  return row.waitingOn?.kind === "plugin" && row.waitingOn.pluginId === mailPluginId;
+}
+
+/**
+ * bb passes the submission marker only on a message's first attempt. A row that mail released into a running turn
+ * comes back without mail's wait when that turn ends before it is delivered, so mail remembers the rows it held.
+ */
+export function inboxDecision(facts: DispatchFacts, mailPluginId: string, heldRows: ReadonlySet<string>): DispatchDecision {
+  if (facts.attempt === "join-turn") return { action: "proceed" };
+  const inbox =
     facts.queuedMessages.length > 0
-      ? facts.queuedMessages.every((row) => row.originPluginId === mailPluginId)
-      : facts.originPluginId === mailPluginId;
-  if (!fromMail || facts.attempt === "join-turn") return { action: "proceed" };
-  return { action: "wait", reason: INBOX_REASON };
+      ? facts.queuedMessages.every((row) => heldByMail(row, mailPluginId) || heldRows.has(row.id))
+      : facts.experimental_submission?.pluginId === mailPluginId;
+  return inbox ? { action: "wait", reason: INBOX_REASON } : { action: "proceed" };
 }
 
 const REPARENT_KINDS = new Set(["ownership-assigned", "ownership-removed", "ownership-batch"]);

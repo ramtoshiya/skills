@@ -1,9 +1,11 @@
 import { PluginCliError, cliCommand, defineCli, type BbPluginApi } from "@get-bb/plugin-sdk";
 import {
   COMMAND_EVENT_TYPES,
+  INBOX_SUBMISSION,
   TURN_EVENT_TYPES,
   UsageError,
   chooseRecipients,
+  heldByMail,
   classifyNotice,
   commandRuns,
   decideCompletion,
@@ -29,6 +31,7 @@ type ListedThread = Awaited<ReturnType<Sdk["threads"]["list"]>>[number];
 type Row = Awaited<ReturnType<Sdk["threads"]["queuedMessages"]["list"]>>[number];
 
 const PAGE = 200;
+const EVENT_LIMIT = 100;
 const NEST_PLUGIN_ID = "nest";
 const HOLD_LIMIT_MS = 30_000;
 const POLL_MS = 1_000;
@@ -58,9 +61,13 @@ export default function plugin(bb: BbPluginApi) {
     return work().catch((error: unknown) => bb.log.warn(`${label}: ${error instanceof Error ? error.message : String(error)}`));
   }
 
+  const heldRows = new Set<string>();
+
   bb.experimental_hooks.on("message.dispatch", (context) => {
     try {
-      return inboxDecision(context, bb.pluginId);
+      for (const row of context.queuedMessages) if (heldByMail(row, bb.pluginId)) heldRows.add(row.id);
+      bb.log.info(`DEBUG dispatch ${JSON.stringify({ t: context.thread.id, attempt: context.attempt, sub: context.experimental_submission, origin: context.originPluginId, rows: context.queuedMessages.map((r) => ({ id: r.id, w: r.waitingOn })) })} -> ${JSON.stringify(inboxDecision(context, bb.pluginId, heldRows))}`);
+      return inboxDecision(context, bb.pluginId, heldRows);
     } catch (error) {
       bb.log.warn(`message.dispatch: ${error instanceof Error ? error.message : String(error)}. Letting the message through.`);
       return { action: "proceed" };
@@ -90,8 +97,8 @@ export default function plugin(bb: BbPluginApi) {
 
   async function completionFacts(parentId: string, childId: string, holdExpired: boolean): Promise<CompletionFacts> {
     const [childEvents, parentEvents, output] = await Promise.all([
-      bb.sdk.threads.events.list({ threadId: childId, order: "desc", limit: String(PAGE), types: [...TURN_EVENT_TYPES] }),
-      bb.sdk.threads.events.list({ threadId: parentId, order: "desc", limit: String(PAGE), types: [...COMMAND_EVENT_TYPES] }),
+      bb.sdk.threads.events.list({ threadId: childId, order: "desc", limit: String(EVENT_LIMIT), types: [...TURN_EVENT_TYPES] }),
+      bb.sdk.threads.events.list({ threadId: parentId, order: "desc", limit: String(EVENT_LIMIT), types: [...COMMAND_EVENT_TYPES] }),
       bb.sdk.threads.output({ threadId: childId }),
     ]);
     const reply = output.output ?? null;
@@ -146,8 +153,13 @@ export default function plugin(bb: BbPluginApi) {
     }
   }
 
+  bb.events.on("message.dispatched", ({ entry }) => {
+    heldRows.delete(entry.id);
+  });
+
   bb.events.on("message.queued", ({ entry }) =>
     guard("message.queued", async () => {
+      if (heldByMail(entry, bb.pluginId)) heldRows.add(entry.id);
       const notice = classifyNotice(entry.systemNotice);
       switch (notice.kind) {
         case "other":
@@ -300,7 +312,7 @@ export default function plugin(bb: BbPluginApi) {
                   threadId: id,
                   mode: "auto",
                   ...(ctx.threadId ? { senderThreadId: ctx.threadId } : {}),
-                  ...(wake ? {} : { originPluginId: bb.pluginId }),
+                  ...(wake ? {} : { pluginSubmission: { pluginId: bb.pluginId, data: INBOX_SUBMISSION } }),
                   input: [{ type: "text", text: body, mentions: [] }],
                 });
               } catch (error) {

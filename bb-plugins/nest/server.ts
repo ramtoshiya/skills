@@ -27,6 +27,7 @@ type SpawnEnvironment = Parameters<Sdk["threads"]["spawn"]>[0]["environment"];
 
 const PAGE = 200;
 const MAX_ANCESTORS = 64;
+const EVENT_LIMIT = 100;
 const MAIL_PLUGIN_ID = "mail";
 
 function chunks<T>(items: readonly T[], size: number): T[][] {
@@ -104,7 +105,7 @@ export default function plugin(bb: BbPluginApi) {
   async function endedToSelfCompactSafely(threadId: string): Promise<boolean> {
     try {
       return endedToSelfCompact(
-        await bb.sdk.threads.events.list({ threadId, order: "desc", limit: String(PAGE), types: [...TURN_EVENT_TYPES] }),
+        await bb.sdk.threads.events.list({ threadId, order: "desc", limit: String(EVENT_LIMIT), types: [...TURN_EVENT_TYPES] }),
       );
     } catch (error) {
       bb.log.warn(`Could not read ${threadId}'s events, so its result is relayed: ${String(error)}`);

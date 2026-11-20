@@ -74,7 +74,12 @@ function start() {
           MAIL_METADATA.push({ threadId: args.threadId, pluginId: args.pluginId, set: args.set });
           return (args.set ?? {}) as never;
         },
-        events: { list: async ({ threadId }) => (EVENTS[threadId] ?? []) as never },
+        events: {
+          list: async ({ threadId, limit }) => {
+            if (Number(limit) > 100) throw new Error("HTTP 400: Thread event limit cannot exceed 100");
+            return (EVENTS[threadId] ?? []) as never;
+          },
+        },
         experimental_listPluginMetadata: async ({ threadIds }) => ({
           threads: threadIds.flatMap((threadId) => (METADATA[threadId] ? [{ threadId, metadata: METADATA[threadId] }] : [])),
         }),
