@@ -72,7 +72,7 @@ class Side:
 def parse_time(value) -> datetime:
     if isinstance(value, (int, float)):
         return datetime.fromtimestamp(value, timezone.utc)
-    return datetime.fromisoformat(value).astimezone(timezone.utc)
+    return datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value).astimezone(timezone.utc)
 
 
 def iso(value: datetime) -> str:
