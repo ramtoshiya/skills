@@ -65,6 +65,21 @@ class FakePluginContext:
         self.hooks[kind] = callback
 
 
+class FakeSessionDB:
+    """Hermes's session store: rows per session, `active` cleared on rows compaction removed."""
+
+    def __init__(self):
+        self.rows, self.parents = {}, {}
+
+    def get_messages(self, session_id, include_compacted=False, include_ancestors=False, limit=None):
+        lineage = [session_id]
+        while include_ancestors and lineage[0] in self.parents:
+            lineage.insert(0, self.parents[lineage[0]])
+        rows = [row for session in lineage for row in self.rows.get(session, [])
+                if include_compacted or row.get("active", True)]
+        return rows[:limit]
+
+
 class SelfCompactPluginTests(unittest.TestCase):
     def setUp(self):
         self.temp = Path(tempfile.mkdtemp())
@@ -72,7 +87,10 @@ class SelfCompactPluginTests(unittest.TestCase):
         self.home = self.temp / "profiles/operator"
         self.threads = {"sess_a": "thr_a", "sess_b": "thr_b"}
         self.config = {"compression": {"threshold_tokens": WINDOW}}
+        self.store = FakeSessionDB()
         modules = {
+            "hermes_state_registry": types.SimpleNamespace(
+                acquire=lambda path: self.store if path == self.home / "state.db" else None, release=lambda db: None),
             "hermes_cli": types.ModuleType("hermes_cli"),
             "hermes_cli.plugins_session_env": types.SimpleNamespace(
                 resolve_session_env=lambda session: {"BB_THREAD_ID": self.threads.get(session)}),
@@ -348,6 +366,38 @@ class SelfCompactPluginTests(unittest.TestCase):
         self.compaction("sess_a3", old="sess_a2")
         self.assertIsNone(self.turn_start("sess_a3"))
         self.assertFalse((self.data / "notes/thr_a.md").exists())
+
+    def test_a_compaction_that_removed_the_first_message_restores_it_once(self):
+        first = "<system_instructions>\nbb rules\n</system_instructions>\nBrief: MARKER-7"
+        summary = {"role": "user", "content": "[CONTEXT COMPACTION — REFERENCE ONLY] ..."}
+        self.store.rows["sess_a"] = [{"role": "user", "content": first}, {"role": "assistant", "content": "ok"}]
+        self.compaction("sess_a")
+        self.assertIsNone(self.turn_start("sess_a"), "the first compaction keeps the first turn")
+
+        self.store.rows["sess_a"] = [{"role": "user", "content": first, "active": False}, summary]
+        self.compaction("sess_a", kind="prune_tool_results")
+        self.assertIsNone(self.turn_start("sess_a"), "pruning removes no turn")
+        self.compaction("sess_a")
+        restored = self.tool_result("sess_a", "terminal", "ls output")
+        self.assertTrue(restored.startswith(self.plugin.PREFIX))
+        self.assertIn("Treat it as current instructions, not as background reference", restored)
+        self.assertIn("the later message wins", restored)
+        self.assertIn(f"<first_message>\n{first}\n</first_message>", restored)
+        self.assertTrue(restored.endswith("\n\nls output"))
+        self.assertIsNone(self.turn_start("sess_a"), "one restore per compaction")
+
+        self.store.rows["sess_a"].append({"role": "user", "content": "next", "api_content": f"next\n\n{restored}"})
+        self.compaction("sess_a")
+        self.assertIsNone(self.turn_start("sess_a"), "the earlier restore is still in context")
+
+        self.store.parents["sess_a2"] = "sess_a"
+        self.store.rows["sess_a2"] = [summary]
+        self.compaction("sess_a2", old="sess_a")
+        self.assertIn("MARKER-7", self.turn_start("sess_a2"), "a rotating compaction reads the first session")
+
+        self.store.rows["sess_c"] = [{"role": "user", "content": first, "active": False}, summary]
+        self.compaction("sess_c")
+        self.assertIsNone(self.turn_start("sess_c"), "a session outside bb gets nothing")
 
     def test_rejects_bad_arguments(self):
         self.assertIn("complete handoff note", self.tool("sess_a", action="compact", note=" ")["error"])

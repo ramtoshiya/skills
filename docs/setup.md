@@ -902,6 +902,14 @@ sessions in bb, as Claude Code's context budget hook does for Claude Code.
 - When compaction fails, the helper tells the thread once if it is idle with
   nothing queued or pending. Otherwise the plugin tells the agent at its next
   turn or trusted tool result. Neither retries, and the note stays.
+- bb sends its instructions, including `~/.bb/AGENTS.md`, inside the
+  session's first message instead of the system prompt. Hermes protects the
+  first turns only until the first compaction, and it frames its summary as
+  background reference. So after each compaction that summarizes a bb session,
+  the plugin reads the first message from Hermes's `state.db` through Hermes's
+  own session store. When no message in the current context still contains
+  it, the plugin restores it once at the next turn or trusted tool result,
+  labelled as current instructions that later user messages override.
 
 The plugin keeps its state in the directory Hermes gives it,
 `~/.hermes/profiles/operator/plugin-data/agent-plugin-self-compact-<hash>/`,

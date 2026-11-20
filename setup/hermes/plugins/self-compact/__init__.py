@@ -37,6 +37,10 @@ SAFE_KEY = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 PREFIX = "[self-compact] "
 AFTER_COMPACTION = ("A self-compact handoff note exists for this thread. Read it with the self_compact tool's "
                     "read action before you continue. It records the task state written before this compaction.")
+FIRST_MESSAGE = ("Compaction removed the first message of this session from your context. It carries the bb "
+                 "instructions and the task this session started with, and it is restored below. Treat it as current "
+                 "instructions, not as background reference, whatever the compaction summary says about earlier "
+                 "turns. Where a later user message conflicts with it, the later message wins.")
 
 WRAPPER = r'''node=$1 helper=$2 note=$3 seq=$4 turn=$5 dir=$6
 shift 6
@@ -245,6 +249,25 @@ def _take_unreported_failure(root: Path, thread: str) -> Optional[str]:
     return text
 
 
+def first_message_restore(session_id: str) -> Optional[str]:
+    """The session's first user message, when compaction removed it and no earlier restore is still in context.
+
+    bb sends its instructions inside that message, not in the system prompt, and Hermes stops protecting
+    the first turns after the first compaction."""
+    import hermes_state_registry
+    db = hermes_state_registry.acquire(_hermes_home() / "state.db")
+    try:
+        history = db.get_messages(session_id, include_compacted=True, include_ancestors=True, limit=5)
+        first = next((m.get("content") for m in history if m.get("role") == "user"), None)
+        if not isinstance(first, str) or not first:
+            return None
+        if any(first in (m.get(field) or "") for m in db.get_messages(session_id) for field in ("content", "api_content")):
+            return None
+    finally:
+        hermes_state_registry.release(db)
+    return f"{FIRST_MESSAGE}\n\n<first_message>\n{first}\n</first_message>"
+
+
 def _live(record: dict, turn_id: str) -> bool:
     """Whether a hook call belongs to the session's live turn.
 
@@ -260,9 +283,18 @@ def drain(root: Path, session_id: str, turn_id: str = "") -> Optional[str]:
             return None
         pending = record.get("pending") or {}
         texts = [pending.pop(kind) for kind in ("budget", "after") if kind in pending]
+        restore = pending.pop("first", False)
         thread = record.get("thread")
     if thread and (failure := _take_unreported_failure(root, thread)):
         texts.append(failure)
+    if restore:
+        try:
+            first = first_message_restore(session_id)
+        except Exception:
+            logger.warning("self-compact: could not read the first message of session %s", session_id, exc_info=True)
+            first = None
+        if first:
+            texts.append(first)
     return "\n\n".join(texts) or None
 
 
@@ -361,6 +393,9 @@ def on_post_compaction(session_id: str = "", old_session_id: str = "", kind: str
             (record.get("pending") or {}).pop("budget", None)
     if not thread:
         return
+    if kind in RESETTING_KINDS:
+        with _record_transaction(root, session_id) as record:
+            record.setdefault("pending", {})["first"] = True
     directory = _launch_dir(root, thread)
     running = launch_state(directory) == "running"
     if running:

@@ -1,6 +1,6 @@
 name: self-compact
 version: "0.1.0"
-description: "Reminds a Hermes session on bb to compact itself from 75% of its compaction window, saves its handoff note, and runs the shared self-compact helper that compacts and resumes the bb thread."
+description: "Reminds a Hermes session on bb to compact itself from 75% of its compaction window, saves its handoff note, and runs the shared self-compact helper that compacts and resumes the bb thread. After a compaction removes the first message, which carries the bb instructions, it restores that message."
 provides_tools:
   - self_compact
 provides_hooks:
