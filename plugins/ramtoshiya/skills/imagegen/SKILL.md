@@ -24,14 +24,8 @@ as `uv run --no-project python <skill-dir>/scripts/imagegen.py ...`.
 The script reads the endpoint and key from the environment. It never takes a key as an argument. Do not ask
 the user to paste a key into the chat. If nothing is configured, the script exits 2 and names the variable
 to set.
-
-| Route | Environment |
-| --- | --- |
-| A local proxy that serves both providers, such as CLIProxyAPI | `IMAGEGEN_BASE_URL=http://127.0.0.1:8317/v1` and `IMAGEGEN_API_KEY` set to one of the proxy's `api-keys` |
-| OpenAI API | `OPENAI_API_KEY`, optionally `OPENAI_BASE_URL` |
-| xAI API | `XAI_API_KEY`, optionally `XAI_BASE_URL` |
-
-`IMAGEGEN_BASE_URL` takes priority for every model when it is set.
+To configure the endpoint and key, read [`references/setup.md`](references/setup.md), which lists each
+route and its environment variables.
 
 ## Choose the model
 
@@ -64,6 +58,26 @@ Use `gpt-image-2` or older models only when the user asks for them. xAI retires
 7. Report the final path, the model, and the final prompt. Save images that belong to the project inside it
    with `--out`, and update the code or documents that reference them.
 
+## Check the result
+
+- Does the image show the requested subject, style, and composition?
+- Is all required text spelled correctly and readable?
+- For an edit, did only the requested part change?
+- Does the shape match? If `notes` reports a different aspect ratio, restate it in the prompt and try once
+  more, or crop locally.
+- For transparency, does the file entry show `"alpha": true`? A drawn checkerboard is not transparency.
+
+If a region must stay pixel-identical, composite the approved edit into the original instead of relying on
+the prompt.
+
+## Errors
+
+Exit 1 means the service or network failed. Stderr has the service's message and a hint. Do not retry
+moderation blocks, quota or credit errors, or `auth_unavailable`. Report them to the user. A timeout on a
+proxy route usually means the upstream closed the request after about 120 seconds, so lower the quality or
+simplify the prompt before one more try. Exit 2 means a bad option or missing configuration, and the
+message names it.
+
 ## Write the prompt
 
 For GPT Image, labeled lines work well when a request has several requirements. Leave out lines that add
@@ -95,6 +109,14 @@ changes, then add one sentence keeping the same subject, angle, and crop.
 
 ## Run the script
 
+Add `--dry-run` to print the request without sending it. `--help` lists every option. The ones that depend
+on the provider are `--size`, `--background`, `--format`, `--compression`, and `--mask` (GPT Image only),
+and `--resolution 1k|2k` (Grok only). `--aspect` works for both.
+
+The saved file's extension follows the bytes the service returned, so `--out hero.jpg` may save
+`hero.png`. The script does not overwrite an existing file. It writes `hero-v2.png` instead unless
+`--force` is given. Without `--out`, files go to `output/imagegen/` under the current directory.
+
 ```sh
 # New image. A prompt file avoids shell quoting problems with long prompts.
 uv run --no-project python <skill-dir>/scripts/imagegen.py generate \
@@ -114,34 +136,6 @@ uv run --no-project python <skill-dir>/scripts/imagegen.py generate \
 uv run --no-project python <skill-dir>/scripts/imagegen.py generate \
   --model grok-imagine-image-2.0 --prompt-file /tmp/prompt.txt --aspect 3:2 --quality medium
 ```
-
-Add `--dry-run` to print the request without sending it. `--help` lists every option. The ones that depend
-on the provider are `--size`, `--background`, `--format`, `--compression`, and `--mask` (GPT Image only),
-and `--resolution 1k|2k` (Grok only). `--aspect` works for both.
-
-The saved file's extension follows the bytes the service returned, so `--out hero.jpg` may save
-`hero.png`. The script does not overwrite an existing file. It writes `hero-v2.png` instead unless
-`--force` is given. Without `--out`, files go to `output/imagegen/` under the current directory.
-
-## Check the result
-
-- Does the image show the requested subject, style, and composition?
-- Is all required text spelled correctly and readable?
-- For an edit, did only the requested part change?
-- Does the shape match? If `notes` reports a different aspect ratio, restate it in the prompt and try once
-  more, or crop locally.
-- For transparency, does the file entry show `"alpha": true`? A drawn checkerboard is not transparency.
-
-If a region must stay pixel-identical, composite the approved edit into the original instead of relying on
-the prompt.
-
-## Errors
-
-Exit 1 means the service or network failed. Stderr has the service's message and a hint. Do not retry
-moderation blocks, quota or credit errors, or `auth_unavailable`. Report them to the user. A timeout on a
-proxy route usually means the upstream closed the request after about 120 seconds, so lower the quality or
-simplify the prompt before one more try. Exit 2 means a bad option or missing configuration, and the
-message names it.
 
 ## Reference
 
