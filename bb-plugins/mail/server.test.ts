@@ -43,7 +43,14 @@ const message = (id: string) => ({ type: "item/completed", data: { item: { type:
 
 let host: Host | null = null;
 
-function start(options: { mailTags?: Record<string, Record<string, true>>; events?: Record<string, unknown[]>; output?: string } = {}) {
+function start(
+  options: {
+    mailTags?: Record<string, Record<string, true>>;
+    events?: Record<string, unknown[]>;
+    output?: string;
+    beforeUpdate?: (rows: Map<string, Row>, call: number) => void;
+  } = {},
+) {
   const sent: Sent[] = [];
   const rows = new Map<string, Row>();
   const deleted: string[] = [];
@@ -51,6 +58,7 @@ function start(options: { mailTags?: Record<string, Record<string, true>>; event
   const mailTags = options.mailTags ?? {};
   const events = options.events ?? {};
   const pages: number[] = [];
+  let updateCalls = 0;
   host = createFakePluginHost({
     pluginId: "mail",
     sdk: {
@@ -99,6 +107,7 @@ function start(options: { mailTags?: Record<string, Record<string, true>>; event
             return undefined as never;
           },
           update: async ({ queuedMessageId, sendAt, expectedUpdatedAt }) => {
+            options.beforeUpdate?.(rows, ++updateCalls);
             if (rows.get(queuedMessageId)?.updatedAt !== expectedUpdatedAt) {
               throw new Error("HTTP 409: Queued message changed since editing began");
             }
@@ -124,7 +133,7 @@ function start(options: { mailTags?: Record<string, Record<string, true>>; event
     await harness.emitThreadEvent("message.queued", { entry: row });
     return row;
   }
-  return { harness, sent, rows, deleted, holds, mailTags, pages, notice };
+  return { harness, sent, rows, deleted, holds, mailTags, pages, notice, updateCalls: () => updateCalls };
 }
 
 const completed = (childId: string) => ({
@@ -618,6 +627,64 @@ describe("built-in notices", () => {
     await notice(completed("WORKER"));
     expect(deleted).toEqual([]);
     expect(rows.get("row_1")!.sendAt).toBeNull();
+  });
+
+  describe("a conditional update that fails", () => {
+    const merged = (row: Row, children: string[]): Row => ({
+      ...row,
+      updatedAt: row.updatedAt + 1,
+      systemNotice: {
+        kind: "child-completed",
+        subject: { kind: "thread", threadId: children[0], threadName: children[0], outcomes: children.map((threadId) => ({ threadId, status: "completed" })) },
+      } as never,
+    });
+    const touch = (rows: Map<string, Row>) => {
+      const row = rows.get("row_1")!;
+      rows.set("row_1", { ...row, updatedAt: row.updatedAt + 1 });
+    };
+
+    it("logs the error and the row's current state", async () => {
+      const { notice, harness } = start({ output: "[no-op]", events: { WORKER: [message("m1"), turnStarted] }, beforeUpdate: (rows, call) => call === 1 && touch(rows) });
+      await notice(completed("WORKER"));
+      const warning = harness.logEntries.find((entry) => entry.level === "warn")?.message ?? "";
+      expect(warning).toContain("HTTP 409: Queued message changed since editing began");
+      expect(warning).toContain("row_1");
+      expect(warning).toContain("updatedAt 101");
+      expect(warning).toContain("expected 100");
+    });
+
+    it("decides again on the row's current contents and drops a no-op that only touched the row", async () => {
+      const { notice, deleted, updateCalls } = start({ output: "[no-op]", events: { WORKER: [message("m1"), turnStarted] }, beforeUpdate: (rows, call) => call === 1 && touch(rows) });
+      await notice(completed("WORKER"));
+      expect(updateCalls()).toBe(2);
+      expect(deleted).toEqual(["row_1"]);
+    });
+
+    it("delivers a row that bb merged another child's result into", async () => {
+      const { notice, deleted, rows, updateCalls } = start({
+        output: "[no-op]",
+        events: { WORKER: [message("m1"), turnStarted] },
+        beforeUpdate: (rows, call) => call === 1 && rows.set("row_1", merged(rows.get("row_1")!, ["WORKER", "RELAY"])),
+      });
+      await notice(completed("WORKER"));
+      expect(deleted).toEqual([]);
+      expect(updateCalls()).toBe(1);
+      expect(rows.get("row_1")!.sendAt).toBeNull();
+    });
+
+    it("decides again only once", async () => {
+      const { notice, deleted, updateCalls } = start({ output: "[no-op]", events: { WORKER: [message("m1"), turnStarted] }, beforeUpdate: (rows) => touch(rows) });
+      await notice(completed("WORKER"));
+      expect(updateCalls()).toBe(2);
+      expect(deleted).toEqual([]);
+    });
+
+    it("does nothing when the row is already gone", async () => {
+      const { notice, deleted, updateCalls } = start({ output: "[no-op]", events: { WORKER: [message("m1"), turnStarted] }, beforeUpdate: (rows) => rows.delete("row_1") });
+      await notice(completed("WORKER"));
+      expect(updateCalls()).toBe(1);
+      expect(deleted).toEqual([]);
+    });
   });
 
   it("leaves the notice to bb when reading events fails", async () => {
