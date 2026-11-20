@@ -47,7 +47,7 @@ function start(options: { mailTags?: Record<string, Record<string, true>>; event
   const sent: Sent[] = [];
   const rows = new Map<string, Row>();
   const deleted: string[] = [];
-  const holds: Array<{ id: string; sendAt: number }> = [];
+  const holds: Array<{ id: string; sendAt: number | null }> = [];
   const mailTags = options.mailTags ?? {};
   const events = options.events ?? {};
   const pages: number[] = [];
@@ -99,10 +99,14 @@ function start(options: { mailTags?: Record<string, Record<string, true>>; event
             return undefined as never;
           },
           update: async ({ queuedMessageId, sendAt }) => {
+            if (typeof sendAt === "number" && sendAt <= Date.now()) {
+              throw new Error("HTTP 400: sendAt must be in the future; pass null to clear the send time");
+            }
             const row = rows.get(queuedMessageId)!;
             const next = { ...row, sendAt: sendAt ?? null, updatedAt: row.updatedAt + 1 };
             rows.set(queuedMessageId, next);
-            holds.push({ id: queuedMessageId, sendAt: sendAt ?? 0 });
+            holds.push({ id: queuedMessageId, sendAt: sendAt ?? null });
+            void host?.harness.emitThreadEvent("message.queued", { entry: next });
             return next as never;
           },
         },
@@ -329,6 +333,7 @@ describe("built-in notices", () => {
     const lead: unknown[] = [command("w1", "bb thread wait WORKER && bb thread output WORKER", null)];
     const { notice, deleted, holds } = start({ events: { LEAD: lead } });
     await notice(completed("WORKER"));
+    await vi.advanceTimersByTimeAsync(0);
     expect(holds).toHaveLength(1);
     expect(deleted).toEqual([]);
     lead.unshift(command("w1", "bb thread wait WORKER && bb thread output WORKER", { exitCode: 0, output: "DONE: 42" }));
@@ -342,8 +347,8 @@ describe("built-in notices", () => {
     await notice(completed("WORKER"));
     await vi.advanceTimersByTimeAsync(31_000);
     expect(deleted).toEqual([]);
-    expect(holds.at(-1)!.sendAt).toBeLessThanOrEqual(Date.now());
-    expect(rows.has("row_1")).toBe(true);
+    expect(holds.map((hold) => hold.sendAt === null)).toEqual([false, true]);
+    expect(rows.get("row_1")!.sendAt).toBeNull();
   });
 
   it("delivers a held notice that bb merged another child into", async () => {
@@ -356,7 +361,7 @@ describe("built-in notices", () => {
     lead.unshift(command("w1", "bb thread wait WORKER && bb thread output WORKER", { exitCode: 0, output: "DONE: 42" }));
     await vi.advanceTimersByTimeAsync(1_000);
     expect(deleted).toEqual([]);
-    expect(rows.get("row_1")!.sendAt).toBeLessThanOrEqual(Date.now());
+    expect(rows.get("row_1")!.sendAt).toBeNull();
   });
 
   it.each([

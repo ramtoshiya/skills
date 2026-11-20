@@ -91,7 +91,7 @@ export default function plugin(bb: BbPluginApi) {
       threadId: row.threadId,
       queuedMessageId: row.id,
       expectedUpdatedAt: row.updatedAt,
-      sendAt: Date.now(),
+      sendAt: null,
     });
   }
 
@@ -153,8 +153,11 @@ export default function plugin(bb: BbPluginApi) {
     }
   }
 
+  const settling = new Set<string>();
+
   bb.events.on("message.dispatched", ({ entry }) => {
     heldRows.delete(entry.id);
+    settling.delete(entry.id);
   });
 
   bb.events.on("message.queued", ({ entry }) =>
@@ -169,6 +172,8 @@ export default function plugin(bb: BbPluginApi) {
           bb.log.info(`reparent notice dropped parent=${entry.threadId} row=${entry.id}`);
           return;
         case "completion":
+          if (settling.has(entry.id)) return;
+          settling.add(entry.id);
           await settleCompletion(entry, notice.childId, Date.now() + HOLD_LIMIT_MS, false);
           return;
       }
