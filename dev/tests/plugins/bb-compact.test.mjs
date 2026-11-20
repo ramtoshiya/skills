@@ -54,6 +54,8 @@ if (config.invalidJson && args[1] === config.invalidJson) {
   out({ thread: { id: config.wrongThread ? 'thr_other' : 'thr_self', providerId: config.provider || 'claude-code',
     status: ready && !(state.phase === 'compact' && config.activeAfterCompact) ? 'idle' : 'active', queuedMessageCount: state.phase === 'compact' ? (config.queuedAfterCompact || 0) : (config.queued || 0),
     archivedAt: config.archived ? 1 : null, deletedAt: null } });
+} else if (args[1] === 'queue') {
+  out(config.queueRows || []);
 } else if (args[1] === 'interactions') {
   out((state.phase === 'compact' && config.interactionsAfterCompact) || config.interactions || []);
 } else if (args[1] === 'log') {
@@ -254,6 +256,33 @@ for (const [name, changes] of [
     assert.notEqual(result.status, 0);
     assert.equal((await fixture.calls()).filter(call => ['compact', 'tell'].includes(call.args[1])).length, 0);
     assert.equal(await readFile(fixture.note, 'utf8'), 'Continue the task.');
+  });
+}
+
+const queueRow = (waitingOn, id = 'queued_1') => ({ id, waitingOn });
+const heldByMail = queueRow({ kind: 'plugin', pluginId: 'mail', reason: 'Mail inbox' });
+
+test('compacts while mail holds an inbox message, which is not queued work', async t => {
+  const fixture = await setup(t, { queued: 1, queuedAfterCompact: 1, queueRows: [heldByMail] });
+  const result = await fixture.run();
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).compacted, true);
+  const listing = (await fixture.calls()).find(call => call.args[1] === 'queue');
+  assert.deepEqual(listing.args, ['thread', 'queue', 'list', thread, '--json']);
+});
+
+for (const [name, changes] of [
+  ['a real queued message beside the held one', { queued: 2, queueRows: [heldByMail, queueRow(null, 'queued_2')] }],
+  ['a message held by another plugin', { queued: 1, queueRows: [queueRow({ kind: 'plugin', pluginId: 'rate-limit', reason: 'Limit' })] }],
+  ['a message waiting on core', { queued: 1, queueRows: [queueRow({ kind: 'interaction' })] }],
+  ['a queue listing shorter than the count', { queued: 2, queueRows: [heldByMail] }],
+  ['a malformed queue listing', { queued: 1, queueRows: ['held'] }],
+]) {
+  test(`refuses preparation with mail holding one message and ${name}`, async t => {
+    const fixture = await setup(t, changes);
+    const result = fixture.prepare();
+    assert.notEqual(result.status, 0);
+    assert.equal((await fixture.calls()).filter(call => ['compact', 'tell'].includes(call.args[1])).length, 0);
   });
 }
 
