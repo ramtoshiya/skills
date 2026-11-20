@@ -76,13 +76,24 @@ export default function plugin(bb: BbPluginApi) {
     }
   });
 
+  async function compactionScheduled(threadId: string): Promise<boolean> {
+    try {
+      const events = await bb.sdk.threads.events.list({ threadId, order: "desc", limit: String(EVENT_LIMIT), types: [...TURN_EVENT_TYPES] });
+      return launchedSelfCompaction(lastTurnItems(events));
+    } catch (error) {
+      bb.log.warn(`compaction check: ${error instanceof Error ? error.message : String(error)}. Releasing held messages.`);
+      return false;
+    }
+  }
+
   for (const event of ["thread.active", "thread.idle"] as const) {
     bb.events.on(event, ({ thread }) =>
       guard(event, async () => {
         if (releaseEvent(thread.providerId) !== event) return;
         const held = await bb.sdk.threads.queue.list({ waitHolder: `plugin:${bb.pluginId}`, threadId: thread.id });
+        if (held.length === 0 || (event === "thread.idle" && (await compactionScheduled(thread.id)))) return;
         for (const row of held) inbox.releasable.add(row.id);
-        if (held.length > 0) await bb.experimental_hooks.recheck("message.dispatch");
+        await bb.experimental_hooks.recheck("message.dispatch");
       }),
     );
   }

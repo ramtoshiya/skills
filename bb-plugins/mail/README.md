@@ -67,6 +67,13 @@ above.
 An inbox message for an idle ACP thread also waits until a turn has started
 and ended, so it does not start a turn on its own.
 
+When a turn ends after scheduling a Hermes self-compaction, mail keeps holding
+until a later turn ends, normally the resume turn. Releasing at once would
+start a turn that makes the self-compact helper abandon the compaction. With
+`resume: false` the thread waits for the user, so mail releases at once. If
+the helper fails and sends no resume, held messages wait for the next turn
+that ends.
+
 ### Self-compaction
 
 Held inbox messages count in `queuedMessageCount`, but the self-compact helper
