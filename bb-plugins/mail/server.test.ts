@@ -269,6 +269,65 @@ describe("ACP recipients", () => {
     expect((await decide(harness, { attempt: "start-turn", initiator: "agent", thread: acp("idle"), queuedMessages: [row] })).action).toBe("proceed");
   });
 
+  describe("a recheck that bb drops", () => {
+    const RETRY_MS = 1_500;
+    async function goIdleHolding(options: { stillHeld?: () => boolean; status?: () => "idle" | "active" } = {}) {
+      vi.useFakeTimers();
+      const { harness } = start();
+      const stillHeld = options.stillHeld ?? (() => true);
+      harness.sdk.stub("threads.queue.list", async () => (stillHeld() ? [makeQueueEntry({ id: "held", threadId: "HERMES" })] : []) as never);
+      harness.sdk.stub("threads.get", async () => acp(options.status?.() ?? "idle") as never);
+      await harness.emitThreadEvent("thread.idle", { thread: acp("idle"), lastAssistantText: null });
+      return harness;
+    }
+
+    it("asks bb again while the held message is still waiting and the thread is idle", async () => {
+      const harness = await goIdleHolding();
+      expect(harness.recheckCount).toBe(1);
+      await vi.advanceTimersByTimeAsync(RETRY_MS);
+      expect(harness.recheckCount).toBe(2);
+    });
+
+    it("stops asking once bb has sent the held message", async () => {
+      let held = true;
+      const harness = await goIdleHolding({ stillHeld: () => held });
+      held = false;
+      await vi.advanceTimersByTimeAsync(RETRY_MS * 3);
+      expect(harness.recheckCount).toBe(1);
+    });
+
+    it("stops asking when the thread has started another turn", async () => {
+      let status: "idle" | "active" = "idle";
+      const harness = await goIdleHolding({ status: () => status });
+      status = "active";
+      await vi.advanceTimersByTimeAsync(RETRY_MS * 3);
+      expect(harness.recheckCount).toBe(1);
+    });
+
+    it("does not ask forever when the message never goes out", async () => {
+      const harness = await goIdleHolding();
+      await vi.advanceTimersByTimeAsync(60_000);
+      const asked = harness.recheckCount;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(harness.recheckCount).toBe(asked);
+    });
+
+    it("does not release a message that was queued after the thread went idle", async () => {
+      let rows = [makeQueueEntry({ id: "held", threadId: "HERMES" })];
+      vi.useFakeTimers();
+      const { harness } = start();
+      harness.sdk.stub("threads.queue.list", async () => rows as never);
+      harness.sdk.stub("threads.get", async () => acp("idle") as never);
+      await harness.emitThreadEvent("thread.idle", { thread: acp("idle"), lastAssistantText: null });
+      rows = [makeQueueEntry({ id: "later", threadId: "HERMES" })];
+      await vi.advanceTimersByTimeAsync(RETRY_MS);
+      expect(harness.recheckCount).toBe(1);
+      const row = { id: "later", initiator: "agent" as const, waitingOn: { kind: "plugin" as const, pluginId: "mail", reason: "inbox" } };
+      const decision = await decide(harness, { attempt: "start-turn", initiator: "agent", thread: acp("idle"), queuedMessages: [row] });
+      expect(decision.action).toBe("wait");
+    });
+  });
+
   describe("self-compaction on a Hermes thread", () => {
     const schedule = (resume?: boolean) => ({
       type: "item/completed",
