@@ -20,6 +20,16 @@ each spawn.
 - It covers spawning and talking to your own workers only. Messages to any other
   thread still follow the bb introduction.
 
+## Messages between threads {:#thread-messages}
+
+Decide whether each message to another thread is worth a turn. `bb thread
+tell` and `bb mail send <thread> --wake` start the recipient's turn. Use them
+for a final result, a failure, a question you need answered, or a request
+that needs action now. For progress, a fact the recipient may use later, or
+"main moved", use `bb mail send <thread>` without `--wake`. It waits in the
+recipient's inbox and arrives with its next turn. To reach several threads,
+use `bb mail send --where <selector>`. The `mail` skill has the selectors.
+
 ## BB references and customizations {:#bb-references-customizations}
 
 Separate a thread or message reference from adjacent text with spaces, including

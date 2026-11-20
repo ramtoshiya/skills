@@ -184,7 +184,8 @@ thread's model. Read `model` and `reasoningLevel` from the
 
 ## Results {:#results}
 
-A child's completion notification is truncated. Read the result in full with
+A child's completion notification quotes a reply of up to 4,000 characters
+and replaces a longer one with one line. Read the result in full with
 `bb thread output <threadId>`, or `bb thread log <threadId> --limit 2` when that
 prints nothing. Read a linked message (`#msg=<seq>`) with
 `bb thread log <threadId> --message <seq> --context 2`. Then, in the same turn:

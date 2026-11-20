@@ -61,11 +61,13 @@ you are waiting for. Do not loop on `bb thread show` or `bb thread wait`.
 
 When your own thread is a BB child, ending a turn reports that turn to your parent as your result.
 `bb status` then shows a `Parent` and `Parent notifications: auto`. Keep the turn open instead. Run
-`bb thread wait <worker-id> --timeout <limit>` in the foreground, with a limit below your shell
-tool's timeout. Run it again only when it exits with code 2, which means it timed out.
+`bb thread wait <worker-id> --timeout <limit> && bb thread output <worker-id>` in the foreground,
+with a limit below your shell tool's timeout. Run it again only when it exits with code 2, which
+means it timed out. The `mail` bb plugin drops the completion message for a reply this command
+already printed.
 
-Both messages quote the worker's final reply up to 4,000 characters, and ends a longer
-reply with `[... output truncated ...]`. Read the whole reply with `bb thread output <id>`.
+Both messages quote a final reply of up to 4,000 characters. A longer reply arrives as one line
+with its first line and length. Read it with `bb thread output <id>`.
 
 ## Change a running worker's model {:#move}
 
