@@ -58,8 +58,8 @@ a seat outside the Claude family, read [Retries and step-ups](references/retries
 
 ## Urgency {:#urgency}
 
-Check urgency when you start a worker and whenever a user message or a failed shared
-check changes the situation. Urgency belongs to a piece of work.
+Check urgency when you start a worker and whenever a user message, a failed shared
+check, or a fix changes the situation. Urgency belongs to a piece of work.
 
 | Signal | What you do |
 | --- | --- |
@@ -75,12 +75,20 @@ When work becomes urgent, judge its row again at that moment:
 
 - `haiku` and `sonnet` rows keep their row. An `opus` row becomes `fable`. Urgent
   work does not use `opus`.
-- Never lower a model. A worker already on Sol moves to `fable`.
+- Never lower a model at this moment. A worker already on Sol moves to `fable`.
 - Urgent work runs on Claude, whatever the route: `haiku`, `sonnet`, or `fable`.
 - Urgent work ignores the 90% switch in [Route and quota](#worker-route). When the
   Fable window is exhausted, by a usage-limit error or 100% use, use `opus`. When
   the Claude weekly limit is exhausted, use the row's GPT column, and `sol` for
   `opus` or `fable`.
+
+Urgency ends when the user says so, or when you judge that the purpose that made the
+work urgent is met. Gate urgency ends when the gate is fixed and the landing it
+blocked works again, such as the shared check passing. Then judge the work's row
+again by the table, as for new work, instead of stepping down one level. Keep the
+worker's current provider and change the model on the same thread, so a worker moved
+to Claude for urgency stays on Claude. Report why urgency ended and the row before
+and after.
 
 A running thread cannot change provider. Move a running GPT worker to Claude, or a
 worker that hits a usage limit to the other side, by handoff: stop its running turn

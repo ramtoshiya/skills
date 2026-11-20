@@ -163,8 +163,9 @@ it as the session that delegates:
   `bb provider models <provider> --json` that the model lists the row's effort
   in its `supportedReasoningEfforts`.
 - Judge urgency as the policy's Urgency section describes, when you start a
-  thread and whenever the user's messages or a failed shared gate change it.
-  Move a running worker to the row and provider urgency calls for.
+  thread and whenever the user's messages, a failed shared gate, or a fix
+  change it. Move a running worker to the row and provider urgency calls for,
+  and to its re-judged row on the same provider when urgency ends.
 - When the user names a provider, model, or effort, use it and route the rest
   by the row. A brief that needs a Claude Code-only plugin runs on
   `claude-code` with the row's Claude model.
