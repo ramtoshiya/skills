@@ -31,8 +31,8 @@ BRIEF
   these flags. Without one, the worker gets a fresh worktree of the project's default branch, which
   has neither your branch nor your uncommitted changes.
 
-If the newest-model guard plugin rejects the first message, the rejection names the newest ID.
-Archive the rejected thread and start a new one with the script's output.
+If the newest-model guard plugin rejects the spawn, it fails with HTTP 409 and names the newest ID,
+and no thread is created. Spawn again with the script's output.
 
 BB has no read-only permission mode, and a worker inherits your permission mode. Keep a read-only
 role read-only through its brief. Say that it must not edit files, commit, or change anything
