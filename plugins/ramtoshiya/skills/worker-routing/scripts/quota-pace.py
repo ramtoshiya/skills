@@ -229,6 +229,8 @@ def recent_pace(samples: list[Sample], now) -> tuple[float, float] | None:
 
 
 def recovered(samples: list[Sample], reading: Sample, since: datetime) -> bool:
+    if reading.at <= since:
+        return False
     if reading.resets_at - WEEK > since:
         return True
     before = [s for s in samples if s.at <= since]
@@ -236,6 +238,8 @@ def recovered(samples: list[Sample], reading: Sample, since: datetime) -> bool:
 
 
 def forecast(reading: Sample | None, sources: list[tuple[str, list[Sample]]], limited_since, now) -> Side:
+    if reading is None and limited_since is not None:
+        return Side("limited", note=f"A usage limit was hit at {iso(limited_since)} and no reading since shows the quota renewed")
     if reading is None:
         return Side("no-reading", note="No current weekly reading")
     side = Side("unknown", used=reading.used, resets_at=iso(reading.resets_at))
@@ -342,14 +346,14 @@ def reset_options(eligible, sides, readings, offers, now) -> dict:
         f = sides[side]
         if f.status not in ("limited", "runs-out"):
             continue
-        reset = parse_time(f.resets_at)
-        start = now if f.status == "limited" else max(now, parse_time(f.runs_out_at))
-        outage_hours = max(0.0, (reset - start).total_seconds() / 3600)
-        entry = {
-            "scheduled_reset": f.resets_at,
-            "outage_hours_before_reset": round(outage_hours, 1),
-            "expected_use_in_outage": None if f.pace_per_hour is None else round(min(100.0, f.pace_per_hour * outage_hours), 1),
-        }
+        reset = parse_time(f.resets_at) if f.resets_at else None
+        entry: dict = {"scheduled_reset": f.resets_at or "unknown, no current reading"}
+        if reset is not None:
+            start = now if f.status == "limited" else max(now, parse_time(f.runs_out_at))
+            outage_hours = max(0.0, (reset - start).total_seconds() / 3600)
+            entry["outage_hours_before_reset"] = round(outage_hours, 1)
+            if f.pace_per_hour is not None:
+                entry["expected_use_in_outage"] = round(min(100.0, f.pace_per_hour * outage_hours), 1)
         if side == "codex":
             options, error = read_codex_credits()
             for option in options:
@@ -364,7 +368,10 @@ def reset_options(eligible, sides, readings, offers, now) -> dict:
                 {
                     "scope": OFFER_SCOPES[kind],
                     "claim_by": iso(claim_by),
-                    "if_claimed_now_lasts_until": iso(fable if kind == "claude-fable" and fable else reset),
+                    "if_claimed_now_lasts_until": (
+                        iso(fable) if kind == "claude-fable" and fable
+                        else iso(reset) if reset else "the scheduled reset, unknown without a reading"
+                    ),
                 }
                 for kind, claim_by in offers
             ]

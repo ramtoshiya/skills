@@ -292,6 +292,13 @@ class QuotaPaceTests(unittest.TestCase):
         reanchored = self.run_pace(bb_usage(codex=(0, later(168)), claude=(5, later(48))), *args)
         self.assertEqual(reanchored["route"]["side"], "codex")
 
+    def test_limit_errors_without_readings_keep_both_sides_off(self):
+        since = iso(ago(0.5))
+        report = self.run_pace("", "--prefer", "codex", "--eligible", "claude,codex",
+                               "--limited", f"codex={since}", "--limited", f"claude={since}")
+        self.assertIsNone(report["route"]["side"])
+        self.assertEqual(report["sides"]["codex"]["status"], "limited")
+
     def test_claude_reset_on_the_same_schedule_counts_as_renewal(self):
         reset = later(40)
         self.history("claude", reset, {10: 90, 1: 99})

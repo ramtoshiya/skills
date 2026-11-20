@@ -77,8 +77,9 @@ When work becomes urgent, judge its row again at that moment:
   work does not use `opus`.
 - Never lower a model at this moment. A worker already on Sol moves to `fable`.
 - Urgent work runs on Claude, whatever the route: `haiku`, `sonnet`, or `fable`.
-- Urgent work runs `quota-pace` with `--prefer claude --eligible claude,codex
-  --no-spill`, so a pace projection never moves it. When the Fable window is
+- Urgent work runs `quota-pace` with `--prefer claude --no-spill`, so a pace
+  projection never moves it. Pass `--eligible claude,codex` unless the calling
+  workflow ties the role to the Claude family. When the Fable window is
   exhausted, by a usage-limit error or 100% use, use `opus`. When the script routes
   urgent work to `codex`, use the row's GPT column, and `sol` for `opus` or `fable`.
 
