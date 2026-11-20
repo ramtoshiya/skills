@@ -224,6 +224,12 @@ bb thread spawn --json --project <project-id> --new-environment worktree \
 EOF
 ```
 
+- Pass every brief and message through a quoted heredoc (`<<'EOF'`), as the
+  commands in this skill do. When several briefs share text, such as a device
+  turn rule, paste the text into each brief. Do not expand a shell variable
+  in an unquoted heredoc. An unquoted heredoc runs each backtick span and
+  `$(...)` in the text as a command and puts the command's output in place
+  of the text.
 - `--parent-self` makes the worker a child of this thread, so its completion
   is reported here. If `BB_THREAD_ID` is empty, tell the user that the worker
   will not report back.
