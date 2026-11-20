@@ -236,6 +236,13 @@ simulators in a private device set with `xcrun simctl --set <path>`, because a
 device in the default set opens a window on the desktop. Mute pages and media
 that a test plays.
 
+## Shared devices {:#shared-devices}
+
+Take a turn with `takeaturn` before you use something other agents on this Mac
+also use. Name it `iphone`, `desktop` for computer use, `tart:<vm>`, or
+`check:<repository>`. Pass your session id as `--owner`: `$CLAUDE_CODE_SESSION_ID`,
+`$CODEX_THREAD_ID`, or `$HERMES_SESSION_ID`. `takeaturn --help` has the rest.
+
 ## Questions and conversation checkpoints {:#conversation-checkpoints}
 
 Ask necessary questions in ordinary chat and wait for the user's reply. Do

@@ -30,6 +30,9 @@ that needs action now. For progress, a fact the recipient may use later, or
 recipient's inbox and arrives with its next turn. To reach several threads,
 use `bb mail send --where <selector>`. The `mail` skill has the selectors.
 
+Do not message other threads to take or hand back a shared device. Take turns
+with `takeaturn`, as the shared instructions' "Shared devices" section says.
+
 When a child's notice or message leaves you nothing to report or do, reply with
 exactly `[no-op]` and nothing else. The mail and nest plugins drop that turn's
 completion notice, so your parent is not woken. Never send a thank-you or

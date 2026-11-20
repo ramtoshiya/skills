@@ -142,6 +142,7 @@ visible.
 | Hermes operator profile | `hermes:operator` | Yes, once installed |
 | Bootstrap packages in `mise.toml` | `mise bootstrap` | No |
 | bb plugins under `bb-plugins/` | `bb plugin install` | Yes, when installed from the shared checkout |
+| `takeaturn` CLI | `takeaturn:install` | Yes |
 | CLIs under `tools/` | Each CLI's install step | No |
 
 Claude Code reads the `ramtoshiya` and `ramtoshiya-cc` plugins straight from
@@ -270,6 +271,7 @@ Agents:
 | `~/.local/bin/claude-review` | Copy of `setup/agents/claude-review`, an executable shell script that starts the review launcher |
 | `~/.local/share/claude-review/claude-review.py` | Copy of `setup/agents/claude-review.py`, the review launcher and its hook handler |
 | `~/.local/bin/quotio-cli` | Copy of `setup/agents/quotio-cli`, an executable shell script that runs the command-line helper inside the [Quotio](https://github.com/nguyenphutrong/quotio) app from `/Applications`. The shared `worker-routing` policy uses it for weekly quota outside BB and as a fallback for BB's Provider usage RPC. Setup does not install Quotio, and without it the script exits with an error |
+| `~/.local/bin/takeaturn` | The [takeaturn](https://github.com/ramtoshiya/takeaturn) lease CLI, built with `go install` at the commit that `COMMIT` in `setup/agents/takeaturn.py` pins. Agents use it to take turns on shared devices, as the shared instructions say. The repository is private, so the build needs Git access to it. `mise run takeaturn:install` installs it, `main:sync` installs it again when the pin changes, and `main:status` reports `drift` when the installed build is not the pinned commit |
 
 The managed plugin synchronization workflow reads host selections from
 `setup/agents/hosts.json`. Both humanizers are paused on Claude Code and
@@ -283,6 +285,11 @@ locations and report unresolved searches before concluding a prerequisite is mis
 
 For feasibility questions, the shared instructions ask agents to demonstrate or
 attempt the stated requirement and report fragile routes with their costs.
+
+Before agents use the iPhone, the desktop session, a tart VM, or a shared
+`./check` run, the shared instructions tell them to take a turn with
+`takeaturn`. They pass their session id as the owner. In bb threads they do
+not ask other threads by message for a turn.
 
 The coding-agent instructions authorize local commits of completed, validated
 task-owned changes on the current branch, including the default branch. They

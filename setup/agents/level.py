@@ -271,6 +271,14 @@ class Installers:
                 rows.append(row("mise", "dotfiles", "conflict", (result.stderr or str(error)).strip()))
         else:
             rows.append(row("mise", "dotfiles", "absent", "mise not on PATH"))
+        if shutil.which("mise"):
+            result = self.run([*self.python, str(self.shared / "setup/agents/takeaturn.py"), "status"])
+            try:
+                rows += json.loads(result.stdout)
+            except ValueError:
+                rows.append(row("takeaturn", "cli", "conflict", (result.stderr or result.stdout).strip()))
+        else:
+            rows.append(row("takeaturn", "cli", "absent", "mise not on PATH"))
         if self.hermes_installed():
             result = self.run([*self.python, str(self.shared / "setup/hermes/operator_profile.py"), "--check"])
             detail = (result.stdout or result.stderr).strip().splitlines()
@@ -283,8 +291,9 @@ class Installers:
     def steps(self, hermes, extra):
         agents = ("agents:sync", [*self.python, str(self.shared / "setup/agents/sync.py"), "sync"])
         dotfiles = ("mise dotfiles", ["mise", "-C", str(self.shared), "dotfiles", "apply", "--yes"])
+        takeaturn = ("takeaturn", [*self.python, str(self.shared / "setup/agents/takeaturn.py"), "install"])
         operator = ("hermes:operator", [*self.python, str(self.shared / "setup/hermes/operator_profile.py"), *extra])
-        steps = [agents, *([dotfiles] if shutil.which("mise") else [])]
+        steps = [agents, *([dotfiles, takeaturn] if shutil.which("mise") else [])]
         if self.hermes_installed():
             steps = [*steps, operator]
         elif hermes:

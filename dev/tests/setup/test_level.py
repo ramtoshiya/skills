@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -16,6 +17,23 @@ FAKE_NPM = f"""#!{sys.executable}
 import json, os, sys
 with open(os.environ["CALLS"], "a") as log:
     log.write(json.dumps({{"args": ["npm", *sys.argv[1:], os.getcwd()]}}) + "\\n")
+"""
+
+FAKE_MISE = f"""#!{sys.executable}
+import json, os, sys
+args = sys.argv[1:]
+if args[:1] == ["-C"]:
+    args = args[2:]
+if args[:2] == ["dotfiles", "status"]:
+    print(json.dumps({{"files": [], "edits": []}}))
+elif args[:1] == ["exec"]:
+    with open(os.environ["CALLS"], "a") as log:
+        log.write(json.dumps({{"args": ["mise", *args], "gobin": os.environ["GOBIN"]}}) + "\\n")
+    commit = args[-1].rsplit("@", 1)[1]
+    binary = os.path.join(os.environ["GOBIN"], "takeaturn")
+    with open(binary, "w") as out:
+        out.write("#!/bin/sh\\necho '" + json.dumps({{"version": "v0.0.0-20261121000000-" + commit[:12]}}) + "'\\n")
+    os.chmod(binary, 0o755)
 """
 
 
@@ -293,6 +311,30 @@ class LevelTests(unittest.TestCase):
                       rows[("bb", "plugin:demo")]["detail"])
         self.assertIn(f"npm ci --ignore-scripts --prefix {self.shared}/bb-plugins/demo",
                       rows[("bb", "plugin:demo")]["detail"])
+
+    def test_takeaturn_follows_the_pin_and_status_names_an_old_build(self):
+        bin_dir = self.tmp / "mise-bin"
+        bin_dir.mkdir()
+        (bin_dir / "mise").write_text(FAKE_MISE)
+        (bin_dir / "mise").chmod(0o755)
+        self.env["PATH"] = os.pathsep.join([str(bin_dir), self.env["PATH"]])
+        pin = re.search(r'^COMMIT = "([0-9a-f]{40})"$', (ROOT / "setup/agents/takeaturn.py").read_text(), re.M)[1]
+        self.assertEqual(self.status()[1][("takeaturn", "cli")]["status"], "drift")
+
+        self.assertEqual(self.level("sync").returncode, 0)
+
+        calls = [json.loads(line) for line in Path(self.env["CALLS"]).read_text().splitlines()]
+        installs = [call for call in calls if call["args"][:2] == ["mise", "exec"]]
+        self.assertEqual([call["args"][-1] for call in installs], [f"github.com/ramtoshiya/takeaturn@{pin}"])
+        self.assertEqual(installs[0]["gobin"], str(self.home / ".local/bin"))
+        code, rows = self.status()
+        self.assertEqual(code, 0, rows)
+        self.assertEqual(rows[("takeaturn", "cli")]["status"], "ok")
+
+        (self.home / ".local/bin/takeaturn").write_text("#!/bin/sh\necho '{\"version\": \"v0.0.0-1-0123456789ab\"}'\n")
+        code, rows = self.status()
+        self.assertEqual(code, 1)
+        self.assertIn(f"is at 0123456789ab, and the pin is {pin[:12]}", rows[("takeaturn", "cli")]["detail"])
 
 
 if __name__ == "__main__":
