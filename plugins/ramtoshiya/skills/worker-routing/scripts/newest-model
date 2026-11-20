@@ -1,0 +1,60 @@
+#!/bin/sh
+# Print the model to pass for a family's newest model on a provider.
+#
+# Usage: newest-model <family> [<provider>]
+#   haiku | sonnet | opus | fable   provider claude-code (default): prints the family alias,
+#                                   which Claude Code resolves to the family's newest model
+#   luna | terra | sol | astra      provider codex (default) or claudex: prints the newest
+#                                   gpt-<version>-<family> ID in that provider's catalog
+#
+# Exit 0: the model is on stdout.
+# Exit 1: the provider's catalog lists no model of that family. Stdout is empty.
+# Exit 2: usage error, or the catalog could not be read.
+
+set -u
+
+usage() {
+  echo "usage: newest-model <haiku|sonnet|opus|fable|luna|terra|sol|astra> [claude-code|codex|claudex]" >&2
+  exit 2
+}
+
+[ $# -ge 1 ] && [ $# -le 2 ] || usage
+family=$1
+
+case $family in
+  haiku | sonnet | opus | fable)
+    provider=${2:-claude-code}
+    [ "$provider" = claude-code ] || {
+      echo "newest-model: $family runs only on claude-code. Under claudex the Claude aliases select GPT models." >&2
+      exit 2
+    }
+    echo "$family"
+    exit 0
+    ;;
+  luna | terra | sol | astra) provider=${2:-codex} ;;
+  *) usage ;;
+esac
+
+case $provider in
+  codex)
+    catalog=${CODEX_HOME:-$HOME/.codex}/models_cache.json
+    ids=$(jq -r '.models[] | select(.visibility == "list") | .slug' "$catalog") || {
+      echo "newest-model: cannot read the Codex catalog $catalog. Start Codex once to refresh it." >&2
+      exit 2
+    }
+    ;;
+  claudex)
+    ids=$(bb provider models claudex --json | jq -r '.[].id') || {
+      echo "newest-model: cannot read the claudex catalog with bb provider models claudex." >&2
+      exit 2
+    }
+    ;;
+  *) usage ;;
+esac
+
+newest=$(printf '%s\n' "$ids" | grep -E "^gpt-[0-9]+(\.[0-9]+)?-$family\$" | sort -V | tail -n 1)
+if [ -z "$newest" ]; then
+  echo "newest-model: the $provider catalog lists no $family model." >&2
+  exit 1
+fi
+echo "$newest"

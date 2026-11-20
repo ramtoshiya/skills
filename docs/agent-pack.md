@@ -24,7 +24,7 @@ does not run the hooks.
 | `reorganize-commits` | Rewrites the current branch's commits into reviewable chunks. Runs only when you invoke it | Git |
 | `self-compact` | Compacts the conversation at a boundary the agent picks and resumes from a handoff note without you | T3 Code, BB with Claude Code or Hermes, or macOS Paseo Desktop. Node.js and the `bb` CLI in BB |
 | `stable-refs` | Gives documents and plans permanent identifiers that survive edits | Nothing |
-| `worker-routing` | Supplies the shared model, effort, provider, quota, retry, and escalation policy when another skill or session mode names it. | T3 Code or BB for cross-provider workers, and for Claude workers when the host hides Claude Code's own subagent tools. Elsewhere, the host's agent tool |
+| `worker-routing` | Supplies the shared model, effort, provider, quota, urgency, retry, and escalation policy that agents follow when they start workers, and a `newest-model` script that prints the model to pass for each family | BB for cross-provider workers, and for Claude workers when the host hides Claude Code's own subagent tools. Elsewhere, the host's agent tool. `jq`, and the `bb` CLI for the `claudex` catalog |
 
 The `codex-session-reader` skill is inactive. Its source remains in
 [`dev/disabled-skills/codex-session-reader`](../dev/disabled-skills/codex-session-reader/SKILL.md),
@@ -78,6 +78,39 @@ agent finishes its step and writes a handoff note first.
   daemons. Set `PASEO_DESKTOP_APP` for a nonstandard bundle location.
 - Other hosts use their automatic compaction. The Claude Code hook points the
   agent to the note afterward.
+
+The `worker-routing` skill is the one policy for choosing a worker's model.
+
+- Every model an agent passes comes from the skill's `scripts/newest-model
+  <family> [<provider>]`. For Claude families it prints the family alias, such
+  as `opus`, which Claude Code resolves to the family's newest model. For the
+  GPT families Luna, Terra, and Sol it prints the newest
+  `gpt-<version>-<family>` ID in the Codex catalog
+  (`~/.codex/models_cache.json`) or, with `claudex`, in bb's claudex catalog.
+  It prints nothing and exits 1 when that catalog has no model of the family.
+- Work is urgent when you say so, or, at the agent's judgement, when a shared
+  gate such as `main`'s check stopped landing on two or more branches. Urgent
+  work runs on Claude, and a top-tier row moves from Opus to Fable. A running
+  GPT worker is handed off to a new Claude thread in the same environment.
+  For anything else the agent proposes urgency to you instead of switching.
+- The file `~/.config/ramtoshiya/worker-route.json` decides where Haiku- and
+  Sonnet-level workers run in bb. With `{"workers": "codex"}` or
+  `{"workers": "claudex"}` they run on GPT Luna and Terra models through that
+  provider. Without the file they run on Claude. Opus-level work stays on
+  Claude, except that a Terra worker whose task outgrew it reruns on GPT Sol
+  through the same provider.
+- bb reads weekly quota through its enabled Provider usage plugin's read-only
+  `getUsage` RPC on the thread's machine, with a five-minute cache allowance.
+  Other hosts, and bb when that lookup is unavailable, use the `quotio-cli`
+  command from [Machine setup](setup.md). When 90% or more of the route's
+  weekly quota is used, or a worker hits a usage limit, workers move to the
+  other side and the agent says so. Urgent work ignores the 90% rule.
+- In bb, the Claude Code provider setting `subagentsDisabled` hides the
+  `Agent`, `Task`, and `ListAgents` tools. The agent then starts every worker
+  with `bb thread spawn` as a child thread, waits for bb's notification that
+  the child finished, and archives the child afterward. The `~/.bb/AGENTS.md`
+  file from [Machine setup](setup.md) lets it start those workers without
+  asking you each time.
 
 `ramtoshiya` hooks, described in [Hooks](hooks.md):
 
