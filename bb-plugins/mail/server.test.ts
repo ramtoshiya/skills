@@ -315,6 +315,57 @@ describe("built-in notices", () => {
     expect(deleted).toEqual(["row_1"]);
   });
 
+  describe("Hermes self-compaction", () => {
+    const hermesCall = (resume?: boolean, status = "scheduled") => ({
+      type: "item/completed",
+      data: {
+        item: {
+          type: "toolCall",
+          id: "t1",
+          tool: "other",
+          arguments: { action: "compact", ...(resume === undefined ? {} : { resume }), note: "# note" },
+          status: "completed",
+          result: `self_compact result\n- **status:** ${status}\n- **resume:** ${resume ?? true}`,
+          presentation: { title: "self_compact" },
+        },
+      },
+    });
+    const scheduledTurn = (resume?: boolean, status?: string) => [message("m2"), hermesCall(resume, status), message("m1"), turnStarted];
+    const compactionTurn = [{ type: "thread/compacted", data: {} }, message("summary"), turnStarted];
+
+    it("drops the turn that scheduled the compaction", async () => {
+      const { notice, deleted } = start({ events: { WORKER: scheduledTurn() } });
+      await notice(completed("WORKER"));
+      expect(deleted).toEqual(["row_1"]);
+    });
+
+    it("drops bb's compaction turn after it, which carries an agent message", async () => {
+      const { notice, deleted } = start({ events: { WORKER: [...compactionTurn, ...scheduledTurn()] } });
+      await notice(completed("WORKER"));
+      expect(deleted).toEqual(["row_1"]);
+    });
+
+    it("delivers the completion when the child waits for the user with resume false", async () => {
+      const { notice, deleted } = start({ events: { WORKER: scheduledTurn(false) } });
+      await notice(completed("WORKER"));
+      expect(deleted).toEqual([]);
+    });
+
+    it("delivers the completion when the schedule was refused", async () => {
+      const { notice, deleted } = start({ events: { WORKER: scheduledTurn(undefined, "refused") } });
+      await notice(completed("WORKER"));
+      expect(deleted).toEqual([]);
+    });
+
+    it("delivers the completion of a turn that only read the note", async () => {
+      const read = hermesCall();
+      (read.data.item.arguments as { action: string }).action = "read";
+      const { notice, deleted } = start({ events: { WORKER: [message("m1"), read, turnStarted] } });
+      await notice(completed("WORKER"));
+      expect(deleted).toEqual([]);
+    });
+  });
+
   it("delivers the completion of a turn whose self-compact launch failed", async () => {
     const { notice, deleted } = start({
       events: { WORKER: [message("m1"), command("c1", "node bb-compact.mjs run missing.md", { exitCode: 1, output: "note not found" }), turnStarted] },

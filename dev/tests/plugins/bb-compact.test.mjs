@@ -52,7 +52,7 @@ if (config.invalidJson && args[1] === config.invalidJson) {
 } else if (args[1] === 'show') {
   const ready = state.phase !== 'prepare' && (!config.holdCaller || state.deliveredCaller);
   out({ thread: { id: config.wrongThread ? 'thr_other' : 'thr_self', providerId: config.provider || 'claude-code',
-    status: ready ? 'idle' : 'active', queuedMessageCount: state.phase === 'compact' ? (config.queuedAfterCompact || 0) : (config.queued || 0),
+    status: ready && !(state.phase === 'compact' && config.activeAfterCompact) ? 'idle' : 'active', queuedMessageCount: state.phase === 'compact' ? (config.queuedAfterCompact || 0) : (config.queued || 0),
     archivedAt: config.archived ? 1 : null, deletedAt: null } });
 } else if (args[1] === 'interactions') {
   out((state.phase === 'compact' && config.interactionsAfterCompact) || config.interactions || []);
@@ -258,7 +258,6 @@ for (const [name, changes] of [
 }
 
 for (const [name, changes] of [
-  ['queued work', { queuedAfterCompact: 1 }],
   ['pending interaction', { interactionsAfterCompact: [{ status: 'pending' }] }],
   ['resolving interaction', { interactionsAfterCompact: [{ status: 'resolving' }] }],
   ['incorrect compact receipt', { compactReceipt: { ok: true, threadId: 'thr_other' } }],
@@ -314,6 +313,28 @@ for (const [name, after] of [
     assert.equal((await fixture.calls()).filter(call => ['compact', 'tell'].includes(call.args[1])).length, 0);
   });
 }
+
+test('keeps a finished compaction when a notice is queued after the request', async t => {
+  const fixture = await setup(t, { queuedAfterCompact: 1 });
+  const result = await fixture.run();
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).compacted, true);
+  assert.equal((await fixture.calls()).filter(call => call.args[1] === 'tell').length, 1);
+});
+
+test('keeps a finished compaction when a queued notice starts its own turn right after it', async t => {
+  const original = recordedEvents();
+  const notice = [
+    event(34, 'client/turn/requested', null, { requestId: 'creq_notice', source: 'tell' }),
+    event(35, 'turn/started', 'notice'),
+    event(36, 'turn/input/accepted', 'notice', { clientRequestId: 'creq_notice' }),
+  ];
+  const fixture = await setup(t, { compact: [...original.compact, ...notice], queuedAfterCompact: 1, activeAfterCompact: true });
+  const result = await fixture.run();
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).compacted, true);
+  assert.equal((await fixture.calls()).filter(call => call.args[1] === 'compact').length, 1);
+});
 
 test('reports a late queued resume without retrying', async t => {
   const fixture = await setup(t, { delivery: { threadId: thread, delivery: 'queued', queuedMessage: { id: 'queue_123' } } });
