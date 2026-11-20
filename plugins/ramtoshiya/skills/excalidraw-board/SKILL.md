@@ -35,6 +35,8 @@ skill must not install, update, or build the command. Its
 The command needs Node.js 24.21 or newer. Room keys live in its private
 per-user SQLite room list, not in projects or installed plugin folders.
 Never write a room link into a repository, document, or tool-written log.
+Do not pass raw links to `read` or `write`. If a saved room is gone, do not
+silently create a replacement.
 Only run `room link` when the user asks for the link, because its output puts
 the key into the session transcript. Never navigate or edit the user's own
 browser tab without permission. Use a separate tab for rendering checks.
@@ -66,6 +68,8 @@ browser tab without permission. Use a separate tab for rendering checks.
    retry must not duplicate an add. Send only changed fields in updates, not
    stale whole elements. Never supply managed version, nonce, seed, index,
    deletion, or timestamp fields.
+   Pass input on stdin to `excalidraw-board write --id <prefix>`. Keep temporary
+   batch files in the host's scratch directory, not the repository.
 5. Check `saved`, `notified`, the revision, and changed ids in the receipt.
    A save followed by a notification failure is not an unsaved batch. Read
    before retrying. No-op writes have no changed ids and do not notify.
@@ -91,43 +95,9 @@ that. For a requested PNG, use the PNG export workflow in
 `references/png-export.md`. It verifies an export of saved state, not live
 delivery in the room.
 
-## Commands {:#commands}
+## References {:#references}
 
-```sh
-excalidraw-board room create design-review
-excalidraw-board room list design
-excalidraw-board read --id <prefix> --outline
-excalidraw-board read --id <prefix> --frame <frame-id>
-excalidraw-board read --id <prefix> --group <group-id>
-excalidraw-board read --id <prefix> --ids a1,b2 --full
-excalidraw-board image --id <prefix> --file screenshot.png --element-id capture-home --x 40 --y 80 --width 406
-```
+For command examples, room import, and missing rooms, read [`references/commands.md`](references/commands.md).
 
-Write input is one JSON object, for example:
-
-```json
-{
-  "add": [
-    {"id":"idea-boundary","type":"rectangle","x":0,"y":0,"w":600,"h":400,"backgroundColor":"transparent"},
-    {"id":"idea-title","type":"text","x":20,"y":16,"w":240,"h":30,"text":"Login idea"},
-    {"id":"a1","type":"rectangle","x":40,"y":80,"w":240,"h":120},
-    {"id":"b2","type":"text","x":60,"y":100,"w":200,"h":30,"text":"Login"}
-  ],
-  "update": [],
-  "delete": []
-}
-```
-
-Pass it through stdin to `excalidraw-board write --id <prefix>`. Keep temporary
-batch files in the host's scratch directory, not the repository.
-
-When the user supplies a link and asks to add the room, use `room import
---name <name> --stdin` with the link on stdin. Import only reads the remote
-scene. Do not pass raw links to `read` or `write`. A missing saved room reports
-`room is gone`. Do not silently create a replacement.
-
-## Image uploads and PNG export
-
-Before uploading a PNG or JPEG file to a room, read
-[`references/image-uploads.md`](references/image-uploads.md). When the user requests a PNG, read
-[`references/png-export.md`](references/png-export.md).
+Before uploading a PNG or JPEG file, read [`references/image-uploads.md`](references/image-uploads.md).
+When the user requests a PNG, read [`references/png-export.md`](references/png-export.md).

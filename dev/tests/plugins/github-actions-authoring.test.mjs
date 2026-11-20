@@ -3,6 +3,12 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 const skill = new URL("../../../plugins/ramtoshiya/skills/github-actions-authoring/SKILL.md", import.meta.url);
+const references = [
+	"dependency-inventory.md",
+	"release-selection.md",
+	"provenance-and-compatibility.md",
+	"delivery-evidence.md",
+];
 
 const contracts = [
 	["discovers workflow and action edits", [
@@ -57,12 +63,35 @@ const contracts = [
 	]],
 ];
 
-for (const [name, instructions] of contracts) {
+const locations = [
+	["entry"],
+	["inventory", "inventory"],
+	["entry", "release", "release", "release", "release"],
+	["release", "release", "release", "release"],
+	["provenance", "provenance", "provenance", "provenance", "provenance", "provenance"],
+	["provenance", "provenance", "provenance", "entry", "entry"],
+	["release", "entry", "entry", "entry"],
+	["entry", "entry", "entry", "entry", "entry", "entry", "entry"],
+];
+
+for (const [index, [name, instructions]] of contracts.entries()) {
 	test(`GitHub Actions authoring policy ${name}`, () => {
 		const text = readFileSync(skill, "utf8");
-		const source = (name.startsWith("discovers") ? text.split("---")[1] : text).replace(/\s+/g, " ");
-		for (const instruction of instructions) {
-			assert.ok(source.includes(instruction), `Missing policy instruction: ${instruction}`);
+		const procedures = references.map((reference) => {
+			const path = `references/${reference}`;
+			assert.ok(text.includes(`](${path})`), `Missing reference route: ${path}`);
+			return readFileSync(new URL(path, skill), "utf8").replace(/\s+/g, " ");
+		});
+		const sources = {
+			entry: (name.startsWith("discovers") ? text.split("---")[1] : text).replace(/\s+/g, " "),
+			inventory: procedures[0],
+			release: procedures[1],
+			provenance: procedures[2],
+		};
+		assert.equal(locations[index].length, instructions.length);
+		for (const [i, instruction] of instructions.entries()) {
+			const location = locations[index][i];
+			assert.ok(sources[location].includes(instruction), `Missing policy instruction in ${location}: ${instruction}`);
 		}
 	});
 }
