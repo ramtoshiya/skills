@@ -25,5 +25,5 @@ capability.
 When the calling workflow needs a seat outside the Claude family, such as a cross-model judge,
 start it with the thread tool on the GPT route's provider, or on `codex` when the route is
 `claude`. Give it the family the route table names for its row, or `sol` at the row's effort for an
-`opus` row. Without a thread tool, or while a usage-limit error keeps the GPT side off, the seat
-cannot run, so follow the calling workflow's fallback.
+`opus` row. Without a thread tool, or while `quota-pace.py` reports the `codex` side limited, the
+seat cannot run, so follow the calling workflow's fallback.

@@ -77,10 +77,10 @@ When work becomes urgent, judge its row again at that moment:
   work does not use `opus`.
 - Never lower a model at this moment. A worker already on Sol moves to `fable`.
 - Urgent work runs on Claude, whatever the route: `haiku`, `sonnet`, or `fable`.
-- Urgent work ignores the 90% switch in [Route and quota](#worker-route). When the
-  Fable window is exhausted, by a usage-limit error or 100% use, use `opus`. When
-  the Claude weekly limit is exhausted, use the row's GPT column, and `sol` for
-  `opus` or `fable`.
+- Urgent work runs `quota-pace` with `--prefer claude --eligible claude,codex
+  --no-spill`, so a pace projection never moves it. When the Fable window is
+  exhausted, by a usage-limit error or 100% use, use `opus`. When the script routes
+  urgent work to `codex`, use the row's GPT column, and `sol` for `opus` or `fable`.
 
 Urgency ends when the user says so, or when you judge that the purpose that made the
 work urgent is met. Gate urgency ends when the gate is fixed and the landing it
@@ -110,17 +110,55 @@ can start a worker, follow the calling workflow's fallback.
 Without a thread tool, every worker runs on Claude, so skip the route file and the
 quota. Otherwise read `~/.config/ramtoshiya/worker-route.json` once at the start.
 Its `workers` value is `claude`, `codex`, or `claudex`. A missing file or any other
-value means `claude`. Then read the weekly quota once, as
-[Quota lookup](references/quota-lookup.md) describes. The `codex` and `claudex`
-routes share the Codex quota. On those routes the table's GPT column applies, on
-the route's provider. The `opus` rows and your own judgement stay on Claude.
+value means `claude`. The `codex` and `claudex` routes share the Codex quota, so both
+are the `codex` side below, and the route's side is the default side for new work.
+On those routes the table's GPT column applies, on the route's provider. The `opus`
+rows and your own judgement stay on Claude.
 
-Switch to the other side when the current route's weekly use is 90% or more, or
-when a worker fails with a usage-limit error. `claude` moves to `codex`, and `codex`
-or `claudex` moves to `claude`. A side that returned a usage-limit error stays off
-for the rest of the session, whatever the file or the quota says. If both sides are
-at 90% or more, keep the file's route. Say in your report when you switch. If the
-quota lookup returns no weekly figure, report the specific failure once and route
-by the file and the usage-limit rule alone. When you compact, write the route, the
-weekly figures and their source, any side that is off, and which work is urgent
-into the handoff note.
+Before you start a batch of new workers, read the quota and pipe it into
+`scripts/quota-pace.py`, as [Quota lookup](references/quota-lookup.md) describes.
+Pass these flags:
+
+- `--prefer`: the route's side.
+- `--eligible`: the sides the work may run on. A row with both columns may run on
+  `claude,codex`. An `opus` row, and a role the calling workflow ties to the Claude
+  family, may run on `claude` only. A seat outside the Claude family may run on
+  `codex` only.
+- `--limited <side>=<time>`: once for each side that returned a usage-limit error
+  in this session, with the time of the error.
+- `--work <percent>`: the work's expected share of the weekly quota, when the
+  measured use of similar workers gives one.
+- `--no-spill`: for urgent work.
+
+Start the worker on the side in `route.side`. The script decides as follows:
+
+- A side is limited when its weekly reading is 100%. After a usage-limit error it
+  stays limited until a reading shows that its quota renewed: a window that started
+  after the error, or a lower count on the same schedule. An available reset credit
+  is not renewal. When the error named a shorter limit, such as Claude's session
+  limit, drop its `--limited` flag after the reset time the error named.
+- When the default side is limited, the work goes to another eligible side that is
+  not limited, even when that side's pace is unknown.
+- When the default side's recent pace runs it out before its scheduled reset, the
+  work moves only to another eligible side whose projection holds the work through
+  its own reset. When both project running out, or the other side's pace is unknown,
+  the work stays on the default side.
+- No percentage of use moves work by itself. Without a projection, the work stays
+  on the default side until a limit.
+
+When `route.side` is `null`, no eligible side can take the work. Do not start the
+worker and do not move it to another model family. Tell the user which role is
+blocked, each side's scheduled reset, and the `reset_options`. A calling workflow's
+own fallback for a seat that cannot run still applies.
+
+Only a person redeems a reset credit. Never redeem one, call a redemption endpoint,
+or route work into a limit to make a credit usable, even when every side is limited.
+When the report has `reset_options`, show them to the user with your report: each
+credit's scope, claim deadline, how long its quota lasts once claimed, and the use
+the outage would cost. A reset that the user performs shows in the next reading.
+
+Say in your report when you switch, and quote the script's `why`. If the lookup or
+the script fails, report the specific failure once and route by the file and the
+usage-limit errors alone. When you compact, write the route, each side's status and
+figures from the last report, each `--limited` flag, and which work is urgent into
+the handoff note.

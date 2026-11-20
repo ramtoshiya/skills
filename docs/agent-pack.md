@@ -24,7 +24,7 @@ does not run the hooks.
 | `reorganize-commits` | Rewrites the current branch's commits into reviewable chunks. Runs only when you invoke it | Git |
 | `self-compact` | Compacts the conversation at a boundary the agent picks and resumes from a handoff note without you | BB with Claude Code or Hermes, or macOS Paseo Desktop. Node.js and the `bb` CLI in BB |
 | `stable-refs` | Gives documents and plans permanent identifiers that survive edits | Nothing |
-| `worker-routing` | Supplies the shared model, effort, provider, quota, urgency, retry, and escalation policy that agents follow when they start workers, and a `newest-model` script that prints the model to pass for each family | BB for cross-provider workers, and for Claude workers when the host hides Claude Code's own subagent tools. Elsewhere, the host's agent tool. `jq`, and the `bb` CLI for the `claudex` catalog |
+| `worker-routing` | Supplies the shared model, effort, provider, quota, urgency, retry, and escalation policy that agents follow when they start workers, a `newest-model` script that prints the model to pass for each family, and a `quota-pace.py` script that picks the side for new work from recent quota use | BB for cross-provider workers, and for Claude workers when the host hides Claude Code's own subagent tools. Elsewhere, the host's agent tool. `jq`, and the `bb` CLI for the `claudex` catalog. uv for `quota-pace.py`, which reads Quotio's history when the Quotio app records it |
 
 The `codex-session-reader` skill is inactive. Its source remains in
 [`dev/disabled-skills/codex-session-reader`](../dev/disabled-skills/codex-session-reader/SKILL.md),
@@ -103,9 +103,17 @@ The `worker-routing` skill is the one policy for choosing a worker's model.
 - bb reads weekly quota through its enabled Provider usage plugin's read-only
   `getUsage` RPC on the thread's machine, with a five-minute cache allowance.
   Other hosts, and bb when that lookup is unavailable, use the `quotio-cli`
-  command from [Machine setup](setup.md). When 90% or more of the route's
-  weekly quota is used, or a worker hits a usage limit, workers move to the
-  other side and the agent says so. Urgent work ignores the 90% rule.
+  command from [Machine setup](setup.md). Before each batch of new workers,
+  the skill's `quota-pace.py` projects each side's weekly use at its
+  scheduled reset from the last 24 hours of use. New work moves to the other
+  side when the route's side is projected to run out and the other side is
+  projected to have room, or when the route's side hits a usage limit. No
+  fixed percentage moves work. A side that hit a limit comes back when a
+  reading shows its quota renewed. Urgent work moves only on a limit.
+- When no eligible side can take a worker, the agent reports the blocked
+  role, each side's scheduled reset, and the reset credits it can see: Codex
+  credits from `codex app-server`, and Claude offers only when you name
+  them. Only you redeem a reset credit. The agent never redeems one.
 - In bb, the Claude Code provider setting `subagentsDisabled` hides the
   `Agent`, `Task`, and `ListAgents` tools. The agent then starts every worker
   with `bb nest spawn` from the [nest](../bb-plugins/nest/README.md) bb
