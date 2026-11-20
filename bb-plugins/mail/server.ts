@@ -89,10 +89,12 @@ export default function plugin(bb: BbPluginApi) {
   }
 
   async function release(row: Row): Promise<void> {
+    const now = await currentRow(row);
+    if (now === null) return;
     await bb.sdk.threads.queuedMessages.update({
-      threadId: row.threadId,
-      queuedMessageId: row.id,
-      expectedUpdatedAt: row.updatedAt,
+      threadId: now.threadId,
+      queuedMessageId: now.id,
+      expectedUpdatedAt: now.updatedAt,
       sendAt: null,
     });
   }
@@ -136,8 +138,7 @@ export default function plugin(bb: BbPluginApi) {
     }
     const claimed = decision.action === "hold" && held ? row : await claim(row, decision.action === "hold" ? deadline + RELEASE_MARGIN_MS : Date.now() + CLAIM_MS);
     if (claimed === null) {
-      const now = held ? await currentRow(row) : null;
-      if (now !== null) await release(now);
+      if (held) await release(row);
       bb.log.info(`completion delivered: the notice changed while mail decided ${note}`);
       return;
     }

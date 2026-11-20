@@ -144,8 +144,9 @@ A bb update can change any of these:
 - The `commandExecution` items in thread events, with `command`, `exitCode`,
   and `aggregatedOutput`, which Claude Code and Codex threads both produce.
 - The command text `bb thread wait <child>`, and the self-compact helper's
-  `bb-compact.mjs run` without `--no-resume`, which exits 0 once the helper
-  has started.
+  `bb-compact.mjs run` without `--no-resume`. A launch counts only with exit
+  code 0, which Claude Code records when it starts the helper in the
+  background. A launch that fails in the foreground records another code.
 - The `createdAt` time on thread events, which mail compares between the
   parent's wait and the child's turn.
 - That bb compacts in a turn of its own with a `thread/compacted` event and
