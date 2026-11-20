@@ -198,6 +198,76 @@ describe("inbox", () => {
   });
 });
 
+describe("ACP recipients", () => {
+  const acp = (status: "active" | "idle" = "active") => makeThreadResponse({ id: "HERMES", providerId: "acp-hermes-agent", status });
+  const claude = makeThreadResponse({ id: "CLAUDE", providerId: "claude-code", status: "active" });
+  const inboxSubmission = { pluginId: "mail", data: { kind: "inbox" } };
+  const heldRow = (initiator: "user" | "agent" | "system" = "agent", id = "held") => ({
+    id,
+    initiator,
+    waitingOn: { kind: "plugin" as const, pluginId: "mail", reason: "inbox" },
+  });
+  const decide = (harness: ReturnType<typeof start>["harness"], facts: Record<string, unknown>) =>
+    harness.registrations.hooks["message.dispatch"]!(makeMessageDispatchHookContext(facts as never));
+
+  it.each([
+    ["an agent message", { initiator: "agent" }, "wait"],
+    ["a plugin or system notice", { initiator: "system" }, "wait"],
+    ["a mail inbox message", { initiator: "agent", experimental_submission: inboxSubmission }, "wait"],
+    ["a user message", { initiator: "user" }, "proceed"],
+    ["a group that includes a user message", { initiator: "mixed", queuedMessages: [heldRow("agent", "a"), { id: "u", initiator: "user", waitingOn: null }] }, "proceed"],
+  ] as const)("decides for %s that would join a running turn: %s", async (_name, facts, action) => {
+    const { harness } = start();
+    const decision = await decide(harness, { attempt: "join-turn", thread: acp(), ...facts });
+    expect(decision.action).toBe(action);
+  });
+
+  it("starts a turn for an agent message when the recipient is idle", async () => {
+    const { harness } = start();
+    expect((await decide(harness, { attempt: "start-turn", initiator: "agent", thread: acp("idle") })).action).toBe("proceed");
+  });
+
+  it.each(["claude-code", "codex"])("still lets an agent message join a running %s turn", async (providerId) => {
+    const { harness } = start();
+    const thread = makeThreadResponse({ providerId, status: "active" });
+    expect((await decide(harness, { attempt: "join-turn", initiator: "agent", thread })).action).toBe("proceed");
+  });
+
+  it("keeps a held inbox message out of the turn that a user starts, then starts its own turn when the recipient goes idle", async () => {
+    const { harness } = start();
+    harness.sdk.stub("threads.queue.list", async () => [makeQueueEntry({ id: "held", threadId: "HERMES" })] as never);
+    const row = heldRow();
+    await decide(harness, { attempt: "start-turn", initiator: "agent", thread: acp("idle"), experimental_submission: inboxSubmission });
+
+    await harness.emitThreadEvent("thread.active", { thread: acp() });
+    expect(harness.recheckCount).toBe(0);
+    expect((await decide(harness, { attempt: "join-turn", initiator: "agent", thread: acp(), queuedMessages: [row] })).action).toBe("wait");
+
+    await harness.emitThreadEvent("thread.idle", { thread: acp("idle"), lastAssistantText: null });
+    expect(harness.recheckCount).toBe(1);
+    expect((await decide(harness, { attempt: "start-turn", initiator: "agent", thread: acp("idle"), queuedMessages: [row] })).action).toBe("proceed");
+  });
+
+  it("holds an agent message sent into a running turn until the recipient goes idle", async () => {
+    const { harness } = start();
+    harness.sdk.stub("threads.queue.list", async () => [makeQueueEntry({ id: "steer", threadId: "HERMES" })] as never);
+    const row = heldRow("agent", "steer");
+    expect((await decide(harness, { attempt: "join-turn", initiator: "agent", thread: acp() })).action).toBe("wait");
+    await harness.emitThreadEvent("message.queued", { entry: makeQueueEntry({ id: "steer", threadId: "HERMES", waitingOn: row.waitingOn }) });
+    expect((await decide(harness, { attempt: "start-turn", initiator: "agent", thread: acp("idle"), queuedMessages: [row] })).action).toBe("wait");
+
+    await harness.emitThreadEvent("thread.idle", { thread: acp("idle"), lastAssistantText: null });
+    expect((await decide(harness, { attempt: "start-turn", initiator: "agent", thread: acp("idle"), queuedMessages: [row] })).action).toBe("proceed");
+  });
+
+  it("does not release held messages when a Claude Code thread goes idle", async () => {
+    const { harness } = start();
+    harness.sdk.stub("threads.queue.list", async () => [makeQueueEntry({ id: "held", threadId: "CLAUDE" })] as never);
+    await harness.emitThreadEvent("thread.idle", { thread: { ...claude, status: "idle" }, lastAssistantText: null });
+    expect(harness.recheckCount).toBe(0);
+  });
+});
+
 describe("bb mail send", () => {
   it("sends to the inbox by default and wakes with --wake", async () => {
     const { harness, sent } = start();
