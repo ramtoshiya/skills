@@ -250,10 +250,6 @@ def _take_unreported_failure(root: Path, thread: str) -> Optional[str]:
 
 
 def first_message_restore(session_id: str) -> Optional[str]:
-    """The session's first user message, when compaction removed it and no earlier restore is still in context.
-
-    bb sends its instructions inside that message, not in the system prompt, and Hermes stops protecting
-    the first turns after the first compaction."""
     import hermes_state_registry
     db = hermes_state_registry.acquire(_hermes_home() / "state.db")
     try:

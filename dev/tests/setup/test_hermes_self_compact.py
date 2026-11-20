@@ -66,8 +66,6 @@ class FakePluginContext:
 
 
 class FakeSessionDB:
-    """Hermes's session store: rows per session, `active` cleared on rows compaction removed."""
-
     def __init__(self):
         self.rows, self.parents = {}, {}
 
