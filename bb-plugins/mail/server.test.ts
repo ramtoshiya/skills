@@ -260,6 +260,62 @@ describe("ACP recipients", () => {
     expect((await decide(harness, { attempt: "start-turn", initiator: "agent", thread: acp("idle"), queuedMessages: [row] })).action).toBe("proceed");
   });
 
+  describe("self-compaction on a Hermes thread", () => {
+    const schedule = (resume?: boolean) => ({
+      type: "item/completed",
+      data: {
+        item: {
+          type: "toolCall",
+          id: "t1",
+          tool: "other",
+          arguments: { action: "compact", ...(resume === undefined ? {} : { resume }), note: "# note" },
+          status: "completed",
+          result: `self_compact result\n- **status:** scheduled\n- **resume:** ${resume ?? true}`,
+          presentation: { title: "self_compact" },
+        },
+      },
+    });
+    const scheduledTurn = (resume?: boolean) => [message("m2"), schedule(resume), message("m1"), turnStarted];
+    const compactionTurn = [{ type: "thread/compacted", data: {} }, message("summary"), turnStarted];
+    const resumeTurn = [message("resumed"), turnStarted];
+
+    async function goIdle(events: Record<string, unknown[]>, failReads = false) {
+      const started = start({ events });
+      started.harness.sdk.stub("threads.queue.list", async () => [makeQueueEntry({ id: "held", threadId: "HERMES" })] as never);
+      if (failReads) {
+        started.harness.sdk.stub("threads.events.list", async () => {
+          throw new Error("events offline");
+        });
+      }
+      await started.harness.emitThreadEvent("thread.idle", { thread: acp("idle"), lastAssistantText: null });
+      return started.harness.recheckCount;
+    }
+
+    it("keeps held messages out of the gap before the helper requests compaction", async () => {
+      expect(await goIdle({ HERMES: scheduledTurn() })).toBe(0);
+    });
+
+    it("keeps holding after bb's compaction turn, until the resume message's turn ends", async () => {
+      expect(await goIdle({ HERMES: [...compactionTurn, ...scheduledTurn()] })).toBe(0);
+    });
+
+    it("releases held messages when the resume turn ends", async () => {
+      expect(await goIdle({ HERMES: [...resumeTurn, ...compactionTurn, ...scheduledTurn()] })).toBe(1);
+    });
+
+    it("releases held messages when the thread waits for the user with resume false", async () => {
+      expect(await goIdle({ HERMES: scheduledTurn(false) })).toBe(1);
+    });
+
+    it("releases held messages when the turn did not schedule a compaction", async () => {
+      expect(await goIdle({ HERMES: [message("m1"), turnStarted] })).toBe(1);
+    });
+
+    it("releases held messages when the events cannot be read", async () => {
+      expect(await goIdle({ HERMES: scheduledTurn() }, true)).toBe(1);
+    });
+  });
+
   it("does not release held messages when a Claude Code thread goes idle", async () => {
     const { harness } = start();
     harness.sdk.stub("threads.queue.list", async () => [makeQueueEntry({ id: "held", threadId: "CLAUDE" })] as never);
