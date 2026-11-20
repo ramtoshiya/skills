@@ -44,6 +44,7 @@ const statePath = path.join(dir, 'state.json');
 const state = JSON.parse(fs.readFileSync(statePath));
 const args = process.argv.slice(2);
 const input = fs.readFileSync(0, 'utf8');
+if (config.callDelayMs) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, config.callDelayMs);
 fs.appendFileSync(path.join(dir, 'calls.jsonl'), JSON.stringify({ args, input }) + '\\n');
 const save = () => fs.writeFileSync(statePath, JSON.stringify(state));
 const out = value => process.stdout.write(JSON.stringify(value));
@@ -141,6 +142,15 @@ test('captures the active caller and waits for its completion before proof and r
 const prepareCommand = event(16, 'item/started', 'caller', { item: {
   id: 'tool_prepare', type: 'commandExecution', command: 'node "/skills/scripts/bb-compact.mjs" prepare "/tmp/handoff.md"',
 } });
+
+test('proves and resumes when every bb call is slow, as on a loaded machine', async t => {
+  const fixture = await setup(t, { holdCaller: true, callDelayMs: 700 });
+  const prepared = fixture.prepare();
+  assert.equal(prepared.status, 0, prepared.stderr);
+  const result = await fixture.run([], JSON.parse(prepared.stdout));
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).resumeSent, true);
+});
 
 test('compacts and resumes after steering and a child notice accepted by the current turn', async t => {
   const events = recordedEvents();
