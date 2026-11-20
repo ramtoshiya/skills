@@ -18,7 +18,6 @@ LOOKBACK = timedelta(hours=24)
 MIN_SPAN = timedelta(hours=6)
 RESET_JITTER = timedelta(minutes=2)
 ROUNDING = 1.0
-STALE = timedelta(minutes=30)
 KEEP = timedelta(days=8)
 HISTORY_SCHEMA = 2
 HISTORY_METRICS = {
@@ -392,6 +391,7 @@ def reset_options(eligible, sides, readings, offers, now) -> dict:
         f = sides[side]
         if f.status not in ("limited", "runs-out"):
             continue
+        weekly_reset = parse_time(f.resets_at) if f.resets_at else None
         scheduled = f.limit_resets_at or f.resets_at
         reset = parse_time(scheduled) if scheduled else None
         entry: dict = {"scheduled_reset": scheduled or "unknown, no current reading"}
@@ -417,7 +417,7 @@ def reset_options(eligible, sides, readings, offers, now) -> dict:
                     "claim_by": iso(claim_by),
                     "if_claimed_now_lasts_until": (
                         iso(fable) if kind == "claude-fable" and fable
-                        else iso(reset) if reset else "the scheduled reset, unknown without a reading"
+                        else iso(weekly_reset) if weekly_reset else "the weekly reset, unknown without a reading"
                     ),
                 }
                 for kind, claim_by in offers
@@ -481,8 +481,7 @@ def main(argv=None) -> int:
         if account_note:
             notes.append(account_note)
         sources = [("quotio history", series), ("samples from earlier runs", state[side])]
-        reading = current.weekly if current else latest_fresh(series + state[side], now)
-        sides[side] = forecast(reading, sources, limited.get(side), now)
+        sides[side] = forecast(current.weekly if current else None, sources, limited.get(side), now)
         if current:
             state[side].append(current.weekly)
     if readings:
@@ -496,11 +495,6 @@ def main(argv=None) -> int:
         report["notes"] = notes
     print(json.dumps(report, indent=1))
     return 0
-
-
-def latest_fresh(samples: list[Sample], now) -> Sample | None:
-    latest = max(samples, key=lambda s: s.at, default=None)
-    return latest if latest is not None and now - latest.at <= STALE else None
 
 
 if __name__ == "__main__":

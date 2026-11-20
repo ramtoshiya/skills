@@ -165,7 +165,7 @@ the outage would cost. A reset that the user performs shows in the next reading.
 
 Say in your report when you switch, and quote the script's `why`. If the lookup or
 the script fails, report the specific failure once and start new work on the default
-side. After a usage-limit error on that side, the role is blocked, as when
-`route.side` is `null`, because no reading confirms the other side's capacity. When you compact, write the route, each side's status and
+side. When that side returned a usage-limit error or read 100%, the role is blocked,
+as when `route.side` is `null`, because no reading confirms the other side's capacity. When you compact, write the route, each side's status and
 figures from the last report, each `--limited` flag, and which work is urgent into
 the handoff note.
