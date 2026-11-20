@@ -223,8 +223,8 @@ describe("ACP recipients", () => {
     ["an agent message", { initiator: "agent" }, "wait"],
     ["a plugin or system notice", { initiator: "system" }, "wait"],
     ["a mail inbox message", { initiator: "agent", experimental_submission: inboxSubmission }, "wait"],
-    ["a user message", { initiator: "user" }, "proceed"],
-    ["a group that includes a user message", { initiator: "mixed", queuedMessages: [heldRow("agent", "a"), { id: "u", initiator: "user", waitingOn: null }] }, "proceed"],
+    ["a user message", { initiator: "user" }, "wait"],
+    ["a group that includes a user message", { initiator: "mixed", queuedMessages: [heldRow("agent", "a"), { id: "u", initiator: "user", waitingOn: null }] }, "wait"],
   ] as const)("decides for %s that would join a running turn: %s", async (_name, facts, action) => {
     const { harness } = start();
     const decision = await decide(harness, { attempt: "join-turn", thread: acp(), ...facts });
@@ -236,10 +236,79 @@ describe("ACP recipients", () => {
     expect((await decide(harness, { attempt: "start-turn", initiator: "agent", thread: acp("idle") })).action).toBe("proceed");
   });
 
-  it.each(["claude-code", "codex"])("still lets an agent message join a running %s turn", async (providerId) => {
+  it.each(["claude-code", "codex"])("still lets an agent or user message join a running %s turn", async (providerId) => {
     const { harness } = start();
     const thread = makeThreadResponse({ providerId, status: "active" });
     expect((await decide(harness, { attempt: "join-turn", initiator: "agent", thread })).action).toBe("proceed");
+    expect((await decide(harness, { attempt: "join-turn", initiator: "user", thread })).action).toBe("proceed");
+  });
+
+  describe("a user message sent into a running turn", () => {
+    const userRow = (id = "user") => heldRow("user", id);
+    const entry = (id: string, initiator: "user" | "agent" | "system") =>
+      makeQueueEntry({ id, threadId: "HERMES", waitingOn: heldRow(initiator, id).waitingOn, initiator } as never);
+
+    async function holdThenIdle(rows: Array<ReturnType<typeof heldRow>>) {
+      const started = start();
+      started.harness.sdk.stub("threads.queue.list", async () => rows.map((row) => entry(row.id, row.initiator)) as never);
+      for (const row of rows) {
+        expect((await decide(started.harness, { attempt: "join-turn", initiator: row.initiator, thread: acp() })).action).toBe("wait");
+        await started.harness.emitThreadEvent("message.queued", { entry: entry(row.id, row.initiator) });
+      }
+      await started.harness.emitThreadEvent("thread.idle", { thread: acp("idle"), lastAssistantText: null });
+      return started;
+    }
+    const walk = (harness: ReturnType<typeof start>["harness"], row: ReturnType<typeof heldRow>, status: "active" | "idle") =>
+      decide(harness, { attempt: status === "idle" ? "start-turn" : "join-turn", initiator: row.initiator, thread: acp(status), queuedMessages: [row] });
+
+    it("waits for the turn to end and then starts a turn of its own", async () => {
+      const { harness } = await holdThenIdle([userRow()]);
+      expect(harness.recheckCount).toBe(1);
+      expect((await walk(harness, userRow(), "idle")).action).toBe("proceed");
+    });
+
+    it("is released by the retry when bb dropped the first recheck", async () => {
+      vi.useFakeTimers();
+      const { harness } = await holdThenIdle([userRow()]);
+      harness.sdk.stub("threads.get", async () => acp("idle") as never);
+      await vi.advanceTimersByTimeAsync(1_500);
+      expect(harness.recheckCount).toBe(2);
+    });
+
+    it.each([
+      ["before", ["user", "agent"]],
+      ["after", ["agent", "user"]],
+    ] as const)("keeps its place when it arrived %s an agent message", async (_name, order) => {
+      const rows = order.map((who) => (who === "user" ? userRow("user") : heldRow("agent", "agent")));
+      const { harness } = await holdThenIdle(rows);
+      const sentOrder: string[] = [];
+      for (const _turn of rows) {
+        for (const row of rows.filter((candidate) => !sentOrder.includes(candidate.id))) {
+          const status = sentOrder.length === rows.indexOf(row) ? "idle" : "active";
+          if ((await walk(harness, row, status)).action === "proceed") sentOrder.push(row.id);
+        }
+        await harness.emitThreadEvent("thread.idle", { thread: acp("idle"), lastAssistantText: null });
+      }
+      expect(sentOrder).toEqual(rows.map((row) => row.id));
+    });
+
+    it("is never sent, merged, or deleted by mail itself", async () => {
+      const { harness, sent, deleted, holds } = await holdThenIdle([userRow()]);
+      await walk(harness, userRow(), "idle");
+      await harness.emitThreadEvent("message.dispatched", { entry: entry("user", "user") });
+      expect({ sent, deleted, holds }).toEqual({ sent: [], deleted: [], holds: [] });
+    });
+
+    it("is not delayed by the inbox rules for an idle thread", async () => {
+      const { harness } = start();
+      const idle = acp("idle");
+      const inbox = { attempt: "start-turn", initiator: "agent", thread: idle, experimental_submission: inboxSubmission };
+      expect((await decide(harness, inbox)).action).toBe("wait");
+      expect((await decide(harness, { attempt: "start-turn", initiator: "user", thread: idle })).action).toBe("proceed");
+      const waitingInbox = heldRow("agent", "inbox");
+      const user = { id: "u", initiator: "user" as const, waitingOn: null };
+      expect((await decide(harness, { attempt: "start-turn", initiator: "mixed", thread: idle, queuedMessages: [waitingInbox, user] })).action).toBe("proceed");
+    });
   });
 
   it("keeps a held inbox message out of the turn that a user starts, then starts its own turn when the recipient goes idle", async () => {
