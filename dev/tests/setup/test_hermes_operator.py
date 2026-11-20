@@ -378,8 +378,6 @@ class BbThreadEnvTests(unittest.TestCase):
             self.assertEqual(set(self.plugin.resolve(sid).values()), {None})
 
 
-# Runs in the installed Hermes runtime. The gateway state is filled through Hermes's own
-# writer, so the plugin's reads of Hermes internals meet the version that is installed.
 INSTALLED_HERMES_PROBE = """
 import importlib.util, json, sys, types
 from gateway import run_api
@@ -401,8 +399,6 @@ print(json.dumps({sid: plugin.resolve(sid) for sid in ("local-bridge", "local-ot
 
 @unittest.skipUnless(shutil.which("hermes"), "Hermes is not installed")
 class BbThreadEnvInstalledHermesTests(unittest.TestCase):
-    """The resolver against the Hermes on PATH, whose internals change between updates."""
-
     def test_bridge_session_gets_its_thread_in_installed_hermes(self):
         argv = json.loads(subprocess.run(["hermes", "--print-runtime-command"], capture_output=True,
                                          text=True, check=True).stdout)

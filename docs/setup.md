@@ -875,8 +875,14 @@ each held draft with `bb thread update <id> --parent-thread "$BB_THREAD_ID"`,
 so the operator receives each worker's completion message.
 
 The plugin reads the server list from the gateway's in-memory session state,
-which Hermes does not document for plugins. If `bb status` in an operator
-session shows `Thread: (not set)` after a Hermes update, check that state first.
+which Hermes does not document for plugins. A Hermes update can change that
+state. Every operator session then loses `BB_THREAD_ID`. The `self-compact`
+and `skill-drafts` plugins lose the thread too, because they read it from
+`bb-thread-env`. `bb status` in an operator session shows `Thread: (not set)`.
+The operator profile's `logs/agent.log` shows `Session env resolver ... failed`
+with the error. `npm test` runs the plugin against the Hermes on `PATH` and
+fails in that case. After a fix reaches `main`, `mise run hermes:operator`
+loads the new copy into the running gateway without a restart.
 
 ### How a session compacts itself
 
