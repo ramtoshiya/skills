@@ -11,7 +11,7 @@ preferences, so fork the repository and edit it before you run it.
 | Part | What it does | Docs |
 | --- | --- | --- |
 | `ramtoshiya` plugin | Skills for Claude Code and Codex, plus a hook that blocks global package installs, unpinned one-shot package runs, and pip installs into a system Python | [Agent plugins](docs/agent-pack.md), [Hooks](docs/hooks.md) |
-| `ramtoshiya-cc` plugin | Claude Code only: a skill for claude.ai/design projects, an opt-in lead mode that hands work to subagents on the cheapest model that can do it, and a hook that blocks AI attribution lines in commits and pull requests | [Agent plugins](docs/agent-pack.md) |
+| `ramtoshiya-cc` plugin | Claude Code only: a skill for claude.ai/design projects, a context budget hook for the shared `self-compact` skill, and a hook that blocks AI attribution lines in commits and pull requests | [Agent plugins](docs/agent-pack.md) |
 | Third-party skills | Skills from other repositories, listed in this repository's marketplace and pinned to exact commits | [Third-party skills](docs/upstream-skills.md) |
 | Machine setup | A `mise.toml` that installs a few Homebrew packages and writes shell, Git, package manager, and agent settings | [Machine setup](docs/setup.md) |
 | `held-drafts` bb plugin | Lets agents create [bb](https://getbb.app) threads whose first message waits until a person sends it | [README](bb-plugins/held-drafts/README.md) |

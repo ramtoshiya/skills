@@ -24,7 +24,7 @@ does not run the hooks.
 | `reorganize-commits` | Rewrites the current branch's commits into reviewable chunks. Runs only when you invoke it | Git |
 | `self-compact` | Compacts the conversation at a boundary the agent picks and resumes from a handoff note without you | T3 Code, BB with Claude Code or Hermes, or macOS Paseo Desktop. Node.js and the `bb` CLI in BB |
 | `stable-refs` | Gives documents and plans permanent identifiers that survive edits | Nothing |
-| `worker-routing` | Supplies the shared model, effort, provider, quota, retry, and escalation policy when another skill or session mode names it. It does not activate lead mode | T3 Code or BB for cross-provider workers, and for Claude workers when the host hides Claude Code's own subagent tools. Elsewhere, the host's agent tool |
+| `worker-routing` | Supplies the shared model, effort, provider, quota, retry, and escalation policy when another skill or session mode names it. | T3 Code or BB for cross-provider workers, and for Claude workers when the host hides Claude Code's own subagent tools. Elsewhere, the host's agent tool |
 
 The `codex-session-reader` skill is inactive. Its source remains in
 [`dev/disabled-skills/codex-session-reader`](../dev/disabled-skills/codex-session-reader/SKILL.md),
@@ -91,60 +91,6 @@ agent finishes its step and writes a handoff note first.
 
 - The `claude-design-direct` skill, which edits and previews claude.ai/design
   projects through Claude Code's `DesignSync` tool.
-- The `lead` skill, which runs only when you invoke it with `/lead` or
-  `/ramtoshiya-cc:lead`. The session then settles the goal and how to check it
-  before work starts, and hands work to subagents on the cheapest model and
-  effort that can do it. It reads `worker-routing` from the shared `ramtoshiya`
-  plugin for that policy. Other modes can read the same policy without activating
-  lead's shipping and review workflow. When you tell it to do a piece of work itself, it
-  does that piece and goes back to delegating at the next one, unless you say
-  the change should last. Guards and validators it builds target ordinary
-  mistakes, not deliberate bypass, and are checked against real commands. It
-  does not review by default. When a change needs review, such as instruction
-  text, a data format, or a design memo, the session commits and merges it
-  first, then starts one review as a separate T3 Code task in its own
-  worktree. That task has 30 minutes, fixes only reproduced breaks of the
-  original request, and stops with a decision for a person when a fix would go
-  beyond that. When a T3 Code provider runs through the `claude-review`
-  launcher in [Machine setup](setup.md), the task gets a reminder at 20
-  minutes and its tool calls are refused after 30, counted from its latest
-  prompt. Without the launcher, the 30 minutes are only an instruction.
-  Outside T3 Code, the session recommends a review in its final report
-  instead. In T3 Code and BB, the file `~/.config/ramtoshiya/lead-route.json`
-  decides where Haiku- and Sonnet-level workers run. With
-  `{"workers": "codex"}` or `{"workers": "claudex"}` they run on GPT Luna and
-  Terra models through that provider. In T3 Code the review runs on GPT Sol
-  through the Codex provider. On both GPT routes, Luna workers use `low` for
-  the Haiku low row and `high` for the Haiku high row. Terra workers use only
-  `high`. When T3 Code lists a Codex provider instance named for workers, the
-  `codex` route's workers and the review use it. Point
-  that instance at a launcher that turns off what only your own sessions need,
-  such as a memory plugin that injects summaries of earlier sessions. Without
-  the file they run on Claude. Opus-level work stays on Claude, except that a
-  Terra worker whose task outgrew it reruns on GPT Sol through the same
-  provider. BB reads weekly quota through its enabled Provider usage plugin's
-  read-only `getUsage` RPC on the thread's machine, with a five-minute cache
-  allowance. Other hosts, and BB when that lookup is unavailable, use the
-  `quotio-cli` command from [Machine setup](setup.md). A sandbox, cache, network,
-  or authentication failure is reported separately from a missing CLI. When
-  90% or more of the route's weekly quota is used, the session moves workers to
-  the other side and says so. A worker that hits a usage limit moves workers the same
-  way, and the session does not return to that side. When a T3 Code provider
-  instance bans Claude Code's own subagent tools, for example with the launch
-  argument `--disallowedTools Agent,Task,Workflow,SendMessage,ListAgents`, the
-  session starts its Claude workers with T3 Code's `delegate_task` instead.
-  In BB, the Claude Code provider setting `subagentsDisabled` hides the
-  `Agent`, `Task`, and `ListAgents` tools. The session then starts every
-  worker with `bb thread spawn` as a child thread, waits for BB's
-  notification that the child finished, and archives the child afterward.
-  The `~/.bb/AGENTS.md` file from [Machine setup](setup.md) lets it start
-  those workers without asking you each time.
-  Claude workers and child leads started with `delegate_task`, for that or any
-  other reason, run on a Claude provider instance named for workers when T3
-  Code lists one, and on the session's own instance otherwise. Opus or Fable
-  subagents the session starts read the same
-  instructions and lead their part of the work. Claude
-  Code keeps the instructions in context after compaction.
 - A context budget hook for the shared `self-compact` skill. From 75% of the
   numeric `autoCompactWindow` setting, it asks the agent once per five-point
   band to compact at the next natural boundary. After a compaction it points
