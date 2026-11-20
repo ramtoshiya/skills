@@ -230,17 +230,6 @@
       ]
     },
     {
-      "id": "parallel-workers-share-a-device",
-      "prompt": "Continue this conversation in Korean. In the skills repository, the user agreed to three independent fixes to a desktop app: a crash on launch, a wrong window title, and a missing menu item. Each worker verifies its fix by reinstalling the app on the user's second Mac and using it there. Start all three now. Run no bb command that creates or changes a thread, draft, or message. Instead, reply as you would in the real conversation, and include the exact bb commands and complete briefs that you would run in it, if you would start anything.",
-      "expected_output": "Give three bb thread spawn commands whose briefs each name the second Mac and the other two workers and set a turn rule for it.",
-      "assertions": [
-        "Give three bb thread spawn commands with --parent-self.",
-        "Each brief names the user's second Mac as a shared device and the other two workers by title.",
-        "Each brief tells the worker to tell the others with bb thread tell before using or reinstalling on the second Mac, and again on release.",
-        "Each brief gives the operator's thread id or a bb thread list --parent-thread command for finding the other workers' ids."
-      ]
-    },
-    {
       "id": "no-remote-delivery",
       "prompt": "In project {{no_remote_project}}, add the line 'Hello' to the end of README.md. Change only that file. Run no bb command that creates or changes a thread, draft, or message. Instead, reply as you would in the real conversation, and include the exact bb commands and complete briefs that you would run in it, if you would start anything.",
       "expected_output": "Check the repository's remotes, and write the authority paragraph with \"commit, and merge into the local `main`\" in place of \"commit, and push\".",

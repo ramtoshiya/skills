@@ -85,8 +85,8 @@ Pass on an instruction that leaves room for judgment as its intent, and keep
 the user's example as an example. Leave out what the mode and checks enforce,
 and events that have not happened. Run `git remote -v` in the owning
 repository. Read `references/brief-cases.md` first when it prints nothing, or
-when the work serves a web UI, splits into independent pieces, shares a
-verification device, or changes a forked skill.
+when the work serves a web UI, splits into independent pieces, or changes a
+forked skill.
 
 ## Start the worker {:#start}
 

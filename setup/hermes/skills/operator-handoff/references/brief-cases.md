@@ -32,13 +32,3 @@ authority paragraph describes, instead of holding all of it for one final
 integration. Say the same when a later message adds scope to a running
 worker. A brief that integrates only at the end keeps finished work off
 `main` and can leave the user wondering why integration is delayed.
-
-## Shared verification device {:#shared-device}
-
-When you start workers that run at the same time and verify on the same
-device, such as an app on another Mac, each brief names that device and the
-other workers by title, and sets a turn rule. Before using the device or
-reinstalling there, the worker tells the others with `bb thread tell`, and
-tells them again on release. A reinstall counts as a turn. The brief gives
-your thread id, so the worker finds the others' ids with
-`bb thread list --parent-thread <your thread id> --json`.
