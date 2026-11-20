@@ -33,6 +33,9 @@ bb nest spawn --new-environment worktree --provider <provider-id> \
   `--new-environment`, `--base-branch`, `--provider`, `--model`,
   `--reasoning-level`, `--title`, and `--json`. The calling thread is always
   the parent, so `--parent-self` is optional.
+- `--tag <tag>`, repeatable, gives the worker a mail tag such as
+  `role=reviewer`, so `bb mail send --where role=reviewer` can reach it.
+  Tags are not inherited.
 
 ## Results {:#results}
 
@@ -44,7 +47,9 @@ The output says which route bb allowed:
   ancestor that bb lets take children. Nest sends you each of its turn results,
   failures, and pending approvals or questions as a message that starts with
   `[nest] Automatic report from your worker`. Those messages need no reply.
-  Never message the host about the worker.
+  A reply over 4,000 characters arrives as one line that names
+  `bb thread output <worker>`. A turn the worker ended only to self-compact
+  is not reported. Never message the host about the worker.
 
 `bb thread wait <worker>`, `bb thread output <worker>`, and
 `bb thread interactions` work on both routes.

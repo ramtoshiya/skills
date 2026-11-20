@@ -1,8 +1,11 @@
 import { PluginCliError, cliCommand, defineCli, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { rpcContract, type LogicalParent } from "./contract";
 import {
+  TURN_EVENT_TYPES,
   UsageError,
   chooseRoute,
+  endedToSelfCompact,
+  mailTagKeys,
   parseEnvironment,
   parseMetadata,
   parsePrompt,
@@ -24,6 +27,7 @@ type SpawnEnvironment = Parameters<Sdk["threads"]["spawn"]>[0]["environment"];
 
 const PAGE = 200;
 const MAX_ANCESTORS = 64;
+const MAIL_PLUGIN_ID = "mail";
 
 function chunks<T>(items: readonly T[], size: number): T[][] {
   const result: T[][] = [];
@@ -96,10 +100,25 @@ export default function plugin(bb: BbPluginApi) {
     return text;
   }
 
+  async function endedToSelfCompactSafely(threadId: string): Promise<boolean> {
+    try {
+      return endedToSelfCompact(
+        await bb.sdk.threads.events.list({ threadId, order: "desc", limit: String(PAGE), types: [...TURN_EVENT_TYPES] }),
+      );
+    } catch (error) {
+      bb.log.warn(`Could not read ${threadId}'s events, so its result is relayed: ${String(error)}`);
+      return false;
+    }
+  }
+
   async function relay(thread: Pick<Thread, "id" | "originPluginId">, outcome: Outcome): Promise<void> {
     if (thread.originPluginId !== bb.pluginId) return;
     const metadata = parseMetadata(await bb.sdk.threads.getPluginMetadata({ threadId: thread.id }));
     if (metadata === null) return;
+    if (outcome.kind === "completed" && (await endedToSelfCompactSafely(thread.id))) {
+      bb.log.info(`Not relaying ${thread.id}: its turn ended to self-compact.`);
+      return;
+    }
     try {
       await bb.sdk.threads.send({
         threadId: metadata.logicalParentThreadId,
@@ -171,6 +190,11 @@ export default function plugin(bb: BbPluginApi) {
             model: { type: "string", description: "Model ID" },
             "reasoning-level": { type: "string", description: "Reasoning level the model lists" },
             title: { type: "string", description: "Thread title" },
+            tag: {
+              type: "string",
+              repeatable: true,
+              description: "Mail tag for the new thread, as key=value or a bare word, such as role=reviewer. Repeat for more",
+            },
             prompt: { type: "string", description: "Brief text" },
             "prompt-file": {
               type: "string",
@@ -195,6 +219,7 @@ export default function plugin(bb: BbPluginApi) {
               }),
             );
             const promptSource = usage(() => parsePrompt({ prompt: options.prompt, promptFile: options["prompt-file"] }));
+            const tags = usage(() => mailTagKeys((options.tag as string[] | undefined) ?? []));
             const projectId = options.project ?? ctx.projectId;
             if (!projectId) throw new PluginCliError("Pass --project <id>.", { code: "no_project" });
 
@@ -230,12 +255,21 @@ export default function plugin(bb: BbPluginApi) {
                 code: "spawn_failed",
               });
             }
-            if (options.json) return { exitCode: 0, stdout: JSON.stringify({ ...thread, nest: route }, null, 2) };
+            let tagError: string | null = null;
+            if (Object.keys(tags).length > 0) {
+              try {
+                await bb.sdk.threads.updatePluginMetadata({ threadId: thread.id, pluginId: MAIL_PLUGIN_ID, set: tags });
+              } catch (error) {
+                tagError = error instanceof Error ? error.message : String(error);
+              }
+            }
+            if (options.json) return { exitCode: 0, stdout: JSON.stringify({ ...thread, nest: route, ...(tagError ? { tagError } : {}) }, null, 2) };
+            const tagWarning = tagError ? `\nThe thread started without its tags (${tagError}). Add them with bb mail tag add ${thread.id} <tags>.` : "";
             const notice =
               route.kind === "child"
                 ? "You will be notified when this thread is done."
                 : `bb's depth limit placed it under ${route.hostThreadId}. Nest relays each of its turn results, failures, and questions to this thread.`;
-            return { exitCode: 0, stdout: `Thread spawned: ${thread.id}\n${notice}` };
+            return { exitCode: 0, stdout: `Thread spawned: ${thread.id}\n${notice}${tagWarning}` };
           },
         }),
         list: cliCommand({

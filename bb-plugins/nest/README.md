@@ -19,6 +19,10 @@ The calling thread (`BB_THREAD_ID`) is always the parent. `bb nest spawn
 `--model`, `--reasoning-level`, `--title`, `--prompt`, `--prompt-file`, and
 `--json`. `--parent-self` is accepted and changes nothing.
 
+`--tag <tag>`, repeatable, gives the new thread a tag of the
+[mail](../mail/README.md) plugin, such as `--tag role=reviewer`. Mail selects
+recipients by tag. The worker's own workers do not inherit it.
+
 ## Install
 
 From this repository:
@@ -44,9 +48,14 @@ take a child. That ancestor is only a host:
 - The worker's first message starts with a short note. It names the caller as
   its logical parent and tells the worker not to message the host.
 - When the worker ends a turn, fails, or waits on an approval or question, the
-  plugin sends the caller a message from the worker. The message says it needs
-  no reply and holds up to 4,000 characters of the final reply. That matches
-  bb's own child notifications.
+  plugin sends the caller a message from the worker. The message wakes the
+  caller and says it needs no reply. It holds a final reply of up to 4,000
+  characters. A longer reply arrives as one line with its first line, its
+  length, and the `bb thread output` command that reads it.
+- A turn that ended only to start the self-compact helper
+  (`bb-compact.mjs run` without `--no-resume`) is not relayed, because the
+  worker resumes on its own. bb's compaction turn after it is not relayed
+  either.
 
 `bb nest list --parent <thread>` lists a thread's unarchived workers from
 both routes. The `route` column shows `child` or `relay`.
@@ -73,6 +82,12 @@ sidebar. It is off by default.
 - Relays are sent when bb emits the worker's event. If the plugin is not
   running at that moment, for example during a bb restart, that result is not
   relayed. Read it with `bb thread output <worker>`.
+- The self-compaction check reads the worker's `commandExecution` events and
+  matches the helper's file name and `run` argument. If the events cannot be
+  read, the result is relayed.
+- `--tag` writes into the mail plugin's thread metadata as the key
+  `tag:<tag>`. If that write fails, the thread still starts and the output
+  says so.
 - `bb thread update --parent-thread` cannot move a thread below four levels
   either. Relay workers stay under their host.
 - The plugin uses experimental plugin APIs, which a bb update can change or

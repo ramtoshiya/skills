@@ -25,6 +25,9 @@ const METADATA: Record<string, Record<string, unknown>> = {
   DONE: { logicalParentThreadId: "L4" },
 };
 
+const EVENTS: Record<string, unknown[]> = {};
+const MAIL_METADATA: Array<{ threadId: string; pluginId?: string; set?: Record<string, unknown> }> = [];
+
 let host: Host | null = null;
 
 function thread(id: keyof typeof THREADS) {
@@ -69,6 +72,11 @@ function start() {
           return { delivery: "sent" } as never;
         },
         getPluginMetadata: async ({ threadId }) => METADATA[threadId] ?? {},
+        updatePluginMetadata: async (args) => {
+          MAIL_METADATA.push({ threadId: args.threadId, pluginId: args.pluginId, set: args.set });
+          return (args.set ?? {}) as never;
+        },
+        events: { list: async ({ threadId }) => (EVENTS[threadId] ?? []) as never },
         experimental_listPluginMetadata: async ({ threadIds }) => ({
           threads: threadIds.flatMap((threadId) => (METADATA[threadId] ? [{ threadId, metadata: METADATA[threadId] }] : [])),
         }),
@@ -100,6 +108,8 @@ function start() {
 }
 
 afterEach(async () => {
+  for (const key of Object.keys(EVENTS)) delete EVENTS[key];
+  MAIL_METADATA.length = 0;
   await host?.harness.lifecycle.dispose();
   host = null;
 });
@@ -145,6 +155,13 @@ describe("bb nest spawn", () => {
     expect(prompt).toContain("never message @thread:L3");
   });
 
+  it("saves --tag values as mail tags on the new thread", async () => {
+    const { harness } = start();
+    const result = await harness.runCli([...spawnArgs, "--tag", "role=reviewer", "--tag", "urgent"], { threadId: "L3" });
+    expect(result.exitCode).toBe(0);
+    expect(MAIL_METADATA).toEqual([{ threadId: "thr_new", pluginId: "mail", set: { "tag:role=reviewer": true, "tag:urgent": true } }]);
+  });
+
   it("reads --prompt-file on the caller's machine, relative to the caller's directory", async () => {
     const { harness, spawned, reads } = start();
     const result = await harness.runCli(
@@ -170,6 +187,7 @@ describe("bb nest spawn", () => {
     [["spawn", "--project", "proj_x", "--prompt-file", "-"], "L4"],
     [spawnArgs, undefined],
     [[...spawnArgs, "--environment", "env_1", "--new-environment", "personal"], "L4"],
+    [[...spawnArgs, "--tag", "project=x"], "L3"],
   ])("refuses %j from %s without creating a thread", async (argv, threadId) => {
     const { harness, spawned } = start();
     const result = await harness.runCli(argv, threadId ? { threadId } : {});
@@ -216,12 +234,34 @@ describe("relay", () => {
     expect(sent[0]?.text).toContain("bb thread interactions show int_1 L5");
   });
 
-  it("truncates a long reply and says where to read all of it", async () => {
+  it("replaces a reply over 4,000 characters with its first line and where to read it", async () => {
     const { harness, sent } = start();
-    await harness.emitThreadEvent("thread.idle", { thread: thread("L5"), lastAssistantText: "x".repeat(10_000) });
-    expect(sent[0]?.text).toContain("[... output truncated ...]");
-    expect(sent[0]?.text.length).toBeLessThan(5000);
+    await harness.emitThreadEvent("thread.idle", { thread: thread("L5"), lastAssistantText: `Verdict: ship\n${"x".repeat(10_000)}` });
+    expect(sent[0]?.text).toContain('10,014-character reply starts "Verdict: ship"');
     expect(sent[0]?.text).toContain("bb thread output L5");
+    expect(sent[0]?.text.length).toBeLessThan(500);
+  });
+
+  it("does not relay a turn that ended to self-compact, nor bb's compaction turn after it", async () => {
+    const { harness, sent } = start();
+    const launch = {
+      type: "item/completed",
+      data: { item: { type: "commandExecution", id: "c1", command: 'node "/p/bb-compact.mjs" run "/h/note.md" --launch-seq 9 --turn-id t1' } },
+    };
+    EVENTS.L5 = [launch, { type: "turn/started", data: {} }];
+    await harness.emitThreadEvent("thread.idle", { thread: thread("L5"), lastAssistantText: "Compaction is scheduled." });
+    EVENTS.L5 = [{ type: "thread/compacted", data: {} }, { type: "turn/started", data: {} }, ...EVENTS.L5];
+    await harness.emitThreadEvent("thread.idle", { thread: thread("L5"), lastAssistantText: "Compaction is scheduled." });
+    expect(sent).toEqual([]);
+  });
+
+  it("relays the result when the worker's events cannot be read", async () => {
+    const { harness, sent } = start();
+    harness.sdk.stub("threads.events.list", async () => {
+      throw new Error("events offline");
+    });
+    await harness.emitThreadEvent("thread.idle", { thread: thread("L5"), lastAssistantText: "FINAL: 7" });
+    expect(sent[0]?.text).toContain("FINAL: 7");
   });
 });
 

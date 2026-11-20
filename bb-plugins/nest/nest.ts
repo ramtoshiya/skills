@@ -105,13 +105,15 @@ export function preamble(route: Extract<Route, { kind: "relay" }>): string {
 }
 
 export const RELAY_EXCERPT_LIMIT = 4000;
-const TRUNCATION_MARKER = "\n\n[... output truncated ...]";
+const FIRST_LINE_LIMIT = 200;
 
-function excerpt(text: string | null): string {
-  const trimmed = text?.trim();
-  if (!trimmed) return "No final output was recorded.";
-  if (trimmed.length <= RELAY_EXCERPT_LIMIT) return trimmed;
-  return `${trimmed.slice(0, RELAY_EXCERPT_LIMIT - TRUNCATION_MARKER.length).trimEnd()}${TRUNCATION_MARKER}`;
+function replyText(workerId: string, reply: string | null): string {
+  const text = reply?.trim();
+  if (!text) return "No final output was recorded.";
+  if (text.length <= RELAY_EXCERPT_LIMIT) return `Final reply:\n\n${text}`;
+  const firstLine = text.split("\n").find((line) => line.trim() !== "")!.trim();
+  const clipped = firstLine.length > FIRST_LINE_LIMIT ? `${firstLine.slice(0, FIRST_LINE_LIMIT)}…` : firstLine;
+  return `Its ${text.length.toLocaleString("en-US")}-character reply starts "${clipped}". Read it with \`bb thread output ${workerId}\`.`;
 }
 
 export type Outcome =
@@ -139,7 +141,7 @@ export function relayText(workerId: string, outcome: Outcome): string {
   const header = `[nest] Automatic report from your worker ${worker}. It needs no reply or acknowledgement.`;
   switch (outcome.kind) {
     case "completed":
-      return `${header}\n\n${worker} completed a turn. Final reply:\n\n${excerpt(outcome.reply)}\n\nRead the whole reply with \`bb thread output ${workerId}\`.`;
+      return `${header}\n\n${worker} completed a turn. ${replyText(workerId, outcome.reply)}`;
     case "failed":
       return `${header}\n\n${worker} failed${outcome.error?.trim() ? `: ${outcome.error.trim()}` : "."}\n\nReview it with \`bb thread log ${workerId}\` before deciding next steps.`;
     case "waiting": {
@@ -147,4 +149,53 @@ export function relayText(workerId: string, outcome: Outcome): string {
       return `${header}\n\n${worker} is waiting on an interaction (${outcome.interactionKind ? `${outcome.interactionKind}, ` : ""}${outcome.interactionId}).${questions ? `\n${questions}` : ""}\n\nRead it with \`bb thread interactions show ${outcome.interactionId} ${workerId}\` and resolve it with the matching \`bb thread interactions\` command (answer, approve, grant, deny, or respond).`;
     }
   }
+}
+
+const TAG_PATTERN = /^[A-Za-z0-9_.:/-]+(=[^\s=]+)?$/;
+const MAIL_SELECTOR_KEYS = new Set(["project", "parent", "env", "branch", "provider", "status"]);
+
+/** The mail plugin's tag rule. Mail stores each tag as the key `tag:<tag>` in its thread metadata. */
+export function mailTagKeys(tags: readonly string[]): Record<string, true> {
+  const keys: Record<string, true> = {};
+  for (const raw of tags) {
+    const tag = raw.trim();
+    if (!TAG_PATTERN.test(tag)) throw new UsageError(`Invalid tag "${raw}". Use key=value or a bare word of letters, digits, and . _ : / -`);
+    if (MAIL_SELECTOR_KEYS.has(tag.split("=")[0]!)) throw new UsageError(`"${tag}" uses a built-in mail selector key. Pick another key.`);
+    keys[`tag:${tag}`] = true;
+  }
+  return keys;
+}
+
+const eventSchema = z.object({
+  type: z.string(),
+  data: z.object({ item: z.object({ type: z.string(), command: z.string().optional() }).optional() }).passthrough().nullable().optional(),
+});
+
+export const TURN_EVENT_TYPES = ["turn/started", "item/completed", "thread/compacted"] as const;
+const SELF_COMPACT_RUN = /bb-compact\.mjs["']?\s+run\b/;
+
+/**
+ * Whether the worker's latest turn, from events newest first, ended only to self-compact. bb compacts in a turn of its
+ * own that holds no items, so that turn is skipped and the turn that started the helper is checked.
+ */
+export function endedToSelfCompact(eventsNewestFirst: readonly unknown[]): boolean {
+  let commands: string[] = [];
+  let items = 0;
+  let compaction = false;
+  for (const raw of eventsNewestFirst) {
+    const parsed = eventSchema.safeParse(raw);
+    if (!parsed.success) continue;
+    const { type, data } = parsed.data;
+    if (type === "thread/compacted") compaction = true;
+    else if (type === "item/completed" && data?.item) {
+      items += 1;
+      if (data.item.type === "commandExecution" && data.item.command) commands.push(data.item.command);
+    } else if (type === "turn/started") {
+      if (items > 0 && !compaction) break;
+      commands = [];
+      items = 0;
+      compaction = false;
+    }
+  }
+  return commands.some((command) => SELF_COMPACT_RUN.test(command) && !command.includes("--no-resume"));
 }
