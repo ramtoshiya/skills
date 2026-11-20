@@ -291,6 +291,8 @@ class LevelTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn(f"bb plugin install path:{self.shared}/bb-plugins/demo --yes",
                       rows[("bb", "plugin:demo")]["detail"])
+        self.assertIn(f"npm ci --ignore-scripts --prefix {self.shared}/bb-plugins/demo",
+                      rows[("bb", "plugin:demo")]["detail"])
 
 
 if __name__ == "__main__":
