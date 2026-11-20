@@ -66,7 +66,6 @@ export default function plugin(bb: BbPluginApi) {
   bb.experimental_hooks.on("message.dispatch", (context) => {
     try {
       for (const row of context.queuedMessages) if (heldByMail(row, bb.pluginId)) heldRows.add(row.id);
-      bb.log.info(`DEBUG dispatch ${JSON.stringify({ t: context.thread.id, attempt: context.attempt, sub: context.experimental_submission, origin: context.originPluginId, rows: context.queuedMessages.map((r) => ({ id: r.id, w: r.waitingOn })) })} -> ${JSON.stringify(inboxDecision(context, bb.pluginId, heldRows))}`);
       return inboxDecision(context, bb.pluginId, heldRows);
     } catch (error) {
       bb.log.warn(`message.dispatch: ${error instanceof Error ? error.message : String(error)}. Letting the message through.`);

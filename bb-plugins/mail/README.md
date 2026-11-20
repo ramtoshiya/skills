@@ -52,6 +52,11 @@ recipient is already working, the message joins the running turn, as any
 queued message does. A later message that does start a turn carries the
 held inbox messages with it.
 
+Mail marks an inbox message with a plugin submission when it sends it, and
+remembers which queued messages it is holding. That memory lives in the
+running plugin. If mail restarts while a message is held, that message can
+start a turn when bb next tries to deliver it.
+
 ## Selectors
 
 `--where` takes terms, and a thread must match all of them. Repeat `--where`
@@ -102,8 +107,9 @@ timed out or failed does not count.
   into it, and bb emits no event for the merge. Mail reads the notice again
   and deletes it only if it has not changed. A merge in the few milliseconds
   between that read and the delete would lose the merged outcome.
-- The wait check reads at most the parent's last 200 command events, and the
-  compaction check reads the child's last 200 turn events.
+- The wait check reads at most the parent's last 100 events, and the
+  compaction check reads the child's last 100 events. bb refuses a larger
+  read.
 - `parent=` follows nest's metadata. A thread moved with
   `bb thread update --parent-thread` keeps any logical parent nest recorded.
 
@@ -111,15 +117,21 @@ timed out or failed does not count.
 
 A bb update can change any of these:
 
-- Experimental plugin APIs: `experimental_hooks.on("message.dispatch")` and
-  `experimental_hooks.recheck` for the inbox,
+- Experimental plugin APIs: `experimental_hooks.on("message.dispatch")`,
+  its `experimental_submission` field, and `experimental_hooks.recheck` for
+  the inbox,
   `threads.experimental_listPluginMetadata` for tags and nest's logical
   parents, and the `waitHolder` filter of `threads.queue.list`.
 - bb's notice rows: the `systemNotice` kinds `ownership-assigned`,
   `ownership-removed`, `ownership-batch`, and `child-completed`, the subject
   shape `{ kind: "thread", threadId, outcomes }`, and that plugins may delete
   and reschedule these rows.
+- That bb sets `originPluginId` on every message a plugin sends, so mail
+  cannot use it to tell an inbox message from a wake message, and that bb
+  passes the plugin submission only on a message's first delivery attempt.
 - bb's 2-second window for merging child notices, during which mail decides.
+- That a held notice is released with a `null` send time, because bb rejects
+  a send time that is not in the future.
 - bb's 4,000-character quote limit for child replies.
 - The `commandExecution` items in thread events, with `command`, `exitCode`,
   and `aggregatedOutput`, which Claude Code and Codex threads both produce.
