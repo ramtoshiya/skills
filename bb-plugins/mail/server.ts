@@ -10,7 +10,7 @@ import {
   commandRuns,
   decideCompletion,
   inboxDecision,
-  lastTurnCommands,
+  lastTurnItems,
   latestTurnStart,
   launchedSelfCompaction,
   logicalAncestors,
@@ -109,7 +109,7 @@ export default function plugin(bb: BbPluginApi) {
     return {
       childId,
       reply,
-      compacting: launchedSelfCompaction(lastTurnCommands(childEvents)),
+      compacting: launchedSelfCompaction(lastTurnItems(childEvents)),
       wait: waitState(commandRuns(parentEvents), childId, reply, latestTurnStart(childEvents)),
       holdExpired,
     };

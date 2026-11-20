@@ -96,12 +96,12 @@ async function main() {
   }
 
   let provider = null;
-  async function threadState() {
+  async function threadState({ queued = false } = {}) {
     const show = await bb(['thread', 'show', threadId]);
     const thread = show?.thread;
     if (!isObject(thread) || thread.id !== threadId || !Object.hasOwn(PROVIDERS, thread.providerId) ||
         !['active', 'starting', 'idle'].includes(thread.status) ||
-        !Number.isInteger(thread.queuedMessageCount) || thread.queuedMessageCount !== 0 ||
+        !Number.isInteger(thread.queuedMessageCount) || (!queued && thread.queuedMessageCount !== 0) ||
         thread.archivedAt !== null || thread.deletedAt !== null) {
       fail(`The thread must be an unarchived thread of a supported provider (${Object.keys(PROVIDERS).join(', ')}) with no queued work or error.`);
     }
@@ -229,8 +229,15 @@ async function main() {
   }
   const proof = { boundarySeq, requestId: null, requestSeq: null, turnId: null,
     acceptedSeq: null, compactionSeq: null, completionSeq: null };
+  let laterWork = false;
 
+  // Once BB records the compaction turn as completed, the proof is closed. A queued notice can then
+  // start its own turn before the helper polls again, and that turn does not undo the compaction.
   function checkCompaction(event) {
+    if (proof.completionSeq) {
+      laterWork ||= ['client/turn/requested', 'turn/started'].includes(event.type);
+      return;
+    }
     checkFailure(event);
     const { type, data, scope, seq } = event;
     if (type === 'client/turn/requested') {
@@ -270,8 +277,9 @@ async function main() {
 
   while (true) {
     (await events()).forEach(checkCompaction);
-    const status = await threadState();
-    if (proof.completionSeq && status === 'idle') {
+    // Messages may queue while compaction runs. The refusal to start with queued work is above.
+    const status = await threadState({ queued: true });
+    if (proof.completionSeq && (status === 'idle' || laterWork)) {
       (await events()).forEach(checkCompaction);
       break;
     }

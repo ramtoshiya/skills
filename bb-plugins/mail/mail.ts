@@ -179,6 +179,9 @@ const itemSchema = z.object({
   command: z.string().optional(),
   exitCode: z.number().nullable().optional(),
   aggregatedOutput: z.string().nullable().optional(),
+  arguments: z.object({ action: z.string().optional(), resume: z.boolean().optional() }).passthrough().optional().catch(undefined),
+  result: z.string().nullable().optional().catch(undefined),
+  presentation: z.object({ title: z.string().optional() }).passthrough().optional().catch(undefined),
 });
 const eventSchema = z.object({
   type: z.string(),
@@ -196,31 +199,40 @@ export const TURN_EVENT_TYPES = ["turn/started", "item/completed", "thread/compa
 export const COMMAND_EVENT_TYPES = ["item/started", "item/completed"] as const;
 
 /** bb compacts in a turn of its own, which the self-compact helper can request before mail reads the events. */
-export function lastTurnCommands(eventsNewestFirst: readonly unknown[]): FinishedCommand[] {
-  let commands: FinishedCommand[] = [];
-  let items = 0;
+export function lastTurnItems(eventsNewestFirst: readonly unknown[]): Item[] {
+  let finished: Item[] = [];
   let compaction = false;
   for (const raw of eventsNewestFirst) {
     const event = parseEvent(raw);
     if (event === null) continue;
     if (event.type === "thread/compacted") compaction = true;
-    else if (event.type === "item/completed" && event.item) {
-      items += 1;
-      if (event.item.type === "commandExecution" && event.item.command) commands.push({ command: event.item.command, exitCode: event.item.exitCode ?? null });
-    } else if (event.type === "turn/started") {
-      if (items > 0 && !compaction) return commands;
-      commands = [];
-      items = 0;
+    else if (event.type === "item/completed" && event.item) finished.push(event.item);
+    else if (event.type === "turn/started") {
+      if (finished.length > 0 && !compaction) return finished;
+      finished = [];
       compaction = false;
     }
   }
-  return commands;
+  return finished;
 }
 
 const SELF_COMPACT_RUN = /bb-compact\.mjs["']?\s+run\b/;
+const HERMES_SCHEDULED = /\*\*status:\*\*\s*scheduled\b/;
 
-export function launchedSelfCompaction(commands: readonly FinishedCommand[]): boolean {
-  return commands.some(({ command, exitCode }) => exitCode === 0 && SELF_COMPACT_RUN.test(command) && !command.includes("--no-resume"));
+/**
+ * Claude Code runs the helper as a command. Hermes calls its self_compact tool, which only schedules the compaction.
+ * With `resume: false` the child then waits for the user, so its completion is real.
+ */
+export function launchedSelfCompaction(items: readonly Item[]): boolean {
+  return items.some((item) =>
+    item.type === "commandExecution"
+      ? item.exitCode === 0 && item.command !== undefined && SELF_COMPACT_RUN.test(item.command) && !item.command.includes("--no-resume")
+      : item.type === "toolCall" &&
+        item.presentation?.title === "self_compact" &&
+        item.arguments?.action === "compact" &&
+        item.arguments.resume !== false &&
+        HERMES_SCHEDULED.test(item.result ?? ""),
+  );
 }
 
 export function latestTurnStart(eventsNewestFirst: readonly unknown[]): number | null {

@@ -88,7 +88,7 @@ sets them when the thread is created.
 | bb notice | What mail does |
 | --- | --- |
 | A thread became or stopped being this thread's child | Deletes it, whoever moved the thread |
-| A child finished a turn that ended only to start the self-compact helper, and the helper started | Deletes it, because the child resumes on its own |
+| A child finished a turn that ended only to start self-compaction, or bb's compaction turn after it | Deletes it, because the child resumes on its own |
 | A child finished, and this thread's `bb thread wait <child>` command already printed the child's reply | Deletes it |
 | A child finished while this thread's `bb thread wait <child>` command is still running | Holds it up to 30 seconds, then decides again |
 | A child finished with a reply over 4,000 characters | Replaces bb's truncated quote with one line: the reply's first line, its length, and `bb thread output <child>` |
@@ -147,10 +147,14 @@ A bb update can change any of these:
   `bb-compact.mjs run` without `--no-resume`. A launch counts only with exit
   code 0, which Claude Code records when it starts the helper in the
   background. A launch that fails in the foreground records another code.
+- Hermes's `self_compact` tool call, which bb records as a `toolCall` item
+  titled `self_compact` with `arguments.action` `compact` and a result that
+  contains `**status:** scheduled`. `resume: false` is not dropped, because
+  that child then waits for the user.
 - The `createdAt` time on thread events, which mail compares between the
   parent's wait and the child's turn.
 - That bb compacts in a turn of its own with a `thread/compacted` event and
-  no items.
+  no items other than Hermes's one agent message.
 - That nest stores a worker's logical parent as `logicalParentThreadId` in
   its thread metadata, and that one plugin may write another plugin's thread
   metadata, which `bb nest spawn --tag` uses.
