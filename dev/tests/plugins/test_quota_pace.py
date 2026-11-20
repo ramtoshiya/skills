@@ -25,6 +25,13 @@ for line in sys.stdin:
         print(json.dumps({"id": 2, "result": json.load(open(os.environ["FAKE_CODEX_RESPONSE"]))}), flush=True)
 """
 
+FAKE_QUOTIO = """#!/usr/bin/env python3
+import os, sys
+if not os.path.exists(os.environ["FAKE_QUOTIO_RESPONSE"]):
+    sys.exit(1)
+print(open(os.environ["FAKE_QUOTIO_RESPONSE"]).read())
+"""
+
 
 def iso(value):
     return value.isoformat().replace("+00:00", "Z")
@@ -63,6 +70,10 @@ class QuotaPaceTests(unittest.TestCase):
         codex = bin_dir / "codex"
         codex.write_text(FAKE_CODEX)
         codex.chmod(0o755)
+        quotio = bin_dir / "quotio-cli"
+        quotio.write_text(FAKE_QUOTIO)
+        quotio.chmod(0o755)
+        self.quotio_response = self.tmp / "quotio.json"
         self.codex_log = self.tmp / "codex.log"
         self.codex_response = self.tmp / "codex.json"
         self.codex_response.write_text(json.dumps({"rateLimitResetCredits": {"availableCount": 0, "credits": []}}))
@@ -70,6 +81,7 @@ class QuotaPaceTests(unittest.TestCase):
             **os.environ, "HOME": str(self.home), "XDG_STATE_HOME": str(self.tmp / "state"),
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
             "FAKE_CODEX_LOG": str(self.codex_log), "FAKE_CODEX_RESPONSE": str(self.codex_response),
+            "FAKE_QUOTIO_RESPONSE": str(self.quotio_response),
         }
         self.series = 0
 
@@ -298,6 +310,42 @@ class QuotaPaceTests(unittest.TestCase):
                                "--limited", f"codex={since}", "--limited", f"claude={since}")
         self.assertIsNone(report["route"]["side"])
         self.assertEqual(report["sides"]["codex"]["status"], "limited")
+
+    def test_limit_error_without_an_alternate_reading_leaves_the_role_blocked(self):
+        report = self.run_pace(bb_usage(codex=(97, later(40))), "--prefer", "codex", "--eligible", "claude,codex",
+                               "--limited", f"codex={iso(ago(0.5))}")
+        self.assertEqual(report["sides"]["claude"]["status"], "no-reading")
+        self.assertIsNone(report["route"]["side"])
+        self.assertNear(report["reset_options"]["codex"]["scheduled_reset"], later(40))
+
+    def test_full_default_without_an_alternate_reading_leaves_the_role_blocked(self):
+        report = self.run_pace(bb_usage(codex=(100, later(30))), "--prefer", "codex", "--eligible", "claude,codex")
+        self.assertIsNone(report["route"]["side"])
+
+    def test_quotio_cli_supplies_a_missing_alternate_reading(self):
+        self.quotio_response.write_text(json.dumps({
+            "accounts": [{"id": "raw-id-q", "provider_id": "claude", "email": "person@example.com"}],
+            "usage": [{"account_id": "raw-id-q", "metrics": [
+                {"display_name": "Weekly", "quota": {"used_percent": 40}, "resets_at": iso(later(90))},
+            ]}],
+        }))
+        report = self.run_pace(bb_usage(codex=(97, later(40))), "--prefer", "codex", "--eligible", "claude,codex",
+                               "--limited", f"codex={iso(ago(0.5))}")
+        self.assertEqual(report["sides"]["claude"]["used"], 40)
+        self.assertEqual(report["route"]["side"], "claude")
+        output = json.dumps(report)
+        for private in ("raw-id-q", "person@example.com"):
+            self.assertNotIn(private, output)
+
+    def test_a_shorter_limit_holds_until_the_reset_time_the_error_named(self):
+        usage = bb_usage(claude=(30, later(90)), codex=(10, later(40)))
+        args = ("--prefer", "claude", "--eligible", "claude,codex")
+        held = self.run_pace(usage, *args, "--limited", f"claude={iso(ago(1))}/{iso(later(2))}")
+        self.assertEqual(held["sides"]["claude"]["status"], "limited")
+        self.assertEqual(held["route"]["side"], "codex")
+        self.assertNear(held["reset_options"]["claude"]["scheduled_reset"], later(2))
+        reopened = self.run_pace(usage, *args, "--limited", f"claude={iso(ago(5))}/{iso(ago(0.1))}")
+        self.assertEqual(reopened["route"]["side"], "claude")
 
     def test_claude_reset_on_the_same_schedule_counts_as_renewal(self):
         reset = later(40)
