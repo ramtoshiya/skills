@@ -1,5 +1,6 @@
 import json
 import os
+import runpy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sqlite3
@@ -367,6 +368,16 @@ class QuotaPaceTests(unittest.TestCase):
                 self.assertEqual(report["sides"]["claude"]["used"], 40)
                 self.assertEqual(report["sides"]["claude"]["resets_at"], expected)
                 self.assertEqual(report["route"]["side"], "claude")
+
+    def test_timestamp_precision_and_invalid_values(self):
+        parse_time = runpy.run_path(str(SCRIPT))["parse_time"]
+        for text, microsecond in ((".1", 100000), (".97185", 971850), (".123456789", 123456)):
+            with self.subTest(fraction=text):
+                self.assertEqual(parse_time(f"2026-11-26T17:00:00{text}Z").microsecond, microsecond)
+        self.assertEqual(parse_time(0), datetime(1970, 1, 1, tzinfo=timezone.utc))
+        for text in ("2026-11-26T17:00:00.12345xZ", "2026-11-26T17:00:00.12345+garbage"):
+            with self.subTest(invalid=text), self.assertRaises(ValueError):
+                parse_time(text)
 
     def test_a_shorter_limit_holds_until_the_reset_time_the_error_named(self):
         usage = bb_usage(claude=(30, later(90)), codex=(10, later(40)))

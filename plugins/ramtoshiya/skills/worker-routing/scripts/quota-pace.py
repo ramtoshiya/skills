@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -72,6 +73,11 @@ class Side:
 def parse_time(value) -> datetime:
     if isinstance(value, (int, float)):
         return datetime.fromtimestamp(value, timezone.utc)
+    value = re.sub(
+        r"^(\d{4}-\d{2}-\d{2}.\d{2}:\d{2}:\d{2})\.(\d+)(?=Z|[+-]|$)",
+        lambda match: match[1] + "." + match[2][:6].ljust(6, "0"),
+        value,
+    )
     return datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value).astimezone(timezone.utc)
 
 
