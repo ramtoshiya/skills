@@ -591,7 +591,9 @@ It needs:
   `mise run agents:sync` fetches. The task stops and says so when one is
   missing.
 - bb with the [held-drafts](../bb-plugins/held-drafts/README.md) plugin, which
-  provides `bb draft create` for background skill-review proposals.
+  provides `bb draft create` for background skill-review proposals, and the
+  [nest](../bb-plugins/nest/README.md) plugin, which provides `bb nest spawn`
+  for workers.
 
 The profile gets every skill that Claude Code or Codex gets from
 `.claude-plugin/marketplace.json`: both of this repository's plugins,
@@ -822,7 +824,8 @@ draft. A gateway that stops during a review loses that review's proposals.
 The skill files never change in any of these cases.
 
 For other work, the `operator-handoff` skill tells Hermes how to write a brief
-and start the worker with `bb thread spawn --parent-self` in a new worktree.
+and start the worker with `bb nest spawn` from the
+[nest](../bb-plugins/nest/README.md) bb plugin in a new worktree.
 Hermes passes each worker, draft, and research thread a provider, model, and
 reasoning level chosen by the `worker-routing` policy, so bb does not fall
 back to its remembered or default settings. Drafts are held while the
@@ -858,7 +861,7 @@ token. It unsets `BB_PROJECT_ID`, `BB_ENVIRONMENT_ID`, and `BB_THREAD_STORAGE`,
 because the `bb` CLI finds them from the thread id.
 
 With `BB_THREAD_ID` set, `bb status` names the operator's thread. The
-`operator-handoff` skill starts each worker with `--parent-self` and parents
+`operator-handoff` skill starts each worker with `bb nest spawn` and parents
 each held draft with `bb thread update <id> --parent-thread "$BB_THREAD_ID"`,
 so the operator receives each worker's completion message.
 

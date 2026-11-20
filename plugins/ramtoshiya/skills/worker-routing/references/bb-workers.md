@@ -1,20 +1,31 @@
 # BB workers {:#bb-workers}
 
-Read this before your first `bb thread spawn`. [Worker routing](../SKILL.md) decides the row,
+Read this before your first worker thread. [Worker routing](../SKILL.md) decides the row,
 provider, and urgency. This file covers the commands.
 
 ## Start a worker {:#start}
 
-Start each worker as a child of your thread:
+Start each worker with `bb nest spawn` from the bb `nest` plugin. Run this as one shell command:
 
 ```sh
-bb thread spawn --project "$BB_PROJECT_ID" --parent-self --title "<role>" \
-  --provider <provider> --model "$(<skill-dir>/scripts/newest-model <family> <provider>)" \
-  --reasoning-level <effort> \
-  --environment "$BB_ENVIRONMENT_ID" --prompt-file - <<'BRIEF'
+read -r -d '' brief <<'BRIEF'
 <brief>
 BRIEF
+bb nest spawn --project "$BB_PROJECT_ID" --title "<role>" \
+  --provider <provider> --model "$(<skill-dir>/scripts/newest-model <family> <provider>)" \
+  --reasoning-level <effort> \
+  --environment "$BB_ENVIRONMENT_ID" --prompt "$brief"
 ```
+
+`bb nest spawn` makes the worker a child of your thread, as `bb thread spawn --parent-self` does.
+bb rejects that command below four thread levels, and `bb nest spawn` then runs the worker under
+the nearest ancestor that can take it and relays its results to you. Do not use
+`bb thread spawn --parent-self`. If `bb nest` is missing, say that the bb `nest` plugin is not
+installed and stop.
+
+- `read` exits 1 at the end of the heredoc, so do not join it to the next command with `&&`. Keep
+  the heredoc out of `$(...)`. `--prompt-file -` fails, because plugin commands cannot read
+  multi-line standard input. `--prompt-file <path>` works.
 
 - `--provider` is `claude-code` for a worker on Claude, and `codex` or `claudex` for a GPT worker
   on that route.
@@ -41,7 +52,9 @@ outside its reply. After it finishes, run `git status` to confirm that the check
 ## Wait for workers {:#wait}
 
 Wait for workers through parent notifications. When a worker's turn completes, fails, or stops on a
-question or an approval, BB sends a `[bb system]` message to your thread. The message steers into
+question or an approval, BB sends a `[bb system]` message to your thread. For a worker that
+`bb nest spawn` placed past the depth limit, the message starts with
+`[nest] Automatic report from your worker` instead and needs no reply. The message steers into
 your running turn, or starts a new turn when you are idle. Do other work meanwhile. When the next
 step needs a result and no other work is left, end your turn with one line that names the workers
 you are waiting for. Do not loop on `bb thread show` or `bb thread wait`.
@@ -51,7 +64,7 @@ When your own thread is a BB child, ending a turn reports that turn to your pare
 `bb thread wait <worker-id> --timeout <limit>` in the foreground, with a limit below your shell
 tool's timeout. Run it again only when it exits with code 2, which means it timed out.
 
-The `[bb system]` message quotes the worker's final reply up to 4,000 characters, and ends a longer
+Both messages quote the worker's final reply up to 4,000 characters, and ends a longer
 reply with `[... output truncated ...]`. Read the whole reply with `bb thread output <id>`.
 
 ## Change a running worker's model {:#move}
@@ -73,14 +86,15 @@ To move a worker to another provider, such as a GPT worker whose work became urg
 1. `bb thread stop <old-id>`. Leave the old thread idle and do not archive it yet.
 2. Read where it stands: `bb thread log <old-id>`, and `git status` and `git diff` in its
    environment.
-3. Start the new worker with `bb thread spawn` as above, on the target provider, with
+3. Start the new worker with `bb nest spawn` as above, on the target provider, with
    `--environment <old worker's environment id>` so it sees the same files. Its brief carries the
    original brief, the state reached, the uncommitted changes it now owns, and what is left.
 4. Move the old worker's children under the new one. List them with
-   `bb thread list --parent-thread <old-id> --json`, then run
-   `bb thread update <child-id> --parent-thread <new-id>` for each.
+   `bb nest list --parent <old-id> --json`. Run `bb thread update <child-id> --parent-thread <new-id>`
+   for each row whose `route` is `child`. A `relay` row cannot move. It keeps reporting to the old
+   worker, so read its result with `bb thread output <child-id>` and pass it to the new worker.
 5. Archive the old worker after the new one finishes. Archiving a thread also archives the children
-   still under it, so step 4 comes first.
+   still under it and its relay workers, so step 4 comes first.
 
 ## Gate fixer {:#gate-fixer}
 

@@ -108,8 +108,9 @@ The `worker-routing` skill is the one policy for choosing a worker's model.
   other side and the agent says so. Urgent work ignores the 90% rule.
 - In bb, the Claude Code provider setting `subagentsDisabled` hides the
   `Agent`, `Task`, and `ListAgents` tools. The agent then starts every worker
-  with `bb thread spawn` as a child thread, waits for bb's notification that
-  the child finished, and archives the child afterward. The `~/.bb/AGENTS.md`
+  with `bb nest spawn` from the [nest](../bb-plugins/nest/README.md) bb
+  plugin, which works at any thread depth. It waits for the notification that
+  the worker finished, and archives the worker afterward. The `~/.bb/AGENTS.md`
   file from [Machine setup](setup.md) lets it start those workers without
   asking you each time.
 

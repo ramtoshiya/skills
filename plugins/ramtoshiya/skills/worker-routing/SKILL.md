@@ -35,7 +35,7 @@ It sits in `scripts/` next to this file:
 ## Choose the row {:#models}
 
 Pass the row's model and effort every time you start a worker: `model` and `effort`
-on an Agent call, and `--model` and `--reasoning-level` on `bb thread spawn`.
+on an Agent call, and `--model` and `--reasoning-level` on `bb nest spawn`.
 Without them, an Agent subagent on another model runs at that model's saved effort,
 which may be `low`, and a BB worker runs on your own model and effort.
 
@@ -101,8 +101,8 @@ commands, including a model change that stays on one provider.
 ## Route and quota {:#worker-route}
 
 Start Claude workers with the Agent tool. In BB (`BB_THREAD_ID` is set) the thread
-tool `bb thread spawn` starts a worker as a separate thread on any provider BB
-offers. Use it for GPT workers, and for Claude workers when the Agent tool is
+tool `bb nest spawn` starts a worker as a separate thread on any provider BB
+offers, at any thread depth. Use it for GPT workers, and for Claude workers when the Agent tool is
 missing, as it is while BB's Claude Code setting `subagentsDisabled` is on. Read
 [BB workers](references/bb-workers.md) before your first spawn there. When no tool
 can start a worker, follow the calling workflow's fallback.

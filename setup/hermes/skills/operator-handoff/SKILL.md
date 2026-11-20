@@ -96,17 +96,22 @@ Find the owning project in `bb project list --json` by matching
 `references/new-project.md` first.
 
 ```sh
-bb thread spawn --json --project <project-id> --new-environment worktree \
-  --parent-self --provider <provider> --model <model-id> \
-  --reasoning-level <effort> --title "<short title>" --prompt-file - <<'EOF'
+read -r -d '' brief <<'EOF'
 <the complete brief>
 EOF
+bb nest spawn --json --project <project-id> --new-environment worktree \
+  --provider <provider> --model <model-id> \
+  --reasoning-level <effort> --title "<short title>" --prompt "$brief"
 ```
 
+- Run the `read` and `bb nest spawn` as one command. `read` exits 1 at the end
+  of the heredoc, so do not join them with `&&`. `bb nest spawn` cannot read
+  `--prompt-file -`.
 - Keep every heredoc quoted (`<<'EOF'`) and paste shared text in, because an
   unquoted heredoc runs backtick spans and `$(...)` as commands.
-- `--parent-self` reports completion here. With `BB_THREAD_ID` empty it cannot,
-  so tell the user.
+- `bb nest spawn` makes the worker report here, and the worker can start its
+  own workers at any depth. It needs `BB_THREAD_ID`. If that is empty, tell
+  the user.
 - Tell the user `@thread:<id>`, what will actually change, and any
   consequential difference from the request.
 - If `bb` fails, show the user the error and stop. Do not work around it.
@@ -190,8 +195,9 @@ prints nothing. Read a linked message (`#msg=<seq>`) with
    a claim back when the check covers less than the claim or the claim
    conflicts with what is known. Relay a claim you cannot test as unchecked.
 2. Query the child as Current state describes. List its descendants with
-   `bb thread list --parent-thread <threadId> --include-hidden --json`, repeat
-   down the tree, and query each unarchived descendant.
+   `bb nest list --parent <threadId> --json`, repeat down the tree, and query
+   each descendant it lists. It also lists workers that bb placed elsewhere
+   because of its thread depth limit.
 3. Keep the child unless every check passes:
    - The output reports the task finished, not a question, an approval request,
      a blocker, an error, or a partial result.
@@ -232,11 +238,12 @@ another model. When the conversation needs the next learning step, start it
 instead of asking whether to. Run it in the personal workspace:
 
 ```sh
-bb thread spawn --json --project {{RESEARCH_PROJECT}} --new-environment personal \
-  --parent-self --provider <provider> --model <model-id> \
-  --reasoning-level <effort> --title "<short title>" --prompt-file - <<'EOF'
+read -r -d '' brief <<'EOF'
 <the research brief>
 EOF
+bb nest spawn --json --project {{RESEARCH_PROJECT}} --new-environment personal \
+  --provider <provider> --model <model-id> \
+  --reasoning-level <effort> --title "<short title>" --prompt "$brief"
 ```
 
 The research brief starts with the same opening line as an implementation brief

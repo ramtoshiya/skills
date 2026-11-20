@@ -9,10 +9,12 @@ each spawn.
   follow assigns to workers, such as arena candidates, cross-model judges,
   reviewers, Comment Sicko, and research workers. Start only those roles, with
   the counts and model families the workflow sets.
-- Start each one with `bb thread spawn --parent-self` so it shows as a child of
-  your thread. Do not move a role to a hidden subagent instead. Archive each
-  worker with `bb thread archive <id>` after you have read its result.
-- While `bb thread spawn` works, do not replace separate workers with your own
+- Start each one with `bb nest spawn`, as the `nest` skill shows, so it reports
+  to your thread at any depth. Do not use `bb thread spawn --parent-self`,
+  which bb rejects below four thread levels. Do not move a role to a hidden
+  subagent instead. Archive each worker with `bb thread archive <id>` after you
+  have read its result.
+- While `bb nest spawn` works, do not replace separate workers with your own
   sequential passes. Use a workflow's sequential fallback only when spawning
   fails, and report the failure.
 - It covers spawning and talking to your own workers only. Messages to any other

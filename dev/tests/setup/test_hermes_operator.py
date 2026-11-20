@@ -722,14 +722,15 @@ class OperatorProfileSetupTests(unittest.TestCase):
                             sorted(runtime_skills(self.operator)["operator-handoff"][0].rglob("*.md")))
         commands = [block.split("\n```", 1)[0].replace("\\\n", " ")
                     for block in installed.split("```sh\n")[1:]]
-        starts = [c for c in commands if "bb draft create" in c or "bb thread spawn" in c]
+        starts = [c for c in commands if "bb draft create" in c or "bb nest spawn" in c]
         self.assertEqual(len(starts), 3)
         for command in starts:
             for flag in ("--provider <provider>", "--model <model-id>", "--reasoning-level <effort>"):
                 self.assertIn(flag, command)
-        workers = [c for c in starts if "bb thread spawn" in c and "--new-environment worktree" in c]
+        workers = [c for c in starts if "bb nest spawn" in c and "--new-environment worktree" in c]
         self.assertEqual(len(workers), 1)
-        self.assertIn("--parent-self", workers[0])
+        self.assertIn("read -r -d '' brief <<'EOF'", workers[0])
+        self.assertIn('--prompt "$brief"', workers[0])
 
     def test_bb_lists_what_the_operator_loads(self):
         self.setup_profile()

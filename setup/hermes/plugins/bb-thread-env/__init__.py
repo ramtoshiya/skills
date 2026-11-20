@@ -2,7 +2,7 @@
 
 bb starts `hermes acp` with BB_THREAD_ID, but that process only views the
 session. Tools run in the shared gateway, whose environment has no BB_*
-variables, so `bb status` and `bb thread spawn --parent-self` in the terminal
+variables, so `bb status` and `bb nest spawn` in the terminal
 had no thread. Several bb threads can share one checkout, so the working
 directory cannot name the thread.
 
