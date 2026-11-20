@@ -344,6 +344,23 @@ class QuotaPaceTests(unittest.TestCase):
         for private in ("raw-id-q", "person@example.com"):
             self.assertNotIn(private, output)
 
+    def test_empty_input_reads_fractional_utc_quotio_timestamps(self):
+        self.quotio_response.write_text(json.dumps({
+            "accounts": [{"id": "fixture", "provider_id": "claude"}],
+            "usage": [{"account_id": "fixture", "metrics": [
+                {"display_name": "Weekly", "quota": {"used_percent": 40},
+                 "resets_at": "2026-11-26T17:00:00.474Z"},
+            ]}],
+        }))
+        state = self.tmp / "state/ramtoshiya/quota-samples.json"
+        state.parent.mkdir(parents=True)
+        state.write_text(json.dumps({"claude": [[iso(ago(8).replace(microsecond=0)), 30,
+                                                 "2026-11-26T17:00:00Z"]], "codex": []}))
+        report = self.run_pace("", "--prefer", "claude", "--eligible", "claude,codex")
+        self.assertEqual(report["sides"]["claude"]["used"], 40)
+        self.assertEqual(report["sides"]["claude"]["resets_at"], "2026-11-26T17:00:00Z")
+        self.assertEqual(report["route"]["side"], "claude")
+
     def test_a_shorter_limit_holds_until_the_reset_time_the_error_named(self):
         usage = bb_usage(claude=(30, later(90)), codex=(10, later(40)))
         args = ("--prefer", "claude", "--eligible", "claude,codex")
