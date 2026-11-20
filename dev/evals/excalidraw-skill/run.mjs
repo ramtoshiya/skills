@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkSize, hardLimit } from "../../../tools/excalidraw-board/size-limit.mjs";
@@ -12,7 +12,10 @@ if (!skillPath || !outputPath || !["with_skill", "old_skill"].includes(configura
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const suite = JSON.parse(readFileSync(join(root, "plugins/ramtoshiya/skills/excalidraw-board/evals/evals.json"), "utf8"));
-const skill = readFileSync(resolve(skillPath), "utf8");
+const references = join(dirname(resolve(skillPath)), "references");
+const skill = [readFileSync(resolve(skillPath), "utf8"),
+	...(existsSync(references) ? readdirSync(references).filter(name => name.endsWith(".md")).sort() : [])
+		.map(name => `File references/${name}:\n${readFileSync(join(references, name), "utf8")}`)].join("\n\n");
 const output = resolve(outputPath);
 const schema = {
 	type: "object",
