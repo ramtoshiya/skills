@@ -163,13 +163,9 @@ export interface InboxMemory {
   releasable: ReadonlySet<string>;
 }
 
-function involvesUser(facts: DispatchFacts): boolean {
-  return facts.initiator === "user" || facts.queuedMessages.some((row) => row.initiator === "user");
-}
-
 export function inboxDecision(facts: DispatchFacts, mailPluginId: string, memory: InboxMemory): DispatchDecision {
   const { providerId } = facts.thread;
-  if (steersByCancel(providerId) && facts.attempt === "join-turn" && !involvesUser(facts)) {
+  if (steersByCancel(providerId) && facts.attempt === "join-turn") {
     return { action: "wait", reason: BUSY_REASON };
   }
   const waits = (row: QueueRow) =>
