@@ -47,15 +47,16 @@ from an agent thread shows `[bb message from thread:<id>]`, as
 ## Inbox and wake
 
 A message sent without `--wake` never starts a turn. bb keeps it queued and
-adds it to the recipient's next turn, whatever starts that turn. If the
-recipient is already working, the message joins the running turn, as any
-queued message does. A later message that does start a turn carries the
-held inbox messages with it.
+adds it to the recipient's next turn when that turn starts, whatever starts
+it. A message sent while the recipient is working waits for the turn after
+the current one, so it does not interrupt work in progress.
 
 Mail marks an inbox message with a plugin submission when it sends it, and
 remembers which queued messages it is holding. That memory lives in the
 running plugin. If mail restarts while a message is held, that message can
-start a turn when bb next tries to deliver it.
+start a turn when bb next tries to deliver it. Each time a thread starts a
+turn, mail asks bb which messages it holds for that thread and lets them
+join the turn.
 
 ## Selectors
 
@@ -87,7 +88,7 @@ sets them when the thread is created.
 | bb notice | What mail does |
 | --- | --- |
 | A thread became or stopped being this thread's child | Deletes it, whoever moved the thread |
-| A child finished a turn that ended only to start the self-compact helper | Deletes it, because the child resumes on its own |
+| A child finished a turn that ended only to start the self-compact helper, and the helper started | Deletes it, because the child resumes on its own |
 | A child finished, and this thread's `bb thread wait <child>` command already printed the child's reply | Deletes it |
 | A child finished while this thread's `bb thread wait <child>` command is still running | Holds it up to 30 seconds, then decides again |
 | A child finished with a reply over 4,000 characters | Replaces bb's truncated quote with one line: the reply's first line, its length, and `bb thread output <child>` |
@@ -96,7 +97,8 @@ sets them when the thread is created.
 `bb thread wait` alone prints only a status line, so its notice is still
 delivered. Run `bb thread wait <child> --timeout <seconds> && bb thread output <child>`
 to get the reply in the same command and let mail drop the notice. A wait that
-timed out or failed does not count.
+timed out or failed does not count, and neither does a wait that returned
+before the child's latest turn started.
 
 ## Limits
 
@@ -104,12 +106,18 @@ timed out or failed does not count.
   messages, and bb's notices arrive unchanged. Every check that throws lets
   the message through.
 - A completion notice changes in place when bb merges another child's outcome
-  into it, and bb emits no event for the merge. Mail reads the notice again
-  and deletes it only if it has not changed. A merge in the few milliseconds
-  between that read and the delete would lose the merged outcome.
+  into it, and bb emits no event for the merge. Before mail deletes or
+  replaces a notice, it reschedules the notice 30 seconds out, conditional on
+  the notice being unchanged. bb merges nothing into a rescheduled notice. If
+  the notice changed, mail leaves it alone. If mail fails after that, the
+  notice arrives when the 30 seconds end.
+- Mail decides from the child's latest reply and turn. If the child starts
+  another turn in the second before mail reads them, mail decides from that
+  turn.
 - The wait check reads at most the parent's last 100 events, and the
   compaction check reads the child's last 100 events. bb refuses a larger
-  read.
+  read. If the child's latest turn started more than 100 events ago, its
+  notice is delivered.
 - `parent=` follows nest's metadata. A thread moved with
   `bb thread update --parent-thread` keeps any logical parent nest recorded.
 
@@ -136,7 +144,10 @@ A bb update can change any of these:
 - The `commandExecution` items in thread events, with `command`, `exitCode`,
   and `aggregatedOutput`, which Claude Code and Codex threads both produce.
 - The command text `bb thread wait <child>`, and the self-compact helper's
-  `bb-compact.mjs run` without `--no-resume`.
+  `bb-compact.mjs run` without `--no-resume`, which exits 0 once the helper
+  has started.
+- The `createdAt` time on thread events, which mail compares between the
+  parent's wait and the child's turn.
 - That bb compacts in a turn of its own with a `thread/compacted` event and
   no items.
 - That nest stores a worker's logical parent as `logicalParentThreadId` in

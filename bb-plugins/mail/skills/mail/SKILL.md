@@ -1,19 +1,20 @@
 ---
 name: mail
-description: Message other bb threads with `bb mail send`, choosing per message whether to wake the recipient now or leave it in the inbox for its next turn, and reach many threads at once with `--where` selectors and tags. Use instead of `bb thread tell` whenever an agent messages another thread.
+description: Message other bb threads with `bb mail send`, choosing per message whether to wake the recipient now or leave it in the inbox for its next turn, and reach many threads at once with `--where` selectors and tags. Use whenever an agent messages another thread and the message should not wake it, or should reach several threads.
 ---
 
 # Message threads with mail {:#mail}
 
 Every message that starts a turn costs the recipient a turn. `bb mail send`
-lets you decide, per message, whether it is worth one. Use it instead of
-`bb thread tell`.
+lets you decide, per message, whether it is worth one. `bb thread tell` always
+wakes the recipient, as `bb mail send --wake` does.
 
 ## Wake or inbox {:#wake-or-inbox}
 
 Without `--wake` the message waits in the recipient's inbox. It starts no
-turn and arrives with the recipient's next turn. With `--wake` it starts a
-turn now.
+turn and arrives when the recipient's next turn starts. If the recipient is
+working, it waits for the turn after the current one. With `--wake` it
+starts a turn now, or joins the running one.
 
 ```sh
 bb mail send <thread> --message "FYI: main moved to 3d34cff."
@@ -74,10 +75,10 @@ bb mail tag ls <thread>
 With mail installed, bb does not wake you for:
 
 - a thread being moved under you or away from you,
-- a child's turn that ended only to self-compact,
+- a child's turn that ended only to start self-compaction,
 - a child's result that your `bb thread wait <child> && bb thread output <child>`
-  already printed. A bare `bb thread wait` prints no result, so that notice
-  still comes.
+  already printed during the child's latest turn. A bare `bb thread wait`
+  prints no result, so that notice still comes.
 
 A child reply over 4,000 characters arrives as one line with its first line,
 its length, and `bb thread output <child>`. Run that command to read it.

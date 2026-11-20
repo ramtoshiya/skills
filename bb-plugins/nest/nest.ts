@@ -163,14 +163,18 @@ export function mailTagKeys(tags: readonly string[]): Record<string, true> {
 
 const eventSchema = z.object({
   type: z.string(),
-  data: z.object({ item: z.object({ type: z.string(), command: z.string().optional() }).optional() }).passthrough().nullable().optional(),
+  data: z
+    .object({ item: z.object({ type: z.string(), command: z.string().optional(), exitCode: z.number().nullable().optional() }).optional() })
+    .passthrough()
+    .nullable()
+    .optional(),
 });
 
 export const TURN_EVENT_TYPES = ["turn/started", "item/completed", "thread/compacted"] as const;
 const SELF_COMPACT_RUN = /bb-compact\.mjs["']?\s+run\b/;
 
 export function endedToSelfCompact(eventsNewestFirst: readonly unknown[]): boolean {
-  let commands: string[] = [];
+  let launched = false;
   let items = 0;
   let compaction = false;
   for (const raw of eventsNewestFirst) {
@@ -180,13 +184,16 @@ export function endedToSelfCompact(eventsNewestFirst: readonly unknown[]): boole
     if (type === "thread/compacted") compaction = true;
     else if (type === "item/completed" && data?.item) {
       items += 1;
-      if (data.item.type === "commandExecution" && data.item.command) commands.push(data.item.command);
+      const { command, exitCode } = data.item;
+      if (data.item.type === "commandExecution" && exitCode === 0 && command && SELF_COMPACT_RUN.test(command) && !command.includes("--no-resume")) {
+        launched = true;
+      }
     } else if (type === "turn/started") {
       if (items > 0 && !compaction) break;
-      commands = [];
+      launched = false;
       items = 0;
       compaction = false;
     }
   }
-  return commands.some((command) => SELF_COMPACT_RUN.test(command) && !command.includes("--no-resume"));
+  return launched;
 }

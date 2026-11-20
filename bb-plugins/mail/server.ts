@@ -11,6 +11,7 @@ import {
   decideCompletion,
   inboxDecision,
   lastTurnCommands,
+  latestTurnStart,
   launchedSelfCompaction,
   logicalAncestors,
   nestLogicalParent,
@@ -36,6 +37,7 @@ const NEST_PLUGIN_ID = "nest";
 const HOLD_LIMIT_MS = 30_000;
 const POLL_MS = 1_000;
 const RELEASE_MARGIN_MS = 5_000;
+const CLAIM_MS = 30_000;
 
 function chunks<T>(items: readonly T[], size: number): T[][] {
   const result: T[][] = [];
@@ -61,12 +63,12 @@ export default function plugin(bb: BbPluginApi) {
     return work().catch((error: unknown) => bb.log.warn(`${label}: ${error instanceof Error ? error.message : String(error)}`));
   }
 
-  const heldRows = new Set<string>();
+  const inbox = { held: new Set<string>(), releasable: new Set<string>() };
 
   bb.experimental_hooks.on("message.dispatch", (context) => {
     try {
-      for (const row of context.queuedMessages) if (heldByMail(row, bb.pluginId)) heldRows.add(row.id);
-      return inboxDecision(context, bb.pluginId, heldRows);
+      for (const row of context.queuedMessages) if (heldByMail(row, bb.pluginId)) inbox.held.add(row.id);
+      return inboxDecision(context, bb.pluginId, inbox);
     } catch (error) {
       bb.log.warn(`message.dispatch: ${error instanceof Error ? error.message : String(error)}. Letting the message through.`);
       return { action: "proceed" };
@@ -76,6 +78,7 @@ export default function plugin(bb: BbPluginApi) {
   bb.events.on("thread.active", ({ thread }) =>
     guard("thread.active", async () => {
       const held = await bb.sdk.threads.queue.list({ waitHolder: `plugin:${bb.pluginId}`, threadId: thread.id });
+      for (const row of held) inbox.releasable.add(row.id);
       if (held.length > 0) await bb.experimental_hooks.recheck("message.dispatch");
     }),
   );
@@ -105,63 +108,78 @@ export default function plugin(bb: BbPluginApi) {
       childId,
       reply,
       compacting: launchedSelfCompaction(lastTurnCommands(childEvents)),
-      wait: waitState(commandRuns(parentEvents), childId, reply),
+      wait: waitState(commandRuns(parentEvents), childId, reply, latestTurnStart(childEvents)),
       holdExpired,
     };
   }
 
-  /** bb merges another child's outcome into a pending notice without an event, so mail acts only while the row is unchanged. */
+  /**
+   * bb merges another child's outcome into a pending notice without an event. Any update to the row stops bb from
+   * merging into it, so mail first updates the row against the `updatedAt` it decided on, and a failed update means
+   * the notice changed. A claimed row that mail fails to settle is delivered when the claim's send time comes.
+   */
+  async function claim(row: Row, sendAt: number): Promise<Row | null> {
+    try {
+      return await bb.sdk.threads.queuedMessages.update({ threadId: row.threadId, queuedMessageId: row.id, expectedUpdatedAt: row.updatedAt, sendAt });
+    } catch {
+      return null;
+    }
+  }
+
   async function settleCompletion(row: Row, childId: string, deadline: number, held: boolean): Promise<void> {
     const decision = decideCompletion(await completionFacts(row.threadId, childId, Date.now() >= deadline));
-    const now = await currentRow(row);
-    if (now === null) return;
-    const target = { threadId: now.threadId, queuedMessageId: now.id };
-    const note = `parent=${now.threadId} child=${childId} row=${now.id}`;
-    if (now.updatedAt !== row.updatedAt) {
-      if (held) await release(now);
-      bb.log.info(`completion delivered: bb merged more outcomes into the notice ${note}`);
+    const note = `parent=${row.threadId} child=${childId} row=${row.id}`;
+    if (decision.action === "deliver") {
+      if (held) await release(row);
+      bb.log.info(`completion delivered ${note}`);
       return;
     }
+    const claimed = decision.action === "hold" && held ? row : await claim(row, decision.action === "hold" ? deadline + RELEASE_MARGIN_MS : Date.now() + CLAIM_MS);
+    if (claimed === null) {
+      const now = held ? await currentRow(row) : null;
+      if (now !== null) await release(now);
+      bb.log.info(`completion delivered: the notice changed while mail decided ${note}`);
+      return;
+    }
+    const target = { threadId: claimed.threadId, queuedMessageId: claimed.id };
     switch (decision.action) {
-      case "deliver":
-        if (held) await release(now);
-        bb.log.info(`completion delivered ${note}`);
-        return;
       case "drop":
         await bb.sdk.threads.queuedMessages.delete(target);
         bb.log.info(`completion dropped (${decision.reason}) ${note}`);
         return;
       case "shorten":
+        try {
+          await bb.sdk.threads.send({
+            threadId: claimed.threadId,
+            mode: "auto",
+            senderThreadId: childId,
+            input: [{ type: "text", text: decision.text, mentions: [] }],
+          });
+        } catch (error) {
+          await release(claimed);
+          throw error;
+        }
         await bb.sdk.threads.queuedMessages.delete(target);
-        await bb.sdk.threads.send({
-          threadId: now.threadId,
-          mode: "auto",
-          senderThreadId: childId,
-          input: [{ type: "text", text: decision.text, mentions: [] }],
-        });
         bb.log.info(`completion shortened ${note}`);
         return;
-      case "hold": {
-        const holding = held
-          ? now
-          : await bb.sdk.threads.queuedMessages.update({ ...target, expectedUpdatedAt: now.updatedAt, sendAt: deadline + RELEASE_MARGIN_MS });
+      case "hold":
         if (!held) bb.log.info(`completion held while the parent's bb thread wait runs ${note}`);
-        setTimeout(() => void guard("completion hold", () => settleCompletion(holding, childId, deadline, true)), POLL_MS);
+        setTimeout(() => void guard("completion hold", () => settleCompletion(claimed, childId, deadline, true)), POLL_MS);
         return;
-      }
     }
   }
 
   const settling = new Set<string>();
 
   bb.events.on("message.dispatched", ({ entry }) => {
-    heldRows.delete(entry.id);
+    inbox.held.delete(entry.id);
+    inbox.releasable.delete(entry.id);
     settling.delete(entry.id);
   });
 
   bb.events.on("message.queued", ({ entry }) =>
     guard("message.queued", async () => {
-      if (heldByMail(entry, bb.pluginId)) heldRows.add(entry.id);
+      if (heldByMail(entry, bb.pluginId)) inbox.held.add(entry.id);
       const notice = classifyNotice(entry.systemNotice);
       switch (notice.kind) {
         case "other":

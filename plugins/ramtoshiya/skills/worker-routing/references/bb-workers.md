@@ -63,8 +63,8 @@ When your own thread is a BB child, ending a turn reports that turn to your pare
 `bb status` then shows a `Parent` and `Parent notifications: auto`. Keep the turn open instead. Run
 `bb thread wait <worker-id> --timeout <limit> && bb thread output <worker-id>` in the foreground,
 with a limit below your shell tool's timeout. Run it again only when it exits with code 2, which
-means it timed out. The `mail` bb plugin drops the completion message for a reply this command
-already printed.
+means it timed out. For a worker that is your bb child, the `mail` bb plugin drops the completion
+message for a reply this command already printed. A nest relay message still arrives.
 
 Both messages quote a final reply of up to 4,000 characters. A longer reply arrives as one line
 with its first line and length. Read it with `bb thread output <id>`.

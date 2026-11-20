@@ -53,7 +53,7 @@ take a child. That ancestor is only a host:
   characters. A longer reply arrives as one line with its first line, its
   length, and the `bb thread output` command that reads it.
 - A turn that ended only to start the self-compact helper
-  (`bb-compact.mjs run` without `--no-resume`) is not relayed, because the
+  (`bb-compact.mjs run` without `--no-resume`, exiting 0) is not relayed, because the
   worker resumes on its own. bb's compaction turn after it is not relayed
   either.
 
@@ -83,7 +83,7 @@ sidebar. It is off by default.
   running at that moment, for example during a bb restart, that result is not
   relayed. Read it with `bb thread output <worker>`.
 - The self-compaction check reads the worker's `commandExecution` events and
-  matches the helper's file name and `run` argument. If the events cannot be
+  matches the helper's file name, `run` argument, and exit code 0. If the events cannot be
   read, the result is relayed.
 - `--tag` writes into the mail plugin's thread metadata as the key
   `tag:<tag>`. If that write fails, the thread still starts and the output

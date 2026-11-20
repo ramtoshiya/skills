@@ -135,16 +135,18 @@ export function heldByMail(row: QueueRow, mailPluginId: string): boolean {
   return row.waitingOn?.kind === "plugin" && row.waitingOn.pluginId === mailPluginId;
 }
 
-/**
- * bb passes the submission marker only on a message's first attempt. A row that mail released into a running turn
- * comes back without mail's wait when that turn ends before it is delivered, so mail remembers the rows it held.
- */
-export function inboxDecision(facts: DispatchFacts, mailPluginId: string, heldRows: ReadonlySet<string>): DispatchDecision {
-  if (facts.attempt === "join-turn") return { action: "proceed" };
+export interface InboxMemory {
+  /** Rows mail held. bb passes the submission marker only on a message's first attempt, and a row released into a turn that ended first comes back without mail's wait. */
+  held: ReadonlySet<string>;
+  /** Held rows that were waiting when the recipient's current turn started, so they may join it. */
+  releasable: ReadonlySet<string>;
+}
+
+export function inboxDecision(facts: DispatchFacts, mailPluginId: string, memory: InboxMemory): DispatchDecision {
+  const waits = (row: QueueRow) =>
+    (heldByMail(row, mailPluginId) || memory.held.has(row.id)) && !(facts.attempt === "join-turn" && memory.releasable.has(row.id));
   const inbox =
-    facts.queuedMessages.length > 0
-      ? facts.queuedMessages.every((row) => heldByMail(row, mailPluginId) || heldRows.has(row.id))
-      : facts.experimental_submission?.pluginId === mailPluginId;
+    facts.queuedMessages.length > 0 ? facts.queuedMessages.every(waits) : facts.experimental_submission?.pluginId === mailPluginId;
   return inbox ? { action: "wait", reason: INBOX_REASON } : { action: "proceed" };
 }
 
@@ -180,21 +182,22 @@ const itemSchema = z.object({
 });
 const eventSchema = z.object({
   type: z.string(),
+  createdAt: z.number().optional(),
   data: z.object({ item: itemSchema.optional() }).passthrough().nullable().optional(),
 });
 type Item = z.infer<typeof itemSchema>;
 
-function parseEvent(raw: unknown): { type: string; item: Item | null } | null {
+function parseEvent(raw: unknown): { type: string; createdAt: number | null; item: Item | null } | null {
   const parsed = eventSchema.safeParse(raw);
-  return parsed.success ? { type: parsed.data.type, item: parsed.data.data?.item ?? null } : null;
+  return parsed.success ? { type: parsed.data.type, createdAt: parsed.data.createdAt ?? null, item: parsed.data.data?.item ?? null } : null;
 }
 
 export const TURN_EVENT_TYPES = ["turn/started", "item/completed", "thread/compacted"] as const;
 export const COMMAND_EVENT_TYPES = ["item/started", "item/completed"] as const;
 
 /** bb compacts in a turn of its own, which the self-compact helper can request before mail reads the events. */
-export function lastTurnCommands(eventsNewestFirst: readonly unknown[]): string[] {
-  let commands: string[] = [];
+export function lastTurnCommands(eventsNewestFirst: readonly unknown[]): FinishedCommand[] {
+  let commands: FinishedCommand[] = [];
   let items = 0;
   let compaction = false;
   for (const raw of eventsNewestFirst) {
@@ -203,7 +206,7 @@ export function lastTurnCommands(eventsNewestFirst: readonly unknown[]): string[
     if (event.type === "thread/compacted") compaction = true;
     else if (event.type === "item/completed" && event.item) {
       items += 1;
-      if (event.item.type === "commandExecution" && event.item.command) commands.push(event.item.command);
+      if (event.item.type === "commandExecution" && event.item.command) commands.push({ command: event.item.command, exitCode: event.item.exitCode ?? null });
     } else if (event.type === "turn/started") {
       if (items > 0 && !compaction) return commands;
       commands = [];
@@ -216,15 +219,27 @@ export function lastTurnCommands(eventsNewestFirst: readonly unknown[]): string[
 
 const SELF_COMPACT_RUN = /bb-compact\.mjs["']?\s+run\b/;
 
-export function launchedSelfCompaction(commands: readonly string[]): boolean {
-  return commands.some((command) => SELF_COMPACT_RUN.test(command) && !command.includes("--no-resume"));
+export function launchedSelfCompaction(commands: readonly FinishedCommand[]): boolean {
+  return commands.some(({ command, exitCode }) => exitCode === 0 && SELF_COMPACT_RUN.test(command) && !command.includes("--no-resume"));
 }
 
-export interface CommandRun {
+export function latestTurnStart(eventsNewestFirst: readonly unknown[]): number | null {
+  for (const raw of eventsNewestFirst) {
+    const event = parseEvent(raw);
+    if (event?.type === "turn/started") return event.createdAt;
+  }
+  return null;
+}
+
+export interface FinishedCommand {
   command: string;
-  running: boolean;
   exitCode: number | null;
+}
+
+export interface CommandRun extends FinishedCommand {
+  running: boolean;
   output: string;
+  endedAt: number | null;
 }
 
 export function commandRuns(eventsNewestFirst: readonly unknown[]): CommandRun[] {
@@ -235,9 +250,9 @@ export function commandRuns(eventsNewestFirst: readonly unknown[]): CommandRun[]
     if (!item || item.type !== "commandExecution" || item.command === undefined) continue;
     const known = runs.get(item.id);
     if (event.type === "item/completed") {
-      runs.set(item.id, { command: item.command, running: false, exitCode: item.exitCode ?? null, output: item.aggregatedOutput ?? "" });
+      runs.set(item.id, { command: item.command, running: false, exitCode: item.exitCode ?? null, output: item.aggregatedOutput ?? "", endedAt: event.createdAt });
     } else if (event.type === "item/started" && known === undefined) {
-      runs.set(item.id, { command: item.command, running: true, exitCode: null, output: "" });
+      runs.set(item.id, { command: item.command, running: true, exitCode: null, output: "", endedAt: null });
     }
   }
   return [...runs.values()];
@@ -251,13 +266,18 @@ function squash(text: string): string {
 
 const REPLY_PROBE_CHARS = 300;
 
-/** `bb thread wait` prints only a status line, so only a command that also prints the reply, such as `bb thread wait <id> && bb thread output <id>`, returned the result. */
-export function waitState(runsNewestFirst: readonly CommandRun[], childId: string, reply: string | null): WaitState {
+/**
+ * `bb thread wait` prints only a status line, so only a command that also prints the reply, such as
+ * `bb thread wait <id> && bb thread output <id>`, returned the result. It returned this turn's result only if it
+ * ended after the child's turn started.
+ */
+export function waitState(runsNewestFirst: readonly CommandRun[], childId: string, reply: string | null, childTurnStartedAt: number | null): WaitState {
   const wait = runsNewestFirst.find((run) => /\bbb thread wait\b/.test(run.command) && run.command.includes(childId));
   if (wait === undefined) return "not-returned";
   if (wait.running) return "running";
   const probe = squash(reply ?? "").slice(0, REPLY_PROBE_CHARS);
-  return wait.exitCode === 0 && probe !== "" && squash(wait.output).includes(probe) ? "returned" : "not-returned";
+  const thisTurn = childTurnStartedAt !== null && wait.endedAt !== null && wait.endedAt >= childTurnStartedAt;
+  return thisTurn && wait.exitCode === 0 && probe !== "" && squash(wait.output).includes(probe) ? "returned" : "not-returned";
 }
 
 export const BB_EXCERPT_LIMIT = 4000;
