@@ -132,6 +132,8 @@ export function waitingOutcome(interaction: { id: string; payload: unknown }): O
   };
 }
 
+export const NO_OP_MARKER = "[no-op]";
+
 export function relayText(workerId: string, outcome: Outcome): string {
   const worker = `@thread:${workerId}`;
   const header = `[nest] Automatic report from your worker ${worker}. It needs no reply or acknowledgement.`;

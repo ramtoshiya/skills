@@ -303,9 +303,12 @@ export function shortCompletion(childId: string, reply: string | null): string |
   return `[mail] @thread:${childId} completed with a ${text.length.toLocaleString("en-US")}-character reply that starts "${clipped}". Read it with \`bb thread output ${childId}\`.`;
 }
 
+/** A turn with nothing to report ends its reply with only this marker. A real result with a stray marker still arrives. */
+export const NO_OP_MARKER = "[no-op]";
+
 export type CompletionDecision =
   | { action: "deliver" }
-  | { action: "drop"; reason: "self-compaction" | "wait-returned" }
+  | { action: "drop"; reason: "self-compaction" | "no-op" | "wait-returned" }
   | { action: "hold" }
   | { action: "shorten"; text: string };
 
@@ -319,6 +322,7 @@ export interface CompletionFacts {
 
 export function decideCompletion(facts: CompletionFacts): CompletionDecision {
   if (facts.compacting) return { action: "drop", reason: "self-compaction" };
+  if (facts.reply?.trim() === NO_OP_MARKER) return { action: "drop", reason: "no-op" };
   if (facts.wait === "returned") return { action: "drop", reason: "wait-returned" };
   if (facts.wait === "running" && !facts.holdExpired) return { action: "hold" };
   const text = shortCompletion(facts.childId, facts.reply);

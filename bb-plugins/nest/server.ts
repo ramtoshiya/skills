@@ -5,6 +5,7 @@ import {
   UsageError,
   chooseRoute,
   endedToSelfCompact,
+  NO_OP_MARKER,
   mailTagKeys,
   parseEnvironment,
   parseMetadata,
@@ -117,6 +118,10 @@ export default function plugin(bb: BbPluginApi) {
     if (thread.originPluginId !== bb.pluginId) return;
     const metadata = parseMetadata(await bb.sdk.threads.getPluginMetadata({ threadId: thread.id }));
     if (metadata === null) return;
+    if (outcome.kind === "completed" && outcome.reply?.trim() === NO_OP_MARKER) {
+      bb.log.info(`Not relaying ${thread.id}: its reply is the ${NO_OP_MARKER} marker.`);
+      return;
+    }
     if (outcome.kind === "completed" && (await endedToSelfCompactSafely(thread.id))) {
       bb.log.info(`Not relaying ${thread.id}: its turn ended to self-compact.`);
       return;

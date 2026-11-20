@@ -57,6 +57,8 @@ take a child. That ancestor is only a host:
   `--no-resume`, exiting 0) for Claude Code, or a Hermes `self_compact` call that
   scheduled a compaction without `resume: false`. bb's compaction turn after it is not relayed
   either.
+- A turn whose whole reply is `[no-op]` (after trimming) is not relayed. A reply that
+  only contains the marker is relayed.
 
 `bb nest list --parent <thread>` lists a thread's unarchived workers from
 both routes. The `route` column shows `child` or `relay`.

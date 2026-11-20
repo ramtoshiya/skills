@@ -66,6 +66,10 @@ with a limit below your shell tool's timeout. Run it again only when it exits wi
 means it timed out. For a worker that is your bb child, the `mail` bb plugin drops the completion
 message for a reply this command already printed. A nest relay message still arrives.
 
+If a worker's notice leaves you nothing to report or do, reply with exactly `[no-op]`. The `mail` and
+`nest` bb plugins drop that turn's notice, so your own parent is not woken. Do not `bb thread tell` a
+worker to acknowledge it. Send progress to your parent with `bb mail send`, which does not wake it.
+
 Both messages quote a final reply of up to 4,000 characters. A longer reply arrives as one line
 with its first line and length. Read it with `bb thread output <id>`.
 

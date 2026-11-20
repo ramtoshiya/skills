@@ -90,6 +90,7 @@ sets them when the thread is created.
 | A thread became or stopped being this thread's child | Deletes it, whoever moved the thread |
 | A child finished a turn that ended only to start self-compaction, or bb's compaction turn after it | Deletes it, because the child resumes on its own |
 | A child finished, and this thread's `bb thread wait <child>` command already printed the child's reply | Deletes it |
+| A child finished a turn whose whole reply is `[no-op]` (after trimming) | Deletes it. A reply that merely contains the marker is delivered |
 | A child finished while this thread's `bb thread wait <child>` command is still running | Holds it up to 30 seconds, then decides again |
 | A child finished with a reply over 4,000 characters | Replaces bb's truncated quote with one line: the reply's first line, its length, and `bb thread output <child>` |
 | Any other child notice, a notice bb merged for several children, and environment directory notices | Leaves it alone |

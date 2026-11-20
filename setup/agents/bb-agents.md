@@ -30,6 +30,13 @@ that needs action now. For progress, a fact the recipient may use later, or
 recipient's inbox and arrives with its next turn. To reach several threads,
 use `bb mail send --where <selector>`. The `mail` skill has the selectors.
 
+When a child's notice or message leaves you nothing to report or do, reply with
+exactly `[no-op]` and nothing else. The mail and nest plugins drop that turn's
+completion notice, so your parent is not woken. Never send a thank-you or
+acknowledgement to a child with `bb thread tell`, because the two threads then
+wake each other without end. Send progress to your parent with `bb mail send`
+(inbox), not by ending a turn. Never end a real result with `[no-op]`.
+
 ## BB references and customizations {:#bb-references-customizations}
 
 Separate a thread or message reference from adjacent text with spaces, including
