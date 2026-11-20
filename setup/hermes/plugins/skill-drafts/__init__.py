@@ -444,8 +444,8 @@ def analyst_brief(sources: dict[str, Any], turn: Turn, packet: Path, parent: str
         "",
         "## Writing the draft",
         "",
-        f"Follow the sections \"Write the brief\", \"Choose the route\", and \"Create the draft\" of `{handoff}`, "
-        "the operator's own instructions, with these differences:",
+        f"Follow the sections \"Write the brief\" and \"Choose the route\" of `{handoff}` and \"Create the draft\" "
+        f"of `{handoff.parent / 'references/held-drafts.md'}`, the operator's own instructions, with these differences:",
         "",
         "- Route the coding worker by the `ramtoshiya:worker-routing` skill as the session that delegates.",
         "- Title it `Skill change: <skill names>`.",

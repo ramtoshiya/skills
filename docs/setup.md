@@ -625,7 +625,7 @@ Then it changes these files under `~/.hermes/profiles/operator/`:
 | Setting | Value | Effect |
 | --- | --- | --- |
 | `agent.disabled_toolsets` | `["file", "code_execution", "delegation"]` | No file reading or writing tools, no code execution, and no `delegate_task` subagents, which bb cannot show. The operator starts every worker as a bb thread instead. The terminal stays on for `bb` |
-| `skills.auto_load` | `["operator-handoff"]` | The handoff procedure is in every session |
+| `skills.auto_load` | `["operator-handoff"]` | The handoff procedure is in every session. Rarer cases, such as held drafts and replay experiments, are in the skill's `references/` files, which the operator opens with `skill_view` when the skill points to them |
 | `skills.project_discovery` | `true` | Project skills load only from trusted repositories |
 | `skills.external_dirs` | The `.hermes/skills` and `.agents/skills` folders of each repository in `skills.trusted_project_dirs` | Every operator session loads the trusted repositories' current skills, also in a bb worktree. Hermes alone loads them only when the session's nearest `.git` is the trusted checkout itself, and a worktree's branch can hold an older copy. After `hermes -p operator skills trust <path>` or `untrust`, run the task again |
 | `curator.enabled` | `false` | Hermes does not archive or merge skills on its own |

@@ -172,8 +172,8 @@ def install_skill(target: Path, source: Source, local_values: dict[str, str]) ->
     shutil.rmtree(target, ignore_errors=True)
     copy_tracked(source, target)
     if target.name in LOCAL_SKILLS:
-        skill = target / "SKILL.md"
-        skill.write_text(filled(skill.read_text(encoding="utf-8"), local_values), encoding="utf-8")
+        for page in sorted(target.rglob("*.md")):
+            page.write_text(filled(page.read_text(encoding="utf-8"), local_values), encoding="utf-8")
 
 
 def digest(entries: dict[str, bytes | str]) -> str:
@@ -193,7 +193,7 @@ def source_fingerprint(setup: Path, managed: dict[str, Source], packages: dict[s
     for name, source in managed.items():
         for path in tracked(source):
             data = (source.checkout / path).read_bytes()
-            if name in LOCAL_SKILLS and path.endswith("/SKILL.md"):
+            if name in LOCAL_SKILLS and path.endswith(".md"):
                 data = filled(data.decode("utf-8"), values).encode("utf-8")
             entries[f"skills/{name}/{Path(path).relative_to(source.path)}"] = data
     for plugin in PLUGINS:

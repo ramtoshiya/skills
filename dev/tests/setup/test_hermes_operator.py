@@ -717,7 +717,8 @@ class OperatorProfileSetupTests(unittest.TestCase):
         self.setup_profile()
         self.start_hermes()
 
-        installed = (runtime_skills(self.operator)["operator-handoff"][0] / "SKILL.md").read_text()
+        installed = "".join(page.read_text() for page in
+                            sorted(runtime_skills(self.operator)["operator-handoff"][0].rglob("*.md")))
         commands = [block.split("\n```", 1)[0].replace("\\\n", " ")
                     for block in installed.split("```sh\n")[1:]]
         starts = [c for c in commands if "bb draft create" in c or "bb thread spawn" in c]
@@ -902,9 +903,15 @@ class OperatorProfileSetupTests(unittest.TestCase):
                    if json.loads(line)["args"][:2] == ["thread", "spawn"]]
         self.assertEqual(option(spawn["args"], "--project"), "proj_personal")
         handoff = self.operator / "skills/operator-handoff/SKILL.md"
+        drafts = handoff.parent / "references/held-drafts.md"
         self.assertIn(f"`{handoff}`", spawn["stdin"])
+        self.assertIn(f"`{drafts}`", spawn["stdin"])
+        self.assertIn("## Create the draft", drafts.read_text())
         self.assertIn("--project proj_personal --new-environment personal", handoff.read_text())
-        self.assertNotIn("{{", handoff.read_text())
+        self.assertIn(f"`{self.repo.resolve()}/tools/claudex/README.md`",
+                      (handoff.parent / "references/replay.md").read_text())
+        for page in handoff.parent.rglob("*.md"):
+            self.assertNotIn("{{", page.read_text(), page)
 
 
 class SoulBlockTests(unittest.TestCase):
