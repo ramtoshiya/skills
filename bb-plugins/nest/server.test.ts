@@ -299,6 +299,18 @@ describe("relay", () => {
     expect(sent[0]?.text).toContain("Which option?");
   });
 
+  it("does not relay a turn whose reply is only the [no-op] marker", async () => {
+    const { harness, sent } = start();
+    await harness.emitThreadEvent("thread.idle", { thread: thread("L5"), lastAssistantText: "[no-op]\n" });
+    expect(sent).toEqual([]);
+  });
+
+  it("relays a reply that only contains the [no-op] marker", async () => {
+    const { harness, sent } = start();
+    await harness.emitThreadEvent("thread.idle", { thread: thread("L5"), lastAssistantText: "[no-op] FINAL: 3" });
+    expect(sent[0]?.text).toContain("FINAL: 3");
+  });
+
   it("relays a turn whose self-compact launch failed", async () => {
     const { harness, sent } = start();
     const failed = { type: "item/completed", data: { item: { type: "commandExecution", id: "c1", command: "node bb-compact.mjs run missing.md", exitCode: 1 } } };

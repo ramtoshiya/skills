@@ -382,6 +382,20 @@ describe("built-in notices", () => {
     expect(deleted).toEqual([]);
   });
 
+  describe("the [no-op] marker", () => {
+    it("drops a completion whose reply is only the marker", async () => {
+      const { notice, deleted } = start({ output: "  [no-op]\n", events: { WORKER: [message("m1"), turnStarted] } });
+      await notice(completed("WORKER"));
+      expect(deleted).toEqual(["row_1"]);
+    });
+
+    it.each(["[no-op] Merged abc123 into main.", "Done. [no-op]", "[no-op] [no-op]", "no-op"])("delivers the reply %j", async (reply) => {
+      const { notice, deleted } = start({ output: reply, events: { WORKER: [message("m1"), turnStarted] } });
+      await notice(completed("WORKER"));
+      expect(deleted).toEqual([]);
+    });
+  });
+
   it("drops a completion whose reply the parent's wait already printed", async () => {
     const { notice, deleted } = start({
       events: {
