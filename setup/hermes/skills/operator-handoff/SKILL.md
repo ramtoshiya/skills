@@ -207,6 +207,11 @@ prints nothing. Read a linked message (`#msg=<seq>`) with
    it with the worker's check, the user's goal, and what is already known. Send
    a claim back when the check covers less than the claim or the claim
    conflicts with what is known. Relay a claim you cannot test as unchecked.
+   A fix that a result proposes, such as a dogfood run's list of improvements,
+   rests on such claims: that the friction comes from where the fix acts, and
+   that what the fix adds or keeps is required. When the worker did not trace a
+   proposed fix to the code or logs behind its friction, start a review that
+   does before you decide or offer the fix.
 2. Query the child as Current state describes. List its descendants with
    `bb nest list --parent <threadId> --json`, repeat down the tree, and query
    each descendant it lists. It also lists workers that bb placed elsewhere
@@ -223,9 +228,9 @@ prints nothing. Read a linked message (`#msg=<seq>`) with
    it later, such as commits, links, and unfinished items. Say what each named
    part is, such as a script, an LLM, an external tool, or an OS feature, and
    where each step happens, such as which screen. Decide choices that lose
-   nothing and fixes for defects the result found, and report them. Continue
-   unfinished work within the brief as Complete approved work describes. When
-   the user judges the result by eye, show images as
+   nothing and fixes for defects whose cause step 1 confirmed, and report them.
+   Continue unfinished work within the brief as Complete approved work describes.
+   When the user judges the result by eye, show images as
    `references/show-images.md` describes.
 5. Run `bb thread archive <threadId>`, then check that
    `bb thread show <threadId> --json` sets `thread.archivedAt`. Archiving also
