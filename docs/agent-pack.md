@@ -102,15 +102,18 @@ The `worker-routing` skill is the one policy for choosing a worker's model.
   through the same provider.
 - bb reads weekly quota through its enabled Provider usage plugin's read-only
   `getUsage` RPC on the thread's machine, with a five-minute cache allowance.
-  Other hosts, and bb when that lookup is unavailable, use the `quotio-cli`
-  command from [Machine setup](setup.md). Before each batch of new workers,
-  the skill's `quota-pace.py` projects each side's weekly use at its
-  scheduled reset from the last 24 hours of use. New work moves to the other
-  side when the route's side is projected to run out and the other side is
-  projected to have room, or when the route's side hits a usage limit. No
-  fixed percentage moves work. A side that hit a limit comes back when a
-  reading shows its quota renewed. Urgent work moves only on a limit.
-- When no eligible side can take a worker, the agent reports the blocked
+  Before each batch of new workers, the skill's `quota-pace.py` reads any
+  side that lookup missed, or every side on other hosts, from the
+  `quotio-cli` command in [Machine setup](setup.md). It projects each side's
+  weekly use at its scheduled reset from the last 24 hours of use. New work
+  moves to the other side when the route's side is projected to run out and
+  the other side is projected to have room. It also moves when the route's
+  side hits a usage limit and the other side reads below 100%. No fixed
+  percentage moves work. A side that hit a limit comes back when a reading
+  shows its quota renewed, or after the reset time that a shorter limit's
+  error named. Urgent work moves only on a limit.
+- When no eligible side can take a worker, including when the other side
+  has no current reading after a limit, the agent reports the blocked
   role, each side's scheduled reset, and the reset credits it can see: Codex
   credits from `codex app-server`, and Claude offers only when you name
   them. Only you redeem a reset credit. The agent never redeems one.

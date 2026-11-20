@@ -21,26 +21,24 @@ printf '%s' "$usage" | uv run --no-project --managed-python --python '>=3.11' py
 The script reads the `Weekly limit` window of `claude-code` and `codex` when `usage.status` is
 `ok`. Urgent work reads the `Weekly · Fable` window itself to tell whether the Fable window is
 exhausted. Do not combine accounts from other machines. The RPC can be callable even when
-`bb plugin rpc list` does not advertise it. If it is unavailable or a side has no weekly figure,
-use Quotio for that side. Do not enable or install a plugin just for this lookup.
+`bb plugin rpc list` does not advertise it. Do not enable or install a plugin just for this lookup.
 
-Outside BB, or as that fallback, capture
-`quotio-cli usage --provider claude --provider codex --no-saved-accounts --format json` and pipe it
-into the script the same way. Keep stderr and the exit status separate. Valid figures still count
-when another provider makes the command exit nonzero. The script joins `usage[].account_id` to
-`accounts[].id` and reads the `Weekly` metric.
+For each eligible side that the piped output lacks, the script runs
+`quotio-cli usage --provider <side> --no-saved-accounts --format json` itself. It joins
+`usage[].account_id` to `accounts[].id`, reads the `Weekly` metric, and never prints the output.
+Outside BB, or when the RPC fails, run the script with no input (`</dev/null`) and it reads every
+eligible side this way. It looks for `quotio-cli` on PATH, at `~/.local/bin/quotio-cli`, and at
+`Contents/Helpers/quotio-cli` in `/Applications/Quotio.app` and `/Applications/Quotio Beta.app`.
+When it finds none, or the command returns no figure for a side, that side has no reading and a
+note says which. A side without a reading is never the fallback for a limited side.
 
-A failed lookup does not mean the CLI is missing. Check `command -v quotio-cli`, not `quotio`.
-On macOS, also check `~/.local/bin/quotio-cli` and the `Contents/Helpers/quotio-cli` executable in
-`/Applications/Quotio.app` and `/Applications/Quotio Beta.app`. Use an existing compatible helper by
-absolute path when PATH is the only problem. Name the Quotio app and this repository's
-`docs/setup.md` only when the launcher or app is actually missing.
-
-If the command ran but reported a cache, authentication, network, or provider error, report that
-category instead. For an explicit sandbox denial, use BB's host-side lookup first. If it cannot
-supply the figure, request the narrowly scoped access needed for one retry through the host's
-normal permission mechanism. Do not disable the sandbox globally or retry a denied permission.
-If access is unavailable, keep any valid figures and use the route-file fallback for the rest.
+A note that `quotio-cli` was not found does not prove that Quotio is absent. Name the Quotio app
+and this repository's `docs/setup.md` only when the launcher or app is actually missing. When the
+note names an exit status, run the same command alone and keep its output private. If it reported
+a cache, authentication, network, or provider error, report that category. For an explicit
+sandbox denial, use BB's host-side lookup first. If it cannot supply the figure, request the
+narrowly scoped access needed for one retry through the host's normal permission mechanism. Do not disable the sandbox globally or retry a denied permission.
+If access is unavailable, pipe in any valid figures and let the script report the rest.
 
 ## Pace {:#pace}
 

@@ -126,7 +126,9 @@ Pass these flags:
   family, may run on `claude` only. A seat outside the Claude family may run on
   `codex` only.
 - `--limited <side>=<time>`: once for each side that returned a usage-limit error
-  in this session, with the time of the error.
+  in this session, with the time of the error. When the error named a limit
+  shorter than the weekly one, such as Claude's session limit, and the reset time
+  it gave, pass `--limited <side>=<time>/<reset time>`.
 - `--work <percent>`: the work's expected share of the weekly quota, when the
   measured use of similar workers gives one.
 - `--no-spill`: for urgent work.
@@ -136,10 +138,13 @@ Start the worker on the side in `route.side`. The script decides as follows:
 - A side is limited when its weekly reading is 100%. After a usage-limit error it
   stays limited until a reading shows that its quota renewed: a window that started
   after the error, or a lower count on the same schedule. An available reset credit
-  is not renewal. When the error named a shorter limit, such as Claude's session
-  limit, drop its `--limited` flag after the reset time the error named.
-- When the default side is limited, the work goes to another eligible side that is
-  not limited, even when that side's pace is unknown.
+  is not renewal. A flag with a reset time keeps the side limited until that time
+  and expires after it.
+- When the default side is limited, the work goes to another eligible side whose
+  current reading is below 100%, even when that side's pace is unknown. A side
+  without a current reading has no confirmed capacity, so it does not take the
+  work. The script asks `quotio-cli` for any eligible side the piped lookup
+  missed before it decides.
 - When the default side's recent pace runs it out before its scheduled reset, the
   work moves only to another eligible side whose projection holds the work through
   its own reset. When both project running out, or the other side's pace is unknown,
@@ -147,7 +152,7 @@ Start the worker on the side in `route.side`. The script decides as follows:
 - No percentage of use moves work by itself. Without a projection, the work stays
   on the default side until a limit.
 
-When `route.side` is `null`, no eligible side can take the work. Do not start the
+When `route.side` is `null`, no eligible side has confirmed capacity. Do not start the
 worker and do not move it to another model family. Tell the user which role is
 blocked, each side's scheduled reset, and the `reset_options`. A calling workflow's
 own fallback for a seat that cannot run still applies.
@@ -159,7 +164,8 @@ credit's scope, claim deadline, how long its quota lasts once claimed, and the u
 the outage would cost. A reset that the user performs shows in the next reading.
 
 Say in your report when you switch, and quote the script's `why`. If the lookup or
-the script fails, report the specific failure once and route by the file and the
-usage-limit errors alone. When you compact, write the route, each side's status and
+the script fails, report the specific failure once and start new work on the default
+side. After a usage-limit error on that side, the role is blocked, as when
+`route.side` is `null`, because no reading confirms the other side's capacity. When you compact, write the route, each side's status and
 figures from the last report, each `--limited` flag, and which work is urgent into
 the handoff note.

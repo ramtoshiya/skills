@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -24,6 +25,12 @@ HISTORY_METRICS = {
     "895bb5f0186a2900bda8665dac046ba0cca7c482d5a59b80f3f02405b7da3aec": "claude",
     "codex-weekly": "codex",
 }
+QUOTIO_CLI = (
+    "quotio-cli",
+    "~/.local/bin/quotio-cli",
+    "/Applications/Quotio.app/Contents/Helpers/quotio-cli",
+    "/Applications/Quotio Beta.app/Contents/Helpers/quotio-cli",
+)
 OFFER_SCOPES = {
     "claude-weekly": "Claude weekly limit. The reset keeps the existing weekly schedule",
     "claude-fable": "Claude Fable models only. Does not restore the weekly limit",
@@ -43,11 +50,18 @@ class Reading:
     fable_resets_at: datetime | None = None
 
 
+@dataclass(frozen=True)
+class Limit:
+    since: datetime
+    until: datetime | None
+
+
 @dataclass
 class Side:
     status: str
     used: float | None = None
     resets_at: str | None = None
+    limit_resets_at: str | None = None
     pace_per_hour: float | None = None
     pace_hours: float | None = None
     pace_source: str | None = None
@@ -114,7 +128,7 @@ def readings_from_quotio(data, now) -> dict[str, list[Reading]]:
 def current_readings(text: str, now) -> tuple[dict[str, Reading], list[str]]:
     notes = []
     if not text.strip():
-        return {}, ["Standard input had no quota lookup output. Run the lookup alone to see its error."]
+        return {}, []
     try:
         data = json.loads(text)
     except ValueError:
@@ -127,6 +141,26 @@ def current_readings(text: str, now) -> tuple[dict[str, Reading], list[str]]:
         elif readings:
             notes.append(f"The lookup returned {len(readings)} {side} accounts. Their readings are ignored.")
     return current, notes
+
+
+def read_quotio(sides: list[str], now) -> tuple[dict[str, Reading], str | None]:
+    cli = next(filter(None, (shutil.which(os.path.expanduser(c)) for c in QUOTIO_CLI)), None)
+    if cli is None:
+        return {}, f"quotio-cli was not found, so {', '.join(sides)} has no reading"
+    providers = [flag for side in sides for flag in ("--provider", side)]
+    try:
+        result = subprocess.run(
+            [cli, "usage", *providers, "--no-saved-accounts", "--format", "json"],
+            capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return {}, f"quotio-cli failed with {type(error).__name__}, so {', '.join(sides)} has no reading"
+    readings, _ = current_readings(result.stdout, now)
+    found = {side: readings[side] for side in sides if side in readings}
+    missing = [side for side in sides if side not in found]
+    if missing:
+        return found, f"quotio-cli exited {result.returncode} without a reading for {', '.join(missing)}"
+    return found, None
 
 
 def history_samples(path: Path, now) -> tuple[dict[str, dict[int, list[Sample]]], str | None]:
@@ -237,9 +271,15 @@ def recovered(samples: list[Sample], reading: Sample, since: datetime) -> bool:
     return bool(before) and same_window(before[-1], reading) and reading.used < before[-1].used - ROUNDING
 
 
-def forecast(reading: Sample | None, sources: list[tuple[str, list[Sample]]], limited_since, now) -> Side:
-    if reading is None and limited_since is not None:
-        return Side("limited", note=f"A usage limit was hit at {iso(limited_since)} and no reading since shows the quota renewed")
+def forecast(reading: Sample | None, sources: list[tuple[str, list[Sample]]], limit: Limit | None, now) -> Side:
+    if limit is not None and limit.until is not None:
+        return Side(
+            "limited", used=reading.used if reading else None,
+            resets_at=iso(reading.resets_at) if reading else None, limit_resets_at=iso(limit.until),
+            note=f"A usage limit was hit at {iso(limit.since)}. The error named its reset at {iso(limit.until)}",
+        )
+    if reading is None and limit is not None:
+        return Side("limited", note=f"A usage limit was hit at {iso(limit.since)} and no reading since shows the quota renewed")
     if reading is None:
         return Side("no-reading", note="No current weekly reading")
     side = Side("unknown", used=reading.used, resets_at=iso(reading.resets_at))
@@ -247,9 +287,9 @@ def forecast(reading: Sample | None, sources: list[tuple[str, list[Sample]]], li
     if reading.used >= 100:
         side.status, side.note = "limited", "The weekly reading is at 100%"
         return side
-    if limited_since is not None and not recovered(known, reading, limited_since):
+    if limit is not None and not recovered(known, reading, limit.since):
         side.status = "limited"
-        side.note = f"A usage limit was hit at {iso(limited_since)} and no reading since shows the quota renewed"
+        side.note = f"A usage limit was hit at {iso(limit.since)} and no reading since shows the quota renewed"
         return side
     if reading.resets_at <= now:
         side.note = "The reading's scheduled reset has passed"
@@ -287,10 +327,16 @@ def choose(prefer: str, eligible: list[str], sides: dict[str, Side], work: float
                     )
             return home, f"{home} projects running out, and no other eligible side projects room through its reset"
         return home, f"{home} is the default side and has capacity"
-    if open_sides:
-        alternative = open_sides[0]
-        return alternative, f"{home} is limited. {alternative} has capacity, status {sides[alternative].status}"
-    return None, "Every eligible side is limited. Report the outage, the scheduled resets, and the reset options"
+    observed = [s for s in open_sides if sides[s].used is not None]
+    if observed:
+        alternative = observed[0]
+        return alternative, (
+            f"{home} is limited. {alternative} reads {sides[alternative].used}%, status {sides[alternative].status}"
+        )
+    return None, (
+        f"{home} is limited, and no other eligible side has a current reading below 100%. "
+        "Report the outage, the scheduled resets, and the reset options"
+    )
 
 
 def read_codex_credits() -> tuple[list[dict], str | None]:
@@ -346,8 +392,9 @@ def reset_options(eligible, sides, readings, offers, now) -> dict:
         f = sides[side]
         if f.status not in ("limited", "runs-out"):
             continue
-        reset = parse_time(f.resets_at) if f.resets_at else None
-        entry: dict = {"scheduled_reset": f.resets_at or "unknown, no current reading"}
+        scheduled = f.limit_resets_at or f.resets_at
+        reset = parse_time(scheduled) if scheduled else None
+        entry: dict = {"scheduled_reset": scheduled or "unknown, no current reading"}
         if reset is not None:
             start = now if f.status == "limited" else max(now, parse_time(f.runs_out_at))
             outage_hours = max(0.0, (reset - start).total_seconds() / 3600)
@@ -387,7 +434,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Pick the side for new workers from recent weekly quota use.")
     parser.add_argument("--prefer", choices=SIDES, required=True)
     parser.add_argument("--eligible", required=True)
-    parser.add_argument("--limited", action="append", default=[], metavar="SIDE=TIME")
+    parser.add_argument("--limited", action="append", default=[], metavar="SIDE=TIME[/RESET]")
     parser.add_argument("--work", type=float, default=0.0, metavar="PERCENT")
     parser.add_argument("--no-spill", action="store_true")
     parser.add_argument("--offer", action="append", default=[], metavar="KIND=CLAIM_BY")
@@ -395,12 +442,16 @@ def main(argv=None) -> int:
     eligible = [s for s in args.eligible.split(",") if s]
     if not eligible or any(s not in SIDES for s in eligible):
         parser.error("--eligible takes claude, codex, or both, separated by a comma")
+    now = datetime.now(timezone.utc)
     limited = {}
     for item in args.limited:
-        side, _, since = item.partition("=")
+        side, _, times = item.partition("=")
         if side not in SIDES:
-            parser.error("--limited takes SIDE=TIME")
-        limited[side] = parse_time(since)
+            parser.error("--limited takes SIDE=TIME or SIDE=TIME/RESET")
+        since, _, until = times.partition("/")
+        limit = Limit(parse_time(since), parse_time(until) if until else None)
+        if limit.until is None or limit.until > now:
+            limited[side] = limit
     offers = []
     for item in args.offer:
         kind, _, claim_by = item.partition("=")
@@ -408,8 +459,13 @@ def main(argv=None) -> int:
             parser.error(f"--offer kinds are {', '.join(OFFER_SCOPES)}")
         offers.append((kind, parse_time(claim_by)))
 
-    now = datetime.now(timezone.utc)
     readings, notes = current_readings(sys.stdin.read(), now)
+    missing = [side for side in eligible if side not in readings]
+    if missing:
+        found, quotio_note = read_quotio(missing, now)
+        readings.update(found)
+        if quotio_note:
+            notes.append(quotio_note)
     history, history_note = history_samples(
         Path.home() / "Library/Application Support/quotio/accounts.history/quota.sqlite", now
     )
