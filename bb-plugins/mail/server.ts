@@ -30,7 +30,6 @@ type Row = Awaited<ReturnType<Sdk["threads"]["queuedMessages"]["list"]>>[number]
 
 const PAGE = 200;
 const NEST_PLUGIN_ID = "nest";
-/** How long a completion notice waits for the parent's running `bb thread wait` to return before bb delivers it. */
 const HOLD_LIMIT_MS = 30_000;
 const POLL_MS = 1_000;
 const RELEASE_MARGIN_MS = 5_000;
@@ -59,8 +58,6 @@ export default function plugin(bb: BbPluginApi) {
     return work().catch((error: unknown) => bb.log.warn(`${label}: ${error instanceof Error ? error.message : String(error)}`));
   }
 
-  // Inbox: hold mail's messages instead of starting a turn, and let them join the recipient's next turn.
-
   bb.experimental_hooks.on("message.dispatch", (context) => {
     try {
       return inboxDecision(context, bb.pluginId);
@@ -77,8 +74,6 @@ export default function plugin(bb: BbPluginApi) {
     }),
   );
 
-  // Built-in notices
-
   async function currentRow(row: Row): Promise<Row | null> {
     const rows = await bb.sdk.threads.queuedMessages.list({ threadId: row.threadId });
     return rows.find((candidate) => candidate.id === row.id) ?? null;
@@ -93,7 +88,7 @@ export default function plugin(bb: BbPluginApi) {
     });
   }
 
-  async function completionFacts(parentId: string, childId: string, final: boolean): Promise<CompletionFacts> {
+  async function completionFacts(parentId: string, childId: string, holdExpired: boolean): Promise<CompletionFacts> {
     const [childEvents, parentEvents, output] = await Promise.all([
       bb.sdk.threads.events.list({ threadId: childId, order: "desc", limit: String(PAGE), types: [...TURN_EVENT_TYPES] }),
       bb.sdk.threads.events.list({ threadId: parentId, order: "desc", limit: String(PAGE), types: [...COMMAND_EVENT_TYPES] }),
@@ -105,14 +100,11 @@ export default function plugin(bb: BbPluginApi) {
       reply,
       compacting: launchedSelfCompaction(lastTurnCommands(childEvents)),
       wait: waitState(commandRuns(parentEvents), childId, reply),
-      final,
+      holdExpired,
     };
   }
 
-  /**
-   * `row` is the notice as mail last saw it. bb merges a second child's outcome into a pending notice without an event,
-   * so mail acts only while the row is unchanged and otherwise leaves bb's merged notice to be delivered.
-   */
+  /** bb merges another child's outcome into a pending notice without an event, so mail acts only while the row is unchanged. */
   async function settleCompletion(row: Row, childId: string, deadline: number, held: boolean): Promise<void> {
     const decision = decideCompletion(await completionFacts(row.threadId, childId, Date.now() >= deadline));
     const now = await currentRow(row);
@@ -170,8 +162,6 @@ export default function plugin(bb: BbPluginApi) {
       }
     }),
   );
-
-  // Recipients
 
   async function unarchivedThreads(): Promise<ListedThread[]> {
     const all: ListedThread[] = [];

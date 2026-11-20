@@ -6,8 +6,6 @@ type Host = ReturnType<typeof createFakePluginHost>;
 type Row = ReturnType<typeof makeQueueEntry>;
 type Sent = { threadId: string; senderThreadId?: string; originPluginId?: string; text: string };
 
-// ROOT ─ LEAD ─ WORKER (bb child) ─ RELAY (nest placed it under LEAD, logical parent WORKER)
-// OTHER is in a second project. DRAFT has not sent its first message. GONE is archived.
 const THREADS = {
   ROOT: { projectId: "proj_a", parentThreadId: null, providerId: "claude-code", status: "idle" },
   LEAD: { projectId: "proj_a", parentThreadId: "ROOT", providerId: "claude-code", status: "active" },

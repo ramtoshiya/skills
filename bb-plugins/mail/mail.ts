@@ -2,8 +2,6 @@ import { z } from "zod";
 
 export class UsageError extends Error {}
 
-// Tags and selectors
-
 export const FACT_KEYS = ["project", "parent", "env", "branch", "provider", "status"] as const;
 export type FactKey = (typeof FACT_KEYS)[number];
 
@@ -25,7 +23,6 @@ export function parseTag(raw: string): string {
 
 export type Term = { kind: "fact"; key: FactKey; value: string } | { kind: "tag"; tag: string };
 
-/** Every term must match. Terms come from repeated --where values, each of which may hold several space-separated terms. */
 export function parseSelector(values: readonly string[]): Term[] {
   const words = values.flatMap((value) => value.split(/\s+/)).filter((word) => word !== "");
   if (words.length === 0) throw new UsageError("--where needs at least one term, such as project=<id> or role=reviewer.");
@@ -47,7 +44,6 @@ export interface Candidate {
   branch: string | null;
   providerId: string;
   status: string;
-  /** Logical ancestors, nearest first: nest's logical parent where nest placed the thread, otherwise bb's parent. */
   ancestors: readonly string[];
   tags: readonly string[];
 }
@@ -74,7 +70,6 @@ export interface Recipients {
   skipped: Array<{ id: string; reason: SkipReason }>;
 }
 
-/** `candidates` are unarchived threads. A `pending` thread has not sent its first message, as a held draft. */
 export function chooseRecipients(candidates: readonly Candidate[], terms: readonly Term[], senderId: string | undefined): Recipients {
   const result: Recipients = { to: [], skipped: [] };
   for (const candidate of candidates) {
@@ -98,8 +93,6 @@ export function logicalAncestors(threadId: string, parentOf: ReadonlyMap<string,
   return ancestors;
 }
 
-// Metadata. Mail keeps one key per tag in its thread metadata, so concurrent tag edits never overwrite each other.
-
 const TAG_KEY_PREFIX = "tag:";
 
 export function tagKey(tag: string): string {
@@ -121,8 +114,6 @@ export function nestLogicalParent(metadata: unknown): string | null {
   return parsed.success ? parsed.data.logicalParentThreadId : null;
 }
 
-// Inbox. A message mail sends is an inbox message: it never starts a turn and joins the recipient's next one.
-
 export const INBOX_REASON = "Mail inbox: delivered when this thread's next turn starts.";
 
 export type DispatchDecision = { action: "proceed" } | { action: "wait"; reason: string };
@@ -142,8 +133,6 @@ export function inboxDecision(facts: DispatchFacts, mailPluginId: string): Dispa
   return { action: "wait", reason: INBOX_REASON };
 }
 
-// Built-in notices
-
 const REPARENT_KINDS = new Set(["ownership-assigned", "ownership-removed", "ownership-batch"]);
 
 const noticeSchema = z.object({
@@ -156,7 +145,6 @@ const noticeSchema = z.object({
 
 export type NoticeClass = { kind: "reparent" } | { kind: "completion"; childId: string } | { kind: "other" };
 
-/** A completion notice that bb merged for several children is left alone. */
 export function classifyNotice(systemNotice: unknown): NoticeClass {
   const parsed = noticeSchema.safeParse(systemNotice);
   if (!parsed.success) return { kind: "other" };
@@ -186,14 +174,10 @@ function parseEvent(raw: unknown): { type: string; item: Item | null } | null {
   return parsed.success ? { type: parsed.data.type, item: parsed.data.data?.item ?? null } : null;
 }
 
-/** The event types the notice checks read. Pass them as the `types` filter, newest first. */
 export const TURN_EVENT_TYPES = ["turn/started", "item/completed", "thread/compacted"] as const;
 export const COMMAND_EVENT_TYPES = ["item/started", "item/completed"] as const;
 
-/**
- * Commands of the thread's latest turn that was not a compaction, from events newest first. bb compacts in a turn of
- * its own, and the self-compact helper can request it before mail reads the events.
- */
+/** bb compacts in a turn of its own, which the self-compact helper can request before mail reads the events. */
 export function lastTurnCommands(eventsNewestFirst: readonly unknown[]): string[] {
   let commands: string[] = [];
   let items = 0;
@@ -217,7 +201,6 @@ export function lastTurnCommands(eventsNewestFirst: readonly unknown[]): string[
 
 const SELF_COMPACT_RUN = /bb-compact\.mjs["']?\s+run\b/;
 
-/** The self-compact skill ends its turn right after it starts the helper. With --no-resume the turn ends on a question instead. */
 export function launchedSelfCompaction(commands: readonly string[]): boolean {
   return commands.some((command) => SELF_COMPACT_RUN.test(command) && !command.includes("--no-resume"));
 }
@@ -229,7 +212,6 @@ export interface CommandRun {
   output: string;
 }
 
-/** Command runs, newest first, from item events newest first. */
 export function commandRuns(eventsNewestFirst: readonly unknown[]): CommandRun[] {
   const runs = new Map<string, CommandRun>();
   for (const raw of eventsNewestFirst) {
@@ -254,11 +236,7 @@ function squash(text: string): string {
 
 const REPLY_PROBE_CHARS = 300;
 
-/**
- * Whether the parent's latest `bb thread wait <child>` command printed the child's reply. `bb thread wait` alone prints
- * only a status line, so only a command that also reads the output, such as `bb thread wait <id> && bb thread output <id>`,
- * returns the result.
- */
+/** `bb thread wait` prints only a status line, so only a command that also prints the reply, such as `bb thread wait <id> && bb thread output <id>`, returned the result. */
 export function waitState(runsNewestFirst: readonly CommandRun[], childId: string, reply: string | null): WaitState {
   const wait = runsNewestFirst.find((run) => /\bbb thread wait\b/.test(run.command) && run.command.includes(childId));
   if (wait === undefined) return "not-returned";
@@ -267,7 +245,6 @@ export function waitState(runsNewestFirst: readonly CommandRun[], childId: strin
   return wait.exitCode === 0 && probe !== "" && squash(wait.output).includes(probe) ? "returned" : "not-returned";
 }
 
-/** bb quotes at most this many characters of a child's reply in its completion notice. */
 export const BB_EXCERPT_LIMIT = 4000;
 const FIRST_LINE_LIMIT = 200;
 
@@ -290,14 +267,13 @@ export interface CompletionFacts {
   reply: string | null;
   compacting: boolean;
   wait: WaitState;
-  /** The hold limit has passed, so a wait still running counts as not returned. */
-  final: boolean;
+  holdExpired: boolean;
 }
 
 export function decideCompletion(facts: CompletionFacts): CompletionDecision {
   if (facts.compacting) return { action: "drop", reason: "self-compaction" };
   if (facts.wait === "returned") return { action: "drop", reason: "wait-returned" };
-  if (facts.wait === "running" && !facts.final) return { action: "hold" };
+  if (facts.wait === "running" && !facts.holdExpired) return { action: "hold" };
   const text = shortCompletion(facts.childId, facts.reply);
   return text === null ? { action: "deliver" } : { action: "shorten", text };
 }

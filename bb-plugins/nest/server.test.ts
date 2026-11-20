@@ -8,8 +8,6 @@ type Sent = { threadId: string; senderThreadId?: string; mode: string; text: str
 
 const BRIEF = "Line one of the brief.\nLine two with `backticks` and $(not a command).";
 
-// L1 is the root. bb lets L1 to L3 take children, so L4 is the first thread that cannot.
-// L5 was started by L4 through nest and therefore sits directly under L3.
 const THREADS = {
   L1: { parentThreadId: null, canSpawnChild: true },
   L2: { parentThreadId: "L1", canSpawnChild: true },

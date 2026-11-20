@@ -49,6 +49,7 @@ function usage<T>(parse: () => T): T {
 }
 
 export default function plugin(bb: BbPluginApi) {
+  /** bb accepts a child only under a thread whose `canSpawnChild` is true. */
   async function lineage(caller: Thread): Promise<ThreadLink[]> {
     const links: ThreadLink[] = [];
     let thread: Thread | null = caller;

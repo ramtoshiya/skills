@@ -71,10 +71,6 @@ export type Route =
   | { kind: "child"; parentThreadId: string }
   | { kind: "relay"; hostThreadId: string; logicalParentThreadId: string };
 
-/**
- * `lineage` is the caller followed by its ancestors, nearest first. bb accepts a child only under a thread whose
- * `canSpawnChild` is true, so a caller that cannot take one borrows the nearest ancestor that can.
- */
 export function chooseRoute(lineage: readonly ThreadLink[]): Route {
   const [caller, ...ancestors] = lineage;
   if (!caller) throw new Error("chooseRoute needs the caller thread");
@@ -154,7 +150,6 @@ export function relayText(workerId: string, outcome: Outcome): string {
 const TAG_PATTERN = /^[A-Za-z0-9_.:/-]+(=[^\s=]+)?$/;
 const MAIL_SELECTOR_KEYS = new Set(["project", "parent", "env", "branch", "provider", "status"]);
 
-/** The mail plugin's tag rule. Mail stores each tag as the key `tag:<tag>` in its thread metadata. */
 export function mailTagKeys(tags: readonly string[]): Record<string, true> {
   const keys: Record<string, true> = {};
   for (const raw of tags) {
@@ -174,10 +169,6 @@ const eventSchema = z.object({
 export const TURN_EVENT_TYPES = ["turn/started", "item/completed", "thread/compacted"] as const;
 const SELF_COMPACT_RUN = /bb-compact\.mjs["']?\s+run\b/;
 
-/**
- * Whether the worker's latest turn, from events newest first, ended only to self-compact. bb compacts in a turn of its
- * own that holds no items, so that turn is skipped and the turn that started the helper is checked.
- */
 export function endedToSelfCompact(eventsNewestFirst: readonly unknown[]): boolean {
   let commands: string[] = [];
   let items = 0;
