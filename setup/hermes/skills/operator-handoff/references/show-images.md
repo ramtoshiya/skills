@@ -10,4 +10,7 @@ bb shows an HTML page inside your reply. You write no files, so:
   `~/.bb/thread-storage/<your thread id>/reports/<topic>/index.html`. Use
   `$BB_THREAD_ID` for your thread id. Show it with
   `::inline-vis{source="thread-storage" file="reports/<topic>/index.html"}`
-  on its own line.
+  on its own line. When a later round updates the same page, ask the worker to
+  rewrite it as the current state. Put the latest changes and captures first,
+  keep one current version of each table, and remove superseded material or
+  fold it into a single collapsed `<details>` section at the end.
