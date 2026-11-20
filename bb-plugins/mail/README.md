@@ -74,7 +74,7 @@ or put several terms in one value separated by spaces.
 
 A selector send never reaches an archived thread, a thread that has not sent
 its first message (such as a held draft), or the sender. The report lists
-the skipped ones. The message starts with `[mail to <selector>]` so each
+skipped drafts and the sender. Archived threads are not listed at all. The message starts with `[mail to <selector>]` so each
 recipient knows it went to a group.
 
 Tags are free text: `key=value` or a bare word of letters, digits, and

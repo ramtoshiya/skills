@@ -39,8 +39,9 @@ bb mail send --where parent=$BB_THREAD_ID --where role=reviewer --message "Re-re
 ```
 
 Terms: `project=`, `parent=` (every descendant, including nest relay
-workers), `env=`, `branch=`, `provider=`, `status=`, and tags. Mail skips
-archived threads, held drafts, and you, and reports what it skipped. Inbox is
+workers), `env=`, `branch=`, `provider=`, `status=`, and tags. Mail never
+reaches archived threads, held drafts, or you. It lists skipped drafts and
+you in its report, and leaves archived threads out of it. Inbox is
 the default here too, so add `--wake` only when every recipient must act now.
 
 For a multi-line message, read it into a variable first:
