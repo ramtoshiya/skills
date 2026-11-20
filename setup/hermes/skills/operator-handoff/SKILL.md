@@ -110,11 +110,23 @@ bb nest spawn --json --project <project-id> --new-environment worktree \
 - Keep every heredoc quoted (`<<'EOF'`) and paste shared text in, because an
   unquoted heredoc runs backtick spans and `$(...)` as commands.
 - `bb nest spawn` makes the worker report here, and the worker can start its
-  own workers at any depth. It needs `BB_THREAD_ID`. If that is empty, tell
-  the user.
+  own workers at any depth. It reads this thread's id from `BB_THREAD_ID`.
 - Tell the user `@thread:<id>`, what will actually change, and any
   consequential difference from the request.
-- If `bb` fails, show the user the error and stop. Do not work around it.
+- If `bb` fails, follow [When bb fails](#bb-failures).
+
+## When bb fails {:#bb-failures}
+
+Find a safe way to finish with the tools you already have. A safe route uses
+only commands this skill allows and acts only on this thread and its workers.
+
+- When `BB_THREAD_ID` is empty, pass this thread's id explicitly:
+  `BB_THREAD_ID=<id> bb nest spawn ...`, or `--parent-thread <id>` on
+  `bb thread update`. Use an id you know for certain, such as one the user or
+  an earlier `bb status` gave, or the only match in `bb thread list --json`.
+  Never guess between several threads.
+- Report a blocker with the command and its error only when no safe route
+  exists. Say which routes you tried.
 
 ## Choose the route {:#route}
 

@@ -41,7 +41,7 @@ Complete approved work instead.
 - Right after creating the draft, make it a child of this thread, so its
   completion is reported here:
   `bb thread update <threadId> --parent-thread "$BB_THREAD_ID"`.
-- If `bb` fails, show the user the error and stop. Do not work around it.
+- If `bb` fails, follow When bb fails in `SKILL.md`.
 
 ## Skill proposals from the background review {:#skill-proposals}
 
