@@ -88,6 +88,9 @@ The `worker-routing` skill is the one policy for choosing a worker's model.
   `gpt-<version>-<family>` ID in the Codex catalog
   (`~/.codex/models_cache.json`) or, with `claudex`, in bb's claudex catalog.
   It prints nothing and exits 1 when that catalog has no model of the family.
+  In bb, the [newest-model-guard](../bb-plugins/newest-model-guard/README.md)
+  plugin rejects an agent-started thread whose model is older than one the
+  catalog lists.
 - Work is urgent when you say so, or, at the agent's judgement, when a shared
   gate such as `main`'s check stopped landing on two or more branches. Urgent
   work runs on Claude, and a top-tier row moves from Opus to Fable. A running
