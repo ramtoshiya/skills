@@ -16,6 +16,7 @@ preferences, so fork the repository and edit it before you run it.
 | Machine setup | A `mise.toml` that installs a few Homebrew packages and writes shell, Git, package manager, and agent settings | [Machine setup](docs/setup.md) |
 | `held-drafts` bb plugin | Lets agents create [bb](https://getbb.app) threads whose first message waits until a person sends it | [README](bb-plugins/held-drafts/README.md) |
 | `draft-quick-actions` bb plugin | Sends an eligible Held Drafts message from a thread header button that works on touch screens, or from a sidebar play button | [README](bb-plugins/draft-quick-actions/README.md) |
+| `nest` bb plugin | Lets agents at any thread depth start worker threads that report back to them | [README](bb-plugins/nest/README.md) |
 | `newest-model-guard` bb plugin | Rejects older catalog models on agent-started threads | [README](bb-plugins/newest-model-guard/README.md) |
 | `sidebar-model-label` bb plugin | Shows each thread's model beside its title without adding a second row | [README](bb-plugins/sidebar-model-label/README.md) |
 | `inline-vis-copy-image` bb plugin | Makes bb Desktop's Copy Image menu item work on images inside inline visualizations | [README](bb-plugins/inline-vis-copy-image/README.md) |
