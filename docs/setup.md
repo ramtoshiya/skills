@@ -307,6 +307,8 @@ fixed-scope implementation to cheaper models, and does small work and
 judgement itself. Before it starts a worker it follows the `worker-routing`
 skill described in [Agent plugins](agent-pack.md). A stricter role
 instruction, such as the operator's rule never to implement, wins.
+After a compaction it rereads in full the mode and skill files its brief or
+task named before it starts another worker or edits a file.
 
 The instructions also ask agents to end nontrivial work with a claim
 checklist: each claim, its evidence, and a confidence. When a user or reviewer

@@ -81,6 +81,10 @@ Before you start a worker, read the `ramtoshiya:worker-routing` skill and
 follow it for the model, effort, provider, and urgency. A stricter instruction
 for your role wins. For example, the Hermes operator never implements.
 
+After a compaction, before the next worker spawn or file edit, reread in full
+the mode and skill files that your brief or task named. Do not use `head` or a
+line range for that read, and do not work from the summary's account of them.
+
 ## Feasibility {:#feasibility}
 
 Answer a feasibility question with a demonstration or a failed attempt, not
