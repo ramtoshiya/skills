@@ -378,6 +378,49 @@ class BbThreadEnvTests(unittest.TestCase):
             self.assertEqual(set(self.plugin.resolve(sid).values()), {None})
 
 
+# Runs in the installed Hermes runtime. The gateway state is filled through Hermes's own
+# writer, so the plugin's reads of Hermes internals meet the version that is installed.
+INSTALLED_HERMES_PROBE = """
+import importlib.util, json, sys, types
+from gateway import run_api
+from gateway.session_local_mcp import attach_editor_mcp, fingerprint, session_scope
+spec = importlib.util.spec_from_file_location("bb_thread_env_probe", sys.argv[2])
+plugin = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(plugin)
+bridge = {"name": "bb-bridge", "command": "node", "args": [], "env": [
+    {"name": "BB_ACP_DYNAMIC_TOOL_TOKEN", "value": "secret-token"},
+    {"name": "BB_ACP_DYNAMIC_TOOL_THREAD_ID", "value": "thr_installed"}]}
+authority = types.SimpleNamespace(profile_id="operator")
+run_api._ACTIVE_RUNNER = types.SimpleNamespace(session_authority=authority)
+servers = [bridge]
+data = {"scope": session_scope(authority, "local-bridge"), "fingerprint": fingerprint(servers)}
+attach_editor_mcp(authority, types.SimpleNamespace(editor_mcp_json=json.dumps(data)), servers)
+print(json.dumps({sid: plugin.resolve(sid) for sid in ("local-bridge", "local-other")}))
+"""
+
+
+@unittest.skipUnless(shutil.which("hermes"), "Hermes is not installed")
+class BbThreadEnvInstalledHermesTests(unittest.TestCase):
+    """The resolver against the Hermes on PATH, whose internals change between updates."""
+
+    def test_bridge_session_gets_its_thread_in_installed_hermes(self):
+        argv = json.loads(subprocess.run(["hermes", "--print-runtime-command"], capture_output=True,
+                                         text=True, check=True).stdout)
+        code = argv[-1]
+        code = code[:code.rindex("runpy.run_module(")] + "runpy.run_path(sys.argv[1], run_name='__main__')"
+        with tempfile.TemporaryDirectory() as tmp:
+            probe = Path(tmp, "probe.py")
+            probe.write_text(INSTALLED_HERMES_PROBE)
+            result = subprocess.run([*argv[:-1], code, str(probe), str(THREAD_ENV)], cwd=tmp,
+                                    capture_output=True, text=True)
+
+        self.assertEqual(result.returncode, 0, result.stderr[-2000:])
+        resolved = json.loads(result.stdout.splitlines()[-1])
+        self.assertEqual(resolved["local-bridge"]["BB_THREAD_ID"], "thr_installed")
+        self.assertIsNone(resolved["local-other"]["BB_THREAD_ID"])
+        self.assertNotIn("secret-token", json.dumps(resolved))
+
+
 # Stands in for the hermes CLI. A home's settings live in fake-config.json beside its skills/.
 # Bundled skills come from $FAKE_BUNDLED. `sync` follows tools/skills_sync.sync_skills, which
 # profile creation, `skills reset`, chat and gateway startup, and `hermes update` all run.
