@@ -322,6 +322,13 @@ class QuotaPaceTests(unittest.TestCase):
         report = self.run_pace(bb_usage(codex=(100, later(30))), "--prefer", "codex", "--eligible", "claude,codex")
         self.assertIsNone(report["route"]["side"])
 
+    def test_a_saved_sample_is_not_a_current_reading_after_a_limit(self):
+        state = self.tmp / "state/ramtoshiya/quota-samples.json"
+        state.parent.mkdir(parents=True)
+        state.write_text(json.dumps({"claude": [[iso(ago(0.1)), 32, iso(later(90))]], "codex": []}))
+        report = self.run_pace(bb_usage(codex=(100, later(30))), "--prefer", "codex", "--eligible", "claude,codex")
+        self.assertIsNone(report["route"]["side"])
+
     def test_quotio_cli_supplies_a_missing_alternate_reading(self):
         self.quotio_response.write_text(json.dumps({
             "accounts": [{"id": "raw-id-q", "provider_id": "claude", "email": "person@example.com"}],
@@ -340,10 +347,13 @@ class QuotaPaceTests(unittest.TestCase):
     def test_a_shorter_limit_holds_until_the_reset_time_the_error_named(self):
         usage = bb_usage(claude=(30, later(90)), codex=(10, later(40)))
         args = ("--prefer", "claude", "--eligible", "claude,codex")
-        held = self.run_pace(usage, *args, "--limited", f"claude={iso(ago(1))}/{iso(later(2))}")
+        held = self.run_pace(usage, *args, "--limited", f"claude={iso(ago(1))}/{iso(later(2))}",
+                             "--offer", f"claude-weekly={iso(later(72))}")
         self.assertEqual(held["sides"]["claude"]["status"], "limited")
         self.assertEqual(held["route"]["side"], "codex")
-        self.assertNear(held["reset_options"]["claude"]["scheduled_reset"], later(2))
+        claude = held["reset_options"]["claude"]
+        self.assertNear(claude["scheduled_reset"], later(2))
+        self.assertNear(claude["credits"][0]["if_claimed_now_lasts_until"], later(90))
         reopened = self.run_pace(usage, *args, "--limited", f"claude={iso(ago(5))}/{iso(ago(0.1))}")
         self.assertEqual(reopened["route"]["side"], "claude")
 
