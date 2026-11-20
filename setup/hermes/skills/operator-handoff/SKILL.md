@@ -28,24 +28,28 @@ Before a worker starts, ask in chat and wait when a plausible reading would
 change the result, the targets, the authority, or a real tradeoff. Ask the most
 decisive question first and build the next on its answer. Look up facts
 yourself, and stop once the goal, scope, and exclusions would brief a stranger.
-Never write an unresolved reading or your own condition into the criteria.
-Decide choices that lose nothing, such as an input format, put them in the
-brief, and list them in your report. Ask about a choice that gives something
-up, with what each option loses. Backfill, compatibility promises, and a
-different change target are never small choices.
+When the user asks for a grilling or interview, follow that skill instead. Keep
+conditions you add apart from what the user asked, and never write an
+unresolved reading into the acceptance criteria. Decide choices that lose
+nothing, such as an input format, put them in the brief, and list them in your
+report. Ask about a choice that gives something up, with what each option
+loses. Backfill, compatibility promises, and a different change target can
+change the outcome, so they are not small by default.
 
 - Follow and improve a direction the user set. Change it only after you ask
   with the evidence. Announcing a pick after a test, or inviting objections
   after the worker started, is not asking.
-- Run a direction nobody decided only as a labeled proposal experiment. It
-  changes no default and no other worker's instructions until the user decides.
+- A worker may try a direction nobody decided as a labeled proposal
+  experiment. Its result comes back to the user as a proposal and changes no
+  default and no other worker's instructions until the user decides.
 - Keep a direction the user rejected out of briefs and worker messages, even as
-  a fallback or an extra measurement. Raise it again only as a question with
-  new evidence.
+  a fallback, an extra measurement, or encouragement. Raise it again only as a
+  question that says the user rejected it and names the new evidence.
 
 When a pending decision blocks part of the work, start the independent part
-now. Finding another repository that owns the cause does not widen the agreed
-targets. The authority paragraph's fork permission never covers a BB app fork.
+now. Finding another repository that owns the cause, or the authority
+paragraph's fork permission, does not widen the agreed targets. Ask before work
+moves to a new target. A BB application fork needs the user's explicit request.
 
 ## Write the brief {:#brief}
 
@@ -79,9 +83,10 @@ The worker sees only the brief. Write it in English with these parts in order:
 
 Pass on an instruction that leaves room for judgment as its intent, and keep
 the user's example as an example. Leave out what the mode and checks enforce,
-and events that have not happened. Read `references/brief-cases.md` first when
-the owning repository has no remote, the work serves a web UI, splits into
-independent pieces, shares a verification device, or changes a forked skill.
+and events that have not happened. Run `git remote -v` in the owning
+repository. Read `references/brief-cases.md` first when it prints nothing, or
+when the work serves a web UI, splits into independent pieces, shares a
+verification device, or changes a forked skill.
 
 ## Start the worker {:#start}
 
@@ -102,8 +107,8 @@ EOF
   unquoted heredoc runs backtick spans and `$(...)` as commands.
 - `--parent-self` reports completion here. With `BB_THREAD_ID` empty it cannot,
   so tell the user.
-- Tell the user `@thread:<id>`, what will actually change, any consequential
-  difference from the request, and the row, provider, model, and effort.
+- Tell the user `@thread:<id>`, what will actually change, and any
+  consequential difference from the request.
 - If `bb` fails, show the user the error and stop. Do not work around it.
 
 ## Choose the route {:#route}
@@ -113,7 +118,8 @@ Pick the row for the hardest decision the brief leaves to the worker. You have
 no Agent tool, so follow its route file and quota steps and skip its Agent tool
 and BB environment steps. Check that `bb provider models <provider> --json`
 lists the row's effort in `supportedReasoningEfforts`. A provider, model, or
-effort the user names wins.
+effort the user names wins. Report each thread's row, provider, model, and
+effort.
 
 ## Complete approved work {:#approved-work}
 
@@ -133,7 +139,8 @@ within its brief, the rest belongs to the same worker:
 
 A missing command option is not a blocker, and neither is a diverged branch or
 a push rejected as non-fast-forward. Send them back, and point the worker to the
-Diverged branches section of the shared preferences.
+Diverged branches section of the shared preferences. When another of your
+threads is integrating the same branch, name it to the worker.
 
 These need the user's answer in conversation before any worker acts on them:
 
@@ -160,8 +167,9 @@ bb thread queue list <threadId> --json
 Use `thread.status` and the thread's own `environment` (path, `isWorktree`,
 `branchName`). The queue shows whether a first message is still held. A queued
 follow-up does not mean the task never started, and an idle thread does not
-prove the work is complete. Report a fact that a query leaves open as unknown,
-and name each earlier claim the evidence disproves.
+prove the work is complete. Report a fact as unknown when a query fails or
+leaves it open, never as the old state. Name each earlier claim the evidence
+disproves.
 
 A worktree exists only after the thread's first message is dispatched. Separate
 worktrees run in parallel even when both land on `main`, so base any sequencing
@@ -192,12 +200,14 @@ prints nothing. Read a linked message (`#msg=<seq>`) with
      `hasUncommittedChanges: false` in `bb git status <environmentId> --json`.
    - Nothing still needs the workspace, such as the user's review of its diff,
      a follow-up message, or a push or merge that the brief required.
-4. Tell the user the result in their terms. Say what each named part is, such
-   as a script, an LLM, an external tool, or an OS feature, and where each step
-   happens, such as which screen. Decide choices that lose nothing and fixes for
-   defects the result found, and report them. Continue unfinished work within
-   the brief as Complete approved work describes. When the user judges the
-   result by eye, show images as `references/show-images.md` describes.
+4. Tell the user the result in their terms, with anything they will need from
+   it later, such as commits, links, and unfinished items. Say what each named
+   part is, such as a script, an LLM, an external tool, or an OS feature, and
+   where each step happens, such as which screen. Decide choices that lose
+   nothing and fixes for defects the result found, and report them. Continue
+   unfinished work within the brief as Complete approved work describes. When
+   the user judges the result by eye, show images as
+   `references/show-images.md` describes.
 5. Run `bb thread archive <threadId>`, then check that
    `bb thread show <threadId> --json` sets `thread.archivedAt`. Archiving also
    archives the descendants, and bb later removes the managed worktree. Commits
@@ -209,10 +219,10 @@ Archive only children of this thread whose result you handled, or your own
 superseded held drafts. To archive a kept child later, run these steps again.
 
 When a result shows that bb or the worker setup misbehaved, such as a worker
-that skipped its workflow's independent roles or ran on unintended defaults,
-propose a fix at a layer every worker reads, such as a bb setting,
-`~/.bb/AGENTS.md`, `worker-routing`, or pstack-mode. A sentence for future
-briefs leaves every other worker exposed.
+that skipped its workflow's independent roles or ran on unintended defaults, do
+not offer a sentence for future briefs or ask the user to pick one. In the same
+reply, propose a fix at a layer every worker reads, such as a bb setting,
+`~/.bb/AGENTS.md`, `worker-routing`, or pstack-mode.
 
 ## Research {:#research}
 
