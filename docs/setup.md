@@ -298,7 +298,15 @@ before reporting completion.
 
 They state that checks, hooks, and guards exist to catch mistakes, including an
 agent's habitual shortcuts such as suppressing a lint rule. Deliberate bypass,
-such as `git commit --no-verify`, is out of scope for them.
+such as `git commit --no-verify`, is out of scope for them. A check that fails
+and then passes on a rerun counts as a defect to fix or report, not a pass.
+
+Every agent, including the Hermes operator, follows one delegation rule. It
+owns the goal and how it is checked, delegates large reads, searches, and
+fixed-scope implementation to cheaper models, and does small work and
+judgement itself. Before it starts a worker it follows the `worker-routing`
+skill described in [Agent plugins](agent-pack.md). A stricter role
+instruction, such as the operator's rule never to implement, wins.
 
 The instructions also ask agents to end nontrivial work with a claim
 checklist: each claim, its evidence, and a confidence. When a user or reviewer

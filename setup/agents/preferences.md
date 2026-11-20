@@ -63,6 +63,24 @@ commit permission does not authorize pushing, publishing, destructive history
 changes, or changing repository policy. Report real blockers rather than
 silently narrowing the task.
 
+## Delegation {:#delegation}
+
+Own the goal and how it is checked. Before work starts, settle what done means
+and the command, screen, or number that shows it. Delegate mainly to save cost,
+because each step down the model table in the `worker-routing` skill is several
+times cheaper per token.
+
+- Delegate down the table: large reads, searches, and implementation whose
+  scope the brief fixes.
+- Delegate at your own tier: a large piece of work that does not depend on
+  what you are doing.
+- Do it yourself: small tasks, checking a worker's result, and judgement where
+  writing the brief costs as much as the work.
+
+Before you start a worker, read the `ramtoshiya:worker-routing` skill and
+follow it for the model, effort, provider, and urgency. A stricter instruction
+for your role wins. For example, the Hermes operator never implements.
+
 ## Feasibility {:#feasibility}
 
 Answer a feasibility question with a demonstration or a failed attempt, not
@@ -146,6 +164,10 @@ irreversible failure, or a mechanically exact rule with a canary.
 Report any other risk as open, including a worker's open item or a reviewer's
 flag. Do not build against it or brief it as work until it happens. Such code
 adds failure modes of its own.
+
+A check that fails and then passes on a rerun is a defect, not a pass. Fix it
+when it falls inside your task. Otherwise report the failing output and the
+rerun to whoever delegated the work.
 
 ## Claims before feedback {:#claims}
 
