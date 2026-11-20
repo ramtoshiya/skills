@@ -6,6 +6,15 @@ Preserve the language the user or artifact requires.
 Write for a reader who has no conversation context. Use concrete language,
 remove unnecessary narration, and reread the result before delivering it.
 
+## Layout stability {:#layout-stability}
+
+When building or changing a UI, an interaction must not move content the user
+did not act on. Reserve space in advance for content that appears, grows, or
+loads during use, such as added lines, toggles, warnings, validation messages,
+results, images, and lazy data. Or show it without taking layout space, such as
+in an overlay or fixed slot. Interact with the UI in a browser at desktop and
+phone widths and confirm elements below the change keep their positions.
+
 ## Diagrams {:#diagrams}
 
 Use Mermaid diagrams proactively when relationships, flows, states, sequences,
