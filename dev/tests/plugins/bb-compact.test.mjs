@@ -35,6 +35,9 @@ function recordedEvents() {
   };
 }
 
+// A helper that polls without end stops here after a fixed number of calls, on a fast or a loaded machine.
+const callBudget = 100;
+
 const fake = `#!/usr/bin/env node
 const fs = require('node:fs');
 const path = require('node:path');
@@ -44,8 +47,13 @@ const statePath = path.join(dir, 'state.json');
 const state = JSON.parse(fs.readFileSync(statePath));
 const args = process.argv.slice(2);
 const input = fs.readFileSync(0, 'utf8');
+const callLog = path.join(dir, 'calls.jsonl');
+if (fs.existsSync(callLog) && fs.readFileSync(callLog, 'utf8').trim().split('\\n').length >= ${callBudget}) {
+  process.stderr.write('fake bb: the helper used up its budget of ${callBudget} calls without finishing.\\n');
+  process.exit(1);
+}
 if (config.callDelayMs) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, config.callDelayMs);
-fs.appendFileSync(path.join(dir, 'calls.jsonl'), JSON.stringify({ args, input }) + '\\n');
+fs.appendFileSync(callLog, JSON.stringify({ args, input }) + '\\n');
 const save = () => fs.writeFileSync(statePath, JSON.stringify(state));
 const out = value => process.stdout.write(JSON.stringify(value));
 if (config.invalidJson && args[1] === config.invalidJson) {
@@ -99,7 +107,7 @@ async function setup(t, changes = {}) {
   await writeFile(join(dir, 'state.json'), JSON.stringify({ phase: 'prepare' }));
   const env = { ...process.env, PATH: `${dir}:${process.env.PATH}`, BB_THREAD_ID: thread, BB_FAKE_DIR: dir };
   delete env.BB_CLI;
-  const invoke = (...args) => spawnSync(process.execPath, [script, ...args], { cwd: dir, env, encoding: 'utf8', timeout: 12_000 });
+  const invoke = (...args) => spawnSync(process.execPath, [script, ...args], { cwd: dir, env, encoding: 'utf8' });
   const calls = async () => {
     try { return (await readFile(join(dir, 'calls.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse); }
     catch (error) { if (error.code === 'ENOENT') return []; throw error; }
