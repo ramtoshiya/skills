@@ -32,13 +32,13 @@ function thread(id: Id) {
   });
 }
 
-function command(id: string, cmd: string, done: { exitCode: number; output: string } | null) {
+function command(id: string, cmd: string, done: { exitCode: number; output: string } | null, createdAt = 2_000) {
   const item = { type: "commandExecution", id, command: cmd, status: done ? "completed" : "inProgress" };
   return done
-    ? { type: "item/completed", data: { item: { ...item, exitCode: done.exitCode, aggregatedOutput: done.output } } }
-    : { type: "item/started", data: { item } };
+    ? { type: "item/completed", createdAt, data: { item: { ...item, exitCode: done.exitCode, aggregatedOutput: done.output } } }
+    : { type: "item/started", createdAt, data: { item } };
 }
-const turnStarted = { type: "turn/started", data: {} };
+const turnStarted = { type: "turn/started", createdAt: 1_000, data: {} };
 const message = (id: string) => ({ type: "item/completed", data: { item: { type: "agentMessage", id } } });
 
 let host: Host | null = null;
@@ -98,7 +98,10 @@ function start(options: { mailTags?: Record<string, Record<string, true>>; event
             deleted.push(queuedMessageId);
             return undefined as never;
           },
-          update: async ({ queuedMessageId, sendAt }) => {
+          update: async ({ queuedMessageId, sendAt, expectedUpdatedAt }) => {
+            if (rows.get(queuedMessageId)?.updatedAt !== expectedUpdatedAt) {
+              throw new Error("HTTP 409: Queued message changed since editing began");
+            }
             if (typeof sendAt === "number" && sendAt <= Date.now()) {
               throw new Error("HTTP 400: sendAt must be in the future; pass null to clear the send time");
             }
@@ -140,7 +143,8 @@ describe("inbox", () => {
   const heldByMail = { id: "held", waitingOn: { kind: "plugin" as const, pluginId: "mail", reason: "inbox" } };
   it.each([
     ["holds an inbox message that would start a turn", { attempt: "start-turn", experimental_submission: inbox }, "wait"],
-    ["lets an inbox message join a running turn", { attempt: "join-turn", experimental_submission: inbox }, "proceed"],
+    ["holds an inbox message sent while the recipient's turn runs", { attempt: "join-turn", experimental_submission: inbox }, "wait"],
+    ["keeps an inbox message out of the turn that was running when it was held", { attempt: "join-turn", queuedMessages: [heldByMail] }, "wait"],
     ["starts a turn for a --wake message, which bb also marks as sent by mail", { attempt: "start-turn", originPluginId: "mail" }, "proceed"],
     ["keeps holding an inbox message when bb re-attempts it", { attempt: "start-turn", queuedMessages: [heldByMail] }, "wait"],
     ["starts the turn when a wake message is drained with held inbox messages", { attempt: "start-turn", queuedMessages: [heldByMail, { id: "wake", waitingOn: null }] }, "proceed"],
@@ -152,9 +156,20 @@ describe("inbox", () => {
     expect(decision.action).toBe(action);
   });
 
+  it("delivers held inbox messages into the recipient's next turn", async () => {
+    const { harness } = start();
+    const hook = harness.registrations.hooks["message.dispatch"]!;
+    harness.sdk.stub("threads.queue.list", async () => [makeQueueEntry({ id: "held", threadId: "LEAD" })] as never);
+    await harness.emitThreadEvent("thread.active", { thread: thread("LEAD") });
+    const joined = await hook(makeMessageDispatchHookContext({ attempt: "join-turn", queuedMessages: [heldByMail] }));
+    expect(joined.action).toBe("proceed");
+  });
+
   it("keeps holding an inbox message that a running turn ended before it was delivered", async () => {
     const { harness } = start();
     const hook = harness.registrations.hooks["message.dispatch"]!;
+    harness.sdk.stub("threads.queue.list", async () => [makeQueueEntry({ id: "held", threadId: "LEAD" })] as never);
+    await harness.emitThreadEvent("thread.active", { thread: thread("LEAD") });
     await hook(makeMessageDispatchHookContext({ attempt: "join-turn", queuedMessages: [heldByMail] }));
     const retried = await hook(makeMessageDispatchHookContext({ attempt: "start-turn", queuedMessages: [{ id: "held", waitingOn: null }] }));
     expect(retried.action).toBe("wait");
@@ -300,6 +315,14 @@ describe("built-in notices", () => {
     expect(deleted).toEqual(["row_1"]);
   });
 
+  it("delivers the completion of a turn whose self-compact launch failed", async () => {
+    const { notice, deleted } = start({
+      events: { WORKER: [message("m1"), command("c1", "node bb-compact.mjs run missing.md", { exitCode: 1, output: "note not found" }), turnStarted] },
+    });
+    await notice(completed("WORKER"));
+    expect(deleted).toEqual([]);
+  });
+
   it("delivers the completion of a turn that only asked about compaction with --no-resume", async () => {
     const { notice, deleted } = start({
       events: { WORKER: [command("c1", "node bb-compact.mjs run note.md --no-resume", { exitCode: 0, output: "" }), turnStarted] },
@@ -311,11 +334,23 @@ describe("built-in notices", () => {
   it("drops a completion whose reply the parent's wait already printed", async () => {
     const { notice, deleted } = start({
       events: {
+        WORKER: [message("m1"), turnStarted],
         LEAD: [command("w1", "bb thread wait WORKER --timeout 600 && bb thread output WORKER", { exitCode: 0, output: "Thread WORKER reached status idle.\nDONE: 42\n" })],
       },
     });
     await notice(completed("WORKER"));
     expect(deleted).toEqual(["row_1"]);
+  });
+
+  it("delivers a completion when the wait that printed the same reply returned before the child's turn started", async () => {
+    const { notice, deleted } = start({
+      events: {
+        WORKER: [message("m2"), turnStarted],
+        LEAD: [command("w1", "bb thread wait WORKER && bb thread output WORKER", { exitCode: 0, output: "DONE: 42" }, 500)],
+      },
+    });
+    await notice(completed("WORKER"));
+    expect(deleted).toEqual([]);
   });
 
   it.each([
@@ -331,7 +366,7 @@ describe("built-in notices", () => {
   it("holds the completion while the parent's wait runs, then drops it when the wait prints the reply", async () => {
     vi.useFakeTimers();
     const lead: unknown[] = [command("w1", "bb thread wait WORKER && bb thread output WORKER", null)];
-    const { notice, deleted, holds } = start({ events: { LEAD: lead } });
+    const { notice, deleted, holds } = start({ events: { LEAD: lead, WORKER: [message("m1"), turnStarted] } });
     await notice(completed("WORKER"));
     await vi.advanceTimersByTimeAsync(0);
     expect(holds).toHaveLength(1);
@@ -354,7 +389,7 @@ describe("built-in notices", () => {
   it("delivers a held notice that bb merged another child into", async () => {
     vi.useFakeTimers();
     const lead: unknown[] = [command("w1", "bb thread wait WORKER && bb thread output WORKER", null)];
-    const { notice, deleted, rows } = start({ events: { LEAD: lead } });
+    const { notice, deleted, rows } = start({ events: { LEAD: lead, WORKER: [message("m1"), turnStarted] } });
     await notice(completed("WORKER"));
     const held = rows.get("row_1")!;
     rows.set("row_1", { ...held, updatedAt: held.updatedAt + 50 });
@@ -382,6 +417,16 @@ describe("built-in notices", () => {
     expect(sent[0]!.text).toContain('"Summary line"');
     expect(sent[0]!.text).toContain("4,001-character");
     expect(sent[0]!.text).toContain("bb thread output WORKER");
+  });
+
+  it("delivers bb's own notice when sending the shortened one fails", async () => {
+    const { harness, notice, deleted, rows } = start({ output: `Summary line\n${"x".repeat(5_000)}` });
+    harness.sdk.stub("threads.send", async () => {
+      throw new Error("send offline");
+    });
+    await notice(completed("WORKER"));
+    expect(deleted).toEqual([]);
+    expect(rows.get("row_1")!.sendAt).toBeNull();
   });
 
   it("leaves the notice to bb when reading events fails", async () => {

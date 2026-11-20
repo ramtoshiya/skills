@@ -249,13 +249,21 @@ describe("relay", () => {
     const { harness, sent } = start();
     const launch = {
       type: "item/completed",
-      data: { item: { type: "commandExecution", id: "c1", command: 'node "/p/bb-compact.mjs" run "/h/note.md" --launch-seq 9 --turn-id t1' } },
+      data: { item: { type: "commandExecution", id: "c1", command: 'node "/p/bb-compact.mjs" run "/h/note.md" --launch-seq 9 --turn-id t1', exitCode: 0 } },
     };
     EVENTS.L5 = [launch, { type: "turn/started", data: {} }];
     await harness.emitThreadEvent("thread.idle", { thread: thread("L5"), lastAssistantText: "Compaction is scheduled." });
     EVENTS.L5 = [{ type: "thread/compacted", data: {} }, { type: "turn/started", data: {} }, ...EVENTS.L5];
     await harness.emitThreadEvent("thread.idle", { thread: thread("L5"), lastAssistantText: "Compaction is scheduled." });
     expect(sent).toEqual([]);
+  });
+
+  it("relays a turn whose self-compact launch failed", async () => {
+    const { harness, sent } = start();
+    const failed = { type: "item/completed", data: { item: { type: "commandExecution", id: "c1", command: "node bb-compact.mjs run missing.md", exitCode: 1 } } };
+    EVENTS.L5 = [{ type: "item/completed", data: { item: { type: "agentMessage", id: "m1" } } }, failed, { type: "turn/started", data: {} }];
+    await harness.emitThreadEvent("thread.idle", { thread: thread("L5"), lastAssistantText: "FINAL: 8" });
+    expect(sent[0]?.text).toContain("FINAL: 8");
   });
 
   it("relays the result when the worker's events cannot be read", async () => {
