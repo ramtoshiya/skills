@@ -170,8 +170,11 @@ class BbPlugins:
             for plugin, shared in plugins:
                 name = f"plugin:{plugin['id']}"
                 if not shared:
-                    move = (f"Move it with `bb plugin install path:{self.home(plugin['id'])} --yes`"
-                            if (self.home(plugin["id"]) / "package.json").is_file()
+                    home = self.home(plugin["id"])
+                    packages = (f"`npm ci --ignore-scripts --prefix {home}`, then "
+                                if (home / "package-lock.json").is_file() else "")
+                    move = (f"Move it with {packages}`bb plugin install path:{home} --yes`"
+                            if (home / "package.json").is_file()
                             else f"{BRANCH} has no {BB_PLUGINS}/{plugin['id']}")
                     rows.append(row("bb", name, "drift",
                                     f"runs {plugin['source'].removeprefix('path:')}, not the shared checkout. {move}"))

@@ -166,7 +166,9 @@ after the turn finishes.
 That covers a worktree of this repository and the `preserved-source` copy bb
 makes when it removes a worktree a plugin was installed from. The row names the
 `bb plugin install path:<shared checkout>/bb-plugins/<id> --yes` command that
-moves it and keeps its settings. `main:sync` never moves a plugin by itself.
+moves it and keeps its settings. When the folder has a `package-lock.json`, the
+row first names `npm ci --ignore-scripts --prefix <folder>`, because bb builds
+the plugin from that folder's `node_modules`. `main:sync` never moves a plugin by itself.
 
 ## Check GitHub Actions
 
