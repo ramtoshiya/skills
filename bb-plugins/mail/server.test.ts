@@ -592,7 +592,14 @@ describe("built-in notices", () => {
     const { notice, deleted, rows } = start({ events: { LEAD: lead, WORKER: [message("m1"), turnStarted] } });
     await notice(completed("WORKER"));
     const held = rows.get("row_1")!;
-    rows.set("row_1", { ...held, updatedAt: held.updatedAt + 50 });
+    rows.set("row_1", {
+      ...held,
+      updatedAt: held.updatedAt + 50,
+      systemNotice: {
+        kind: "child-completed",
+        subject: { kind: "thread", threadId: "WORKER", threadName: "WORKER", outcomes: [{ threadId: "WORKER" }, { threadId: "RELAY" }] },
+      } as never,
+    });
     lead.unshift(command("w1", "bb thread wait WORKER && bb thread output WORKER", { exitCode: 0, output: "DONE: 42" }));
     await vi.advanceTimersByTimeAsync(1_000);
     expect(deleted).toEqual([]);

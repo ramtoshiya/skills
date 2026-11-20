@@ -40,6 +40,15 @@ acknowledgement to a child with `bb thread tell`, because the two threads then
 wake each other without end. Send progress to your parent with `bb mail send`
 (inbox), not by ending a turn. Never end a real result with `[no-op]`.
 
+## Waiting for commands and results {:#waiting}
+
+bb reports each turn end of a worker to its parent as a completion, and a
+background task that finishes starts a new turn. When you can wait for a
+command, test run, review, or child result, wait in the foreground and keep the
+turn open instead of backgrounding it and ending the turn. Report a tool
+timeout or failure as it is. If a turn must end before a scheduled resume and
+has nothing to report, reply with only `[no-op]`.
+
 ## BB references and customizations {:#bb-references-customizations}
 
 Separate a thread or message reference from adjacent text with spaces, including

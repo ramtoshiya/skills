@@ -66,6 +66,11 @@ with a limit below your shell tool's timeout. Run it again only when it exits wi
 means it timed out. For a worker that is your bb child, the `mail` bb plugin drops the completion
 message for a reply this command already printed. A nest relay message still arrives.
 
+Do the same for a long command, test run, or review: run it in the foreground and keep the turn.
+Do not start it in the background and end the turn, because the parent receives that turn as a
+completed result. If a turn must end before a scheduled resume and has nothing to report, reply with
+only `[no-op]`.
+
 If a worker's notice leaves you nothing to report or do, reply with exactly `[no-op]`. The `mail` and
 `nest` bb plugins drop that turn's notice, so your own parent is not woken. Do not `bb thread tell` a
 worker to acknowledge it. Send progress to your parent with `bb mail send`, which does not wake it.

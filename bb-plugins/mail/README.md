@@ -140,6 +140,12 @@ before the child's latest turn started.
   the notice being unchanged. bb merges nothing into a rescheduled notice. If
   the notice changed, mail leaves it alone. If mail fails after that, the
   notice arrives when the 30 seconds end.
+- When that conditional update fails, mail logs the error and the row's
+  current state, reads the row again, and decides once more on its current
+  contents. It deletes the row only if the row is still one child's completion
+  that the rules drop. A row that bb merged another child into, or that changed
+  again during the second decision, is delivered, even when every child in it
+  would be dropped alone. A row that is already gone is left alone.
 - Mail decides from the child's latest reply and turn. If the child starts
   another turn in the second before mail reads them, mail decides from that
   turn.

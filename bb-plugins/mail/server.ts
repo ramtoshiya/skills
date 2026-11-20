@@ -130,20 +130,32 @@ export default function plugin(bb: BbPluginApi) {
     };
   }
 
+  type Claim = { claimed: Row } | { claimed: null; current: Row | null };
+
+  function describeRow(row: Row | null, expectedUpdatedAt: number): string {
+    if (row === null) return "the row is gone";
+    const notice = row.systemNotice as { kind?: string; subject?: { outcomes?: Array<{ threadId: string }> } | null } | null | undefined;
+    const children = notice?.subject?.outcomes?.map((outcome) => outcome.threadId).join(",") ?? "";
+    return `row ${row.id} is at updatedAt ${row.updatedAt} (expected ${expectedUpdatedAt}) sendAt ${row.sendAt} notice ${notice?.kind ?? "none"} children [${children}]`;
+  }
+
   /**
    * bb merges another child's outcome into a pending notice without an event. Any update to the row stops bb from
-   * merging into it, so mail first updates the row against the `updatedAt` it decided on, and a failed update means
-   * the notice changed. A claimed row that mail fails to settle is delivered when the claim's send time comes.
+   * merging into it, so mail first updates the row against the `updatedAt` it decided on. A failed update returns the
+   * row as it is now, and the caller decides again on that. A claimed row that mail fails to settle is delivered when
+   * the claim's send time comes.
    */
-  async function claim(row: Row, sendAt: number): Promise<Row | null> {
+  async function claim(row: Row, sendAt: number): Promise<Claim> {
     try {
-      return await bb.sdk.threads.queuedMessages.update({ threadId: row.threadId, queuedMessageId: row.id, expectedUpdatedAt: row.updatedAt, sendAt });
-    } catch {
-      return null;
+      return { claimed: await bb.sdk.threads.queuedMessages.update({ threadId: row.threadId, queuedMessageId: row.id, expectedUpdatedAt: row.updatedAt, sendAt }) };
+    } catch (error) {
+      const current = await currentRow(row);
+      bb.log.warn(`claim failed: ${error instanceof Error ? error.message : String(error)}. ${describeRow(current, row.updatedAt)}`);
+      return { claimed: null, current };
     }
   }
 
-  async function settleCompletion(row: Row, childId: string, deadline: number, held: boolean): Promise<void> {
+  async function settleCompletion(row: Row, childId: string, deadline: number, held: boolean, mayRetry = true): Promise<void> {
     const decision = decideCompletion(await completionFacts(row.threadId, childId, Date.now() >= deadline));
     const note = `parent=${row.threadId} child=${childId} row=${row.id}`;
     if (decision.action === "deliver") {
@@ -151,12 +163,18 @@ export default function plugin(bb: BbPluginApi) {
       bb.log.info(`completion delivered ${note}`);
       return;
     }
-    const claimed = decision.action === "hold" && held ? row : await claim(row, decision.action === "hold" ? deadline + RELEASE_MARGIN_MS : Date.now() + CLAIM_MS);
-    if (claimed === null) {
-      if (held) await release(row);
+    const attempt = decision.action === "hold" && held ? { claimed: row } : await claim(row, decision.action === "hold" ? deadline + RELEASE_MARGIN_MS : Date.now() + CLAIM_MS);
+    if (attempt.claimed === null) {
+      const { current } = attempt;
+      const notice = current === null ? null : classifyNotice(current.systemNotice);
+      if (current !== null && notice?.kind === "completion" && notice.childId === childId && mayRetry) {
+        return settleCompletion(current, childId, deadline, held, false);
+      }
+      if (current !== null && held) await release(current);
       bb.log.info(`completion delivered: the notice changed while mail decided ${note}`);
       return;
     }
+    const claimed = attempt.claimed;
     const target = { threadId: claimed.threadId, queuedMessageId: claimed.id };
     switch (decision.action) {
       case "drop":
