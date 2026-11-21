@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[3]
 PLUGIN = ROOT / "setup/hermes/plugins/skill-drafts/__init__.py"
 SETUP = ROOT / "setup/hermes/operator_profile.py"
 THREAD_ENV = ROOT / "setup/hermes/plugins/bb-thread-env/__init__.py"
+TITLE_INPUT = ROOT / "setup/hermes/plugins/bb-title-input/__init__.py"
 FAKE_BB = f"""#!{sys.executable}
 import json, os, sys
 from pathlib import Path
@@ -415,6 +416,56 @@ class BbThreadEnvInstalledHermesTests(unittest.TestCase):
         self.assertEqual(resolved["local-bridge"]["BB_THREAD_ID"], "thr_installed")
         self.assertIsNone(resolved["local-other"]["BB_THREAD_ID"])
         self.assertNotIn("secret-token", json.dumps(resolved))
+
+
+TITLE_PROBE = """
+import importlib.util, json, sys, types
+from agent import title_generator as tg
+spec = importlib.util.spec_from_file_location("bb_title_input_probe", sys.argv[2])
+plugin = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(plugin)
+block = "<system_instructions>\\nUse the bb CLI.\\n- skill: does things\\n</system_instructions>\\n"
+messages = [block + "Fix the flaky login test", block + "로그인 테스트가 가끔 실패합니다 고쳐주세요", block]
+def titles():
+    return [[tg.derive_title(m), tg.build_title_input(m), tg.is_titleable_user_message(m)] for m in messages]
+before = titles()
+ctx = types.SimpleNamespace()
+plugin.register(ctx)
+plugin.register(ctx)
+print(json.dumps({"before": before, "after": titles(), "wrappers": len(tg._CONTROL_WRAPPERS)}))
+"""
+
+
+@unittest.skipUnless(shutil.which("hermes"), "Hermes is not installed")
+class BbTitleInputInstalledHermesTests(unittest.TestCase):
+    """Hermes's own titler, as installed, reads bb's first message that starts with a <system_instructions> block."""
+
+    def probe(self):
+        argv = json.loads(subprocess.run(["hermes", "--print-runtime-command"], capture_output=True,
+                                         text=True, check=True).stdout)
+        code = argv[-1]
+        code = code[:code.rindex("runpy.run_module(")] + "runpy.run_path(sys.argv[1], run_name='__main__')"
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp, "probe.py")
+            script.write_text(TITLE_PROBE)
+            result = subprocess.run([*argv[:-1], code, str(script), str(TITLE_INPUT)], cwd=tmp,
+                                    capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr[-2000:])
+        return json.loads(result.stdout.splitlines()[-1])
+
+    def test_titles_name_the_users_text_and_not_the_bb_block(self):
+        result = self.probe()
+
+        self.assertEqual(result["before"][0][0], "<system_instructions>")
+        self.assertEqual([row[0] for row in result["after"]],
+                         ["Fix the flaky login test", "로그인 테스트가 가끔 실패합니다 고쳐주세요", "Use the bb CLI."])
+        self.assertEqual([row[1] for row in result["after"][:2]],
+                         ["Fix the flaky login test", "로그인 테스트가 가끔 실패합니다 고쳐주세요"])
+
+    def test_registering_twice_adds_the_wrapper_once(self):
+        wrappers = self.probe()["wrappers"]
+
+        self.assertEqual(wrappers, 11)
 
 
 # Stands in for the hermes CLI. A home's settings live in fake-config.json beside its skills/.
