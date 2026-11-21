@@ -28,7 +28,7 @@ PSTACK_SKILLS = ("in-your-own-words", "why", "how", "interrogate", "statechart",
                  "technical-writing", "unslop")
 PSTACK_SKILL_DIR = "plugins/pstack-mode/skills"
 LOCAL_SKILLS = ("operator-handoff",)
-PLUGINS = ("skill-drafts", "bb-thread-env", "self-compact")
+PLUGINS = ("skill-drafts", "bb-thread-env", "bb-title-input", "self-compact")
 RESEARCH_PROJECT = "proj_personal"
 # Hermes seeds these into every home, opted out or not, until the home's .bundled_manifest tracks
 # them as deleted. Mirrors ESSENTIAL_SKILLS in Hermes's agent/skill_utils.py.

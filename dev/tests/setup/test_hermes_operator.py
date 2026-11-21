@@ -524,6 +524,9 @@ def run_plugin_command(h, command):
     activation.reload_running_gateway = lambda: reload_gateway(h)
     sys.modules["hermes_cli"] = types.ModuleType("hermes_cli")
     sys.modules["hermes_cli.plugins_activation"] = activation
+    sys.modules["agent"] = types.ModuleType("agent")
+    sys.modules["agent"].title_generator = sys.modules["agent.title_generator"] = types.ModuleType("agent.title_generator")
+    sys.modules["agent.title_generator"]._CONTROL_WRAPPERS = ()
     commands = {}
     class Context:
         def register_cli_command(self, name, help, setup_fn, handler_fn=None, description=""):
@@ -785,7 +788,7 @@ class OperatorProfileSetupTests(unittest.TestCase):
         self.assertFalse(settings["memory.write_approval"])
         self.assertEqual(settings["compression.threshold_tokens"], 300000)
         self.assertEqual(settings["hooks.output_spill.max_chars"], 32000)
-        self.assertEqual(settings["plugins.enabled"], ["skill-drafts", "bb-thread-env", "self-compact", "korean-pack"])
+        self.assertEqual(settings["plugins.enabled"], ["skill-drafts", "bb-thread-env", "bb-title-input", "self-compact", "korean-pack"])
         self.assertTrue((self.operator / "plugins/self-compact/plugin.yaml").is_file())
         handoff = (skills["operator-handoff"][0] / "SKILL.md").read_text()
         self.assertIn(CC_DESCRIPTION, handoff)

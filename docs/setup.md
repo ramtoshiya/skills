@@ -630,6 +630,7 @@ Then it changes these files under `~/.hermes/profiles/operator/`:
 | `plugins/<entry>/` | The files Git tracks in each marketplace entry that is a native Hermes plugin |
 | `plugins/skill-drafts/` | A copy of `setup/hermes/plugins/skill-drafts` and a `sources.json` that maps each skill to the checkout and, for a third-party skill, the fork and commit it came from. The plugin keeps its evidence packets and proposal record in the profile's `skill-drafts/` folder, which a reinstall leaves alone |
 | `plugins/bb-thread-env/` | A copy of `setup/hermes/plugins/bb-thread-env` |
+| `plugins/bb-title-input/` | A copy of `setup/hermes/plugins/bb-title-input` |
 | `plugins/self-compact/` | A copy of `setup/hermes/plugins/self-compact` |
 | `config.yaml` | The settings below, and the plugins enabled |
 
@@ -883,6 +884,24 @@ The operator profile's `logs/agent.log` shows `Session env resolver ... failed`
 with the error. `npm test` runs the plugin against the Hermes on `PATH` and
 fails in that case. After a fix reaches `main`, `mise run hermes:operator`
 loads the new copy into the running gateway without a restart.
+
+
+### How a bb session gets its title
+
+bb starts the first message of every thread with a `<system_instructions>`
+block that holds its plugin text, `AGENTS.md`, and the skill list, and puts the
+user's text after the closing tag. Hermes titles a session from that message,
+so without a fix the session is named after the instructions, such as
+`BB environment setup instructions #12`. bb takes the session's name as the
+thread title whenever its own title generation fails, for example while the AI
+service it uses is at its usage limit.
+
+The `bb-title-input` plugin adds bb's block to the control wrappers that
+Hermes's titler already strips, so the title comes from the user's text. Only
+the titler reads that list, so the model still receives the whole message.
+Hermes has no hook for the title input, so the plugin appends to
+`agent.title_generator._CONTROL_WRAPPERS`. If a Hermes update renames it, the
+plugin fails to load and `npm test` fails against the installed Hermes.
 
 ### How a session compacts itself
 
