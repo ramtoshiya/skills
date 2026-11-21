@@ -24,6 +24,7 @@ does not run the hooks.
 | `reorganize-commits` | Rewrites the current branch's commits into reviewable chunks. Runs only when you invoke it | Git |
 | `self-compact` | Compacts the conversation at a boundary the agent picks and resumes from a handoff note without you | BB with Claude Code or Hermes, or macOS Paseo Desktop. Node.js and the `bb` CLI in BB |
 | `stable-refs` | Gives documents and plans permanent identifiers that survive edits | Nothing |
+| `wjrj-board` | Reads, draws on, renders, and snapshots boards in the wjrj app on the same Mac | The `wjrj` command on `PATH`, which the wjrj checkout installs with `npm run install-cli`, and the wjrj app running on that Mac |
 | `worker-routing` | Supplies the shared model, effort, provider, quota, urgency, retry, and escalation policy that agents follow when they start workers, a `newest-model` script that prints the model to pass for each family, and a `quota-pace.py` script that picks the side for new work from recent quota use | BB for cross-provider workers, and for Claude workers when the host hides Claude Code's own subagent tools. Elsewhere, the host's agent tool. `jq`, and the `bb` CLI for the `claudex` catalog. uv for `quota-pace.py`, which reads Quotio's history when the Quotio app records it |
 
 The `codex-session-reader` skill is inactive. Its source remains in
@@ -162,6 +163,16 @@ node dev/evals/excalidraw-skill/run.mjs plugins/ramtoshiya/skills/excalidraw-boa
 
 These evaluations check the model's delivery decisions, not the CLI protocol
 or live browser synchronization. `npm test` runs the CLI's automated tests.
+
+wjrj board requests update a board in the wjrj app on the same Mac. The agent
+reports saved, rendered, and seen content separately, and never prints the
+agent key from wjrj's `api.json`. The `wjrj` command and its tests live in the
+wjrj repository, not here. The skill's offline policy evaluations take their
+decision schema from the skill's `evals/evals.json`:
+
+```sh
+node dev/evals/wjrj-skill/run.mjs plugins/ramtoshiya/skills/wjrj-board/SKILL.md /path/to/eval-results
+```
 
 ## Requirements
 
