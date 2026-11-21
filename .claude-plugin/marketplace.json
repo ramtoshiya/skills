@@ -22,7 +22,7 @@
         "source": "git-subdir",
         "url": "ramtoshiya/mattpocock-skills",
         "path": "skills/productivity",
-        "sha": "660effa621300eb6c388c7e9347fbf1d4cb3ba4f"
+        "sha": "32fe1412641cd7a665852ddd5e53cc33d1f6c911"
       },
       "skills": ["./grilling", "./grill-me", "./handoff"],
       "author": { "name": "Matt Pocock" },
@@ -36,7 +36,7 @@
         "source": "git-subdir",
         "url": "ramtoshiya/claude-codex-settings",
         "path": "plugins/test-audit/skills",
-        "sha": "b62abd96e98ce0201d7f79f12ab84ae2172716cd"
+        "sha": "bbb9ce6be6f9cfbe6d5b2e10b6d795ba23c7f690"
       },
       "skills": ["./test-audit"],
       "author": { "name": "Fatih C. Akyon" },
@@ -50,7 +50,7 @@
         "source": "git-subdir",
         "url": "ramtoshiya/ouroboros",
         "path": "plugins/ouroboros-interview",
-        "sha": "c1839602f663d43a8227fcf53d426e977c3c01f1"
+        "sha": "f322f8f18fa82a4442249bcd80079cb8e9248fe5"
       },
       "author": { "name": "Q00" },
       "repository": "https://github.com/ramtoshiya/ouroboros",
@@ -63,7 +63,7 @@
         "source": "git-subdir",
         "url": "ramtoshiya/pstack-mode",
         "path": "plugins/pstack-mode",
-        "sha": "f4ca95fef13851459a7443e6a6afd5911ac4a5a4"
+        "sha": "6faa434b802f1681dbac9b474946fa8786f5304b"
       },
       "author": { "name": "Lauren Tan" },
       "repository": "https://github.com/ramtoshiya/pstack-mode",
