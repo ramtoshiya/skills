@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Personal skills and a package and Python guard for Claude Code and Codex",
   "scripts": {
-    "test": "node --test tools/claudex/tests/*.test.mjs tools/worktreeinclude/tests/*.test.mjs tools/excalidraw-board/tests/*.test.mjs tools/sidecar/tests/*.test.mjs bb-plugins/thread-titles/tests/*.test.mjs dev/tests/integration/*.test.mjs dev/tests/plugins/*.test.mjs dev/tests/repository/*.test.mjs && uv run --no-project --managed-python --python '>=3.11' python -m unittest discover -s dev/tests/plugins -p 'test_*.py' && uv run --no-project --managed-python --python '>=3.11' python -m unittest discover -s dev/tests/setup -p 'test_*.py' && uv run --no-project --managed-python --python '>=3.11' python -m unittest discover -s tools/plugin-update-review/tests -p 'test_*.py'"
+    "test": "node --test tools/claudex/tests/*.test.mjs tools/worktreeinclude/tests/*.test.mjs tools/excalidraw-board/tests/*.test.mjs tools/sidecar/tests/*.test.mjs bb-plugins/thread-titles/tests/*.test.mjs dev/tests/integration/*.test.mjs dev/tests/plugins/*.test.mjs dev/tests/repository/*.test.mjs && uv run --no-project --managed-python --python '>=3.11' python -m unittest discover -s dev/tests/plugins -p 'test_*.py' && uv run --no-project --managed-python --python '>=3.11' python -m unittest discover -s dev/tests/setup -p 'test_*.py'"
   },
   "engines": { "node": ">=22.19.0" }
 }

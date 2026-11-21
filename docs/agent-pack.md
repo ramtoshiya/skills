@@ -222,11 +222,6 @@ checkout, so edits apply after a reload.
 
 Restart the agent after installing, or run `/reload-plugins` in Claude Code.
 
-For a local review of third-party updates before changing pins, see
-[Plugin update review](../tools/plugin-update-review/README.md). Its
-installation targets can invoke the sync task after a person applies a
-candidate. Review trust and runtime behavior separately as described below.
-
 ## Synchronize a local checkout
 
 For a managed installation of this repository and its selected third-party
@@ -293,7 +288,7 @@ repeated sync does not rewrite unchanged ownership state.
 
 On first use, an existing installed copy must match an approved source before
 sync adopts it. Local modifications are conflicts, not permission to replace
-the files. Preserve the customization in a reviewed fork or resolve it manually
+the files. Preserve the customization in a fork or resolve it manually
 before retrying. After adoption, local changes to a managed installation also
 produce a conflict.
 

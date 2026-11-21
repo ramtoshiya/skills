@@ -1,4 +1,0 @@
-#!/bin/sh
-set -eu
-runtime="$HOME/.local/share/plugin-update-review/src/review.py"
-exec uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I "$runtime" "$@"

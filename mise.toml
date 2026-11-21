@@ -68,6 +68,10 @@ run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-con
 description = "Bring the shared checkout's main level with origin/main, then install from it"
 run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/level.py sync"
 
+[tasks."upstream-updates:automation"]
+description = "Create or update the daily bb automation that updates third-party skills"
+run = "node dev/automation/upstream-updates/updates.mjs install"
+
 [tasks."agents:status"]
 description = "Compare installed agent packages with this checkout"
 run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/sync.py status"

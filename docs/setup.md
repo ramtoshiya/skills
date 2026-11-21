@@ -171,6 +171,19 @@ moves it and keeps its settings. When the folder has a `package-lock.json`, the
 row first names `npm ci --ignore-scripts --prefix <folder>`, because bb builds
 the plugin from that folder's `node_modules`. `main:sync` never moves a plugin by itself.
 
+## Update third-party skills daily
+
+From the checkout, run:
+
+```sh
+mise run upstream-updates:automation
+```
+
+The task creates or updates the bb automation that keeps third-party skill
+pins level with their upstreams. It needs bb, and a bb project whose source is
+this checkout. Running it again updates the same automation.
+[Third-party skills](upstream-skills.md) describes what the automation does.
+
 ## Check GitHub Actions
 
 From the checkout, run:
@@ -215,9 +228,6 @@ Homebrew setup. Its security step runs even if the syntax check fails.
 `.github/workflows/test.yml` runs `npm test` on macOS for pushes and pull
 requests with the same permissions, action pins, and locked tools. Run the
 same suite locally with `mise exec -- npm test`.
-The upstream fork drift workflow keeps issue-write permission only for its
-existing reporting job. Checkout does not persist credentials, and setup-node's
-automatic package-manager cache is disabled there.
 
 ## What it changes
 

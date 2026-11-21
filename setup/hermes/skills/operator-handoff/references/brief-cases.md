@@ -11,12 +11,11 @@ and push" in the authority paragraph with "commit, and merge into the local
 
 ## Forked skill {:#forked-skill}
 
-When the skill comes from a fork listed in
-`{{SKILLS_REPO}}/.github/upstream-forks.json`, check whether its upstream has
-commits the fork lacks, with
-`gh api 'repos/<upstream>/compare/<upstreamBranch>...<fork owner>:<branch>'`,
-and whether those commits change what the diff targets. If they do, say so in
-the brief and to the user, who decides whether the fork syncs first.
+When the skill comes from a fork, its entry in
+`{{SKILLS_REPO}}/dev/automation/upstream-updates/upstreams.json` names the
+branch that the pin uses. The brief names that branch and says to change it
+only with new commits or merges, never a rebase or force-push. A daily update
+agent merges upstream into the same branch and needs every pin to stay on it.
 
 ## Web UI or server {:#web-ui}
 

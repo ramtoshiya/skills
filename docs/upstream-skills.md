@@ -25,9 +25,8 @@ approval. Questions must ask something explicitly. Only yes/no questions use
 "yes" to accept the recommendation, and multiple-choice recommendations name
 the option. The patches follow [the upstream question-format fix](https://github.com/mattpocock/skills/issues/1249#issuecomment-6120835958)
 and [the list-and-veto preference](https://github.com/mattpocock/skills/issues/1112#issuecomment-6186224765).
-Return the entry to `mattpocock/skills` after issue #1249 closes, reviewing the
-upstream diff and validating the replacement pin before updating installed
-copies.
+The update agent described below points the entry back at
+`mattpocock/skills` once upstream's `grilling` covers this behavior.
 
 `test-audit` runs automatically when writing or changing tests and when the
 requested work assesses test quality, including read-only audits. The fork
@@ -82,13 +81,6 @@ hooks, from the copies `mise run agents:sync` fetches. A pin update pushed to
 `origin/main` runs both installers through `main:sync`, as
 [Machine setup](setup.md) describes.
 
-## Review updates locally
-
-[Plugin update review](../tools/plugin-update-review/README.md) can prepare local
-candidates from configured forks and upstreams. A person reviews the diffs,
-starts any tests, and explicitly applies a candidate. The existing remote drift
-checks continue to run independently.
-
 ## Add an entry
 
 Use a `git-subdir` entry to take some skills from an upstream repository
@@ -131,59 +123,78 @@ Claude Code and Codex behaved like this in tests with Codex CLI
   root is not in the installed copy unless the folder has its own.
 - Both agents install the whole `path` folder and load only the listed skills.
 
-## Scheduled fork checks
+## Automatic updates
 
-[Upstream fork drift](../.github/workflows/upstream-forks.yml) runs every Monday
-at 04:23 UTC and can be started from the Actions tab with `workflow_dispatch`.
-It monitors every fork used by this marketplace:
+A daily bb automation keeps the third-party entries level with their
+upstreams. No person reviews an update before it installs.
 
-| Fork | Upstream |
+At 05:00 Asia/Seoul the automation runs
+`node dev/automation/upstream-updates/updates.mjs check` in the shared
+checkout. For each `git-subdir` entry, the check fetches the entry's source
+repository and the upstream that
+[upstreams.json](../dev/automation/upstream-updates/upstreams.json) names. It
+keeps these mirrors in `~/.cache/ramtoshiya/upstream-updates/`. The newest
+upstream commit that the pinned commit contains is the last handled one. An
+entry is out of date in three cases:
+
+- Upstream changed a file under one of the entry's `watch` paths since the
+  last handled commit.
+- Upstream added a skill under one of its `newSkillsIn` paths.
+- The pinned commit is not on the entry's `branch`.
+
+Upstream commits that touch only other paths do not count. When every entry is
+current, the run prints nothing and bb records it as a skipped run. Otherwise
+the check starts one agent thread in a new worktree of `main`. The thread gets
+[the update instructions](../dev/automation/upstream-updates/agent-prompt.md)
+and the check's findings. The check chooses the agent's provider and model at
+run time with the `worker-routing` skill's `sonnet` `high` row and its quota
+script. If the check itself fails, it sends a bb notification and exits
+nonzero, so bb records a failed run.
+
+The pins are the only state. A merge of an upstream commit into the fork,
+pinned here, marks that commit as handled. A refused upstream change is still
+merged, and the merge leaves out what was refused. An entry the agent cannot
+finish keeps its old pin, so the next day's check starts a new run for it.
+
+The agent merges upstream into each fork and never rebases or force-pushes. It
+keeps the intent of each fork change unless upstream made the change
+unnecessary or conflicts with it, and records why in the fork's commit. It
+always refuses telemetry and judges other new behavior, such as network calls,
+broader triggering, or hooks, against the skill's purpose. It does not add new
+upstream skills. It runs the fork's checks, pins the merge, runs this
+repository's checks, and pushes to `origin/main`, which installs the update
+through `main:sync`. Its final reply in the thread is an HTML summary of the
+day's changes, and it sends a bb notification that opens the thread.
+
+`node dev/automation/upstream-updates/updates.mjs verify` checks the pins in
+the working tree before a push. Each pinned commit must be on its branch, each
+listed skill must have a `SKILL.md`, and a manifest `version` must change when
+the pinned folder changed.
+
+To add an entry, add a record under its name to `upstreams.json`:
+
+| Field | Value |
 | --- | --- |
-| `ramtoshiya/mattpocock-skills:main` | `mattpocock/skills:main` |
-| `ramtoshiya/claude-codex-settings:main` | `fcakyon/claude-codex-settings:main` |
-| `ramtoshiya/ouroboros:main` | `Q00/ouroboros:main` |
-| `ramtoshiya/pstack-mode:main` | `backnotprop/pstack:main` |
+| `branch` | The branch of the entry's source repository that holds the pin |
+| `upstream` | The upstream repository, as `owner/repository` |
+| `upstreamBranch` | The upstream branch to follow |
+| `watch` | Upstream paths whose changes reach the pinned folder |
+| `newSkillsIn` | Optional. Upstream folders where a new skill is reported. Defaults to `watch` |
 
-The Ouroboros fork first runs its own [upstream sync workflow](https://github.com/ramtoshiya/ouroboros/blob/main/.github/workflows/sync-upstream.yml)
-every Monday at 04:00 UTC. It rebases the fork's customization commits onto
-the latest upstream `main`, runs the standalone interview plugin test, and
-pushes with a force-with-lease. A clean rebase therefore finishes without an
-alert. A conflict or failed test leaves the fork unchanged, and the drift check
-then reports the work that needs manual review. Both workflows also support a
-manual run.
+`npm test` fails when a `git-subdir` entry has no record. Create or update the
+automation with `mise run upstream-updates:automation`, as
+[Machine setup](setup.md) describes.
 
-The check uses GitHub's compare API with the upstream branch as the base and
-the fork branch as the head. Its `behind_by` count includes missing upstream
-commits even when the fork has its own commits. When the count is positive,
-the built-in `GITHUB_TOKEN` creates or updates one open issue per pair in
-`ramtoshiya/skills`, with the count and comparison link. A later successful
-check closes that issue when the count reaches zero. API errors fail the run
-and leave that pair's issue unchanged. Runs are serialized to avoid duplicate
-creation, and existing duplicate bot issues are closed.
+## Change a pin by hand
 
-To monitor another public fork in the same GitHub fork network, add an object
-to [the monitored pairs](../.github/upstream-forks.json) with `fork`, `branch`,
-`upstream`, and `upstreamBranch`. Repository values use `owner/repository`.
-The deterministic test also requires every `ramtoshiya/*` marketplace source
-to have a monitored pair, so a new fork cannot be added without this check.
-Each pair has its own issue marker, so changing a pair's branches or removing
-it requires closing its old issue manually. Issue matching uses the marker and
-the `github-actions[bot]` author, leaving human issues alone.
-
-The drift workflow needs only repository contents read access and issues write
-access. It uses no private credentials or local services, and it never changes
-fork branches or marketplace pins. The separate sync workflow runs inside the
-Ouroboros fork, where its built-in token can update that fork without a shared
-credential. Marketplace pins remain review-gated. Follow the pin update steps
-below after reviewing a synchronized fork. Deterministic tests run with
-`npm test`.
-
-## Update a pin
+The update agent follows these steps. Follow them too when you change a fork
+yourself.
 
 1. Read the upstream diff for the entry's folder between the pinned commit and
    the new one. Check removed or renamed files, new dependencies, license
    changes, hook behavior, and changes to the skill's instructions.
-2. For a fork, merge upstream into the fork first. Git reporting no conflict is
+2. For a fork, merge upstream into the fork first. Never rebase the fork
+   branch, because a pin that leaves the branch can disappear. Git reporting no conflict is
    not enough: an upstream change can still undo the intent of a fork change.
    Each fork commit message should say why the change exists, so a later merge
    can tell a customization from an accident.
@@ -192,7 +203,8 @@ below after reviewing a synchronized fork. Deterministic tests run with
    manifests. Claude Code and Codex label an install with this
    version, not the marketplace's commit SHA.
 4. Change `sha` in the entry, and `path` if upstream moved the folder. That
-   commit is the release.
+   commit is the release. Run
+   `node dev/automation/upstream-updates/updates.mjs verify`.
 5. Push the change to `origin/main`. For managed installations, `main:sync`
    then runs `mise run agents:sync`. Reload or restart each changed host and
    review Codex hook trust. For manual installations,
