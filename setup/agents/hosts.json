@@ -2,10 +2,6 @@
   "hosts": ["claude", "codex"],
   "plugins": {
     "ramtoshiya-cc": ["claude"],
-    "humanize": ["codex"],
-    "humanize-korean": ["codex"],
-    "omd-kr-writer": ["claude", "codex"],
-    "omd": [],
     "open-pencil": ["claude", "codex"],
     "mattpocock-productivity": ["claude", "codex"],
     "fcakyon-test-audit": ["claude", "codex"],

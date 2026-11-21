@@ -44,19 +44,6 @@
       "license": "MIT"
     },
     {
-      "name": "humanize",
-      "description": "English writing and advisory AI-wording warnings, with Korean text delegated to humanize-korean and a uv-managed hook.",
-      "source": {
-        "source": "git-subdir",
-        "url": "ramtoshiya/claude-codex-settings",
-        "path": "plugins/humanize",
-        "sha": "200d8bb89914e13dabd1bd35db3db289a5bb349e"
-      },
-      "author": { "name": "Fatih C. Akyon" },
-      "repository": "https://github.com/ramtoshiya/claude-codex-settings",
-      "license": "Apache-2.0"
-    },
-    {
       "name": "ouroboros-interview",
       "description": "Ouroboros's Socratic interview and unstuck workflows with bundled review and lateral-thinking prompts, without its server or execution workflow.",
       "source": {
@@ -80,33 +67,6 @@
       },
       "author": { "name": "Lauren Tan" },
       "repository": "https://github.com/ramtoshiya/pstack-mode",
-      "license": "MIT"
-    },
-    {
-      "name": "humanize-korean",
-      "description": "Korean publication writing plus diagnosis, editing, and verification from epoko77-ai's im-not-ai, packaged for Claude Code and Codex.",
-      "source": {
-        "source": "git-subdir",
-        "url": "ramtoshiya/im-not-ai",
-        "path": "plugins/humanize-korean",
-        "sha": "ae40e238c20e29af1365a0d5e40cce1805a26218"
-      },
-      "author": { "name": "epoko77-ai" },
-      "repository": "https://github.com/ramtoshiya/im-not-ai",
-      "license": "MIT"
-    },
-    {
-      "name": "omd-kr-writer",
-      "description": "OmD Korean writing with 12 voice presets, without the product-design workflow or preference hooks.",
-      "source": {
-        "source": "git-subdir",
-        "url": "ramtoshiya/oh-my-design",
-        "path": "plugins/omd/skills",
-        "sha": "46ebebcabd24d7af695b74402275d6d640d2e379"
-      },
-      "skills": ["./omd-kr-writer"],
-      "author": { "name": "kwakseongjae" },
-      "repository": "https://github.com/ramtoshiya/oh-my-design",
       "license": "MIT"
     }
   ]

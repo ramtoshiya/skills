@@ -18,18 +18,6 @@
     "upstreamBranch": "main"
   },
   {
-    "fork": "ramtoshiya/im-not-ai",
-    "branch": "main",
-    "upstream": "epoko77-ai/im-not-ai",
-    "upstreamBranch": "main"
-  },
-  {
-    "fork": "ramtoshiya/oh-my-design",
-    "branch": "main",
-    "upstream": "kwakseongjae/oh-my-design",
-    "upstreamBranch": "main"
-  },
-  {
     "fork": "ramtoshiya/pstack-mode",
     "branch": "main",
     "upstream": "backnotprop/pstack",

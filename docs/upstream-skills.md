@@ -12,10 +12,7 @@ those repositories. This repository holds none of them.
 | --- | --- | --- | --- |
 | `mattpocock-productivity` | `grilling`, `grill-me`, `handoff` | `skills/productivity` in the fork [ramtoshiya/mattpocock-skills](https://github.com/ramtoshiya/mattpocock-skills) | MIT |
 | `fcakyon-test-audit` | `test-audit` | `plugins/test-audit/skills` in the fork [ramtoshiya/claude-codex-settings](https://github.com/ramtoshiya/claude-codex-settings) | MIT |
-| `humanize` | `humanize` and its hook | `plugins/humanize` in the fork [ramtoshiya/claude-codex-settings](https://github.com/ramtoshiya/claude-codex-settings) | Apache-2.0 |
-| `humanize-korean` | Korean prose diagnosis, editing, and verification | `plugins/humanize-korean` in the fork [ramtoshiya/im-not-ai](https://github.com/ramtoshiya/im-not-ai) | MIT |
 | `ouroboros-interview` | `interview`, `unstuck` | `plugins/ouroboros-interview` in the fork [ramtoshiya/ouroboros](https://github.com/ramtoshiya/ouroboros) | MIT |
-| `omd-kr-writer` | Korean writing with 12 voice presets | `plugins/omd/skills/omd-kr-writer` in the fork [ramtoshiya/oh-my-design](https://github.com/ramtoshiya/oh-my-design) | MIT |
 | `pstack-mode` | `/pstack-mode:mode` and the pstack workflows and principles it selects | `plugins/pstack-mode` in [ramtoshiya/pstack-mode](https://github.com/ramtoshiya/pstack-mode), generated from [backnotprop/pstack](https://github.com/backnotprop/pstack) | MIT |
 
 `grill-me` and `handoff` run only when you invoke them, so the agent's own
@@ -49,20 +46,8 @@ updates. Results stay in the conversation unless you request a summary file.
 Invoke `/ouroboros-interview:interview` or `/ouroboros-interview:unstuck` in
 Claude Code after installing the entry.
 
-The two `claude-codex-settings` entries have different licenses. The
-repository is Apache-2.0, and the `test-audit` folder has its own MIT
-`LICENSE`.
-
-`omd-kr-writer` writes or revises Korean text with 12 voice presets and defaults
-to `toss-tech-design`. Explicit instructions and project voice override presets.
-It uses the caller's output paths and document schema. Other locales remain
-caller-owned.
-
-The marketplace source points at the OmD skills directory but exposes only
-`omd-kr-writer`. It does not load OmD's design-system workflows, roles, or
-preference hooks. Claude Code and Codex use the marketplace's `skills`
-selection. Restart or reload
-the affected agent after changing the installation.
+The `claude-codex-settings` repository is Apache-2.0, and the `test-audit`
+folder has its own MIT `LICENSE`.
 
 `pstack-mode` is a generated package, not a plain fork. Its repository keeps
 an unchanged pstack mirror under `upstream/` and a generator that writes
@@ -72,105 +57,6 @@ and build. The mode reads `ramtoshiya:worker-routing`, so a host that installs
 rebuilt `main` of `ramtoshiya/pstack-mode` and set the entry's `sha` to that
 commit. A change that touches both repositories therefore lands in two
 commits, first in `pstack-mode`, then the pin here.
-
-The `humanize` skill handles English writing and existing code/configuration
-changes. Korean text, including new publication drafts, goes to
-`humanize-korean`. Both skills load for bilingual text. Select by source or
-output language, not the language of the instructions. Ordinary private chat,
-research, explanations, and read-only reviews do not invoke either unless also
-writing files, publishing, or explicitly humanizing text.
-
-Both humanizers are currently paused on Claude Code and installed in Codex.
-[Setup](setup.md) describes the host selection.
-
-Its hook checks file writes, commits, pull requests, and Slack or Linear
-posts for AI-sounding wording. Findings are advisory warnings and do not block
-the call or override normal permissions. The fork runs the hook through
-uv-managed Python instead of a bare `python3`. This change is included at the
-pinned commit. When the hook itself fails, it lets the call through, as
-upstream does. For Codex patches, the hook skips files it cannot read or
-reconstruct and checks the remaining files. Codex reports any patch errors.
-
-`humanize-korean` packages a pinned commit from the
-[ramtoshiya/im-not-ai fork](https://github.com/ramtoshiya/im-not-ai), not a local
-source path. Codex loads the paired skills. The managed host
-selection in `setup/agents/hosts.json` enables the Korean companion where the
-English skill delegates to it.
-
-For new Korean publication text, including issue replies without an editing
-request, the Korean skill reads its rulebook and drafts from the caller's facts.
-It does not create an empty editing source or claim source-relative gate results.
-Supplied-source editing keeps the upstream Korean rules, light/standard/heavy
-routing, diagnosis and finalizer roles, chunk reassembly, and deterministic
-verification scripts. The advisory English-wording hook remains separate.
-
-The fork builds a self-contained package with the upstream MIT license.
-`scripts/build_hermes_plugin.py --check` checks the packaged copies against
-their source files. Run it after merging upstream changes, then exercise the
-packaged helpers in a fresh agent session before updating the marketplace
-pin. A matching rulebook alone
-does not prove that the workflow still works.
-
-## Measure humanizer routing
-
-Measure source/output-language routing separately from conversation language.
-Korean publication and source editing should use `humanize-korean`, English
-text should use `humanize`, and bilingual text should use both. A private-chat
-control means ordinary Q&A without file writing or a separate publication task,
-not a platform privacy or access-control guarantee.
-
-Run the routing evaluator with local `SKILL.md` files from the exact marketplace
-pins. It needs Node.js, Claude Code, and a configured model provider:
-
-```sh
-node dev/evals/humanizer-routing/run.mjs \
-  dev/evals/humanizer-routing/fixtures/humanizer-trigger-cases.json \
-  /path/to/english/SKILL.md /path/to/korean/SKILL.md \
-  /path/outside/repository/results.json gpt-6.1-sol 3
-```
-
-The corpus has paired Korean and English requests, cross-language editing, and
-bilingual text. The runner loads both skills' frontmatter together in a temporary
-plugin, uses isolated settings, and records actual `Skill` calls in the first
-assistant turn. Skill bodies and hooks do not execute. Claude Code's built-in
-skills can remain visible and are recorded with each observation. Timeouts,
-missing skills, and failed runs are invalid observations, not non-triggers.
-
-To check implicit writing, use
-`dev/evals/humanizer-routing/fixtures/humanizer-implicit-thread-cases.json` as the first argument. It
-pairs the same user message in a published Multica thread and a private chat,
-in Korean and English, without asking for humanization. Publication context is
-stated in the prompt, not discovered through a live Multica tool. Both corpora
-carry `expected_skills` for the publication-inclusive contract above. Code-only
-changes remain with `humanize`. Combine the corpora and freeze those labels
-before evaluating either configuration. Compare baseline and candidate against
-the same contract rather than scoring each against its own scope.
-
-`dev/evals/humanizer-routing/fixtures/humanizer-publication-holdout-cases.json` adds cross-language
-publication and private discussion that mentions posting without requesting it.
-Keep this separate from the optimization corpus when reporting results.
-
-Keep experimental source clones at explicit base commits and record each local
-candidate commit. Edit the Korean fork's canonical skill sources, then rebuild and check its self-contained package with
-`scripts/build_hermes_plugin.py`. Evaluate the rebuilt package, not a generated
-file edited by hand. A new-writing mode must not invent an empty editing source
-or claim source-relative gate results. Smoke-test the full skill body
-separately from description-only routing. Local evaluation does not update
-marketplace pins, plugin versions, or installed agents.
-
-Report each skill's calls divided by valid runs, grouped by conversation language
-and task type. Also report target-text language, both/neither selections, and
-invalid runs. For each skill, compute the true-positive rate on cases that
-require it and the false-positive rate on cases that exclude it. Report missed
-calls separately from wrong-language calls. A skill with no positive cases has
-an undefined true-positive rate, not a zero rate. State whether the reference
-contract is the current scope or a proposed language-exclusive writing policy.
-Keep generated results outside the repository and attach them to
-the review. Three repetitions of a small synthetic corpus are a routing check,
-not a production usage estimate. This evaluator does not measure later calls,
-editing quality, hook warnings, or Codex behavior. Do not use
-Claude Code's `--bare` mode here. It omits automatic skill context even when the
-initialization event lists the skills.
 
 ## Install
 
@@ -187,8 +73,6 @@ Claude Code and Codex read the marketplace. After adding it as described in
 claude plugin install mattpocock-productivity@ramtoshiya --scope user
 codex plugin add mattpocock-productivity@ramtoshiya
 ```
-
-Codex runs the `humanize` hook only after you trust it in `/hooks`.
 
 A loose copy of the same skill makes it load twice, as described in
 [Agent plugins](agent-pack.md).
@@ -242,7 +126,7 @@ Claude Code and Codex behaved like this in tests with Codex CLI
   skills load. The entry's `skills` list cannot narrow it: Claude Code adds the
   list to it. Choosing fewer skills needs a fork with an edited `plugin.json`.
 - Codex refuses an entry whose `name` differs from the `name` in the source's
-  `plugin.json`. This is why the `humanize` entry keeps the upstream name.
+  `plugin.json`.
 - A `git-subdir` install copies only `path`. A `LICENSE` at the repository
   root is not in the installed copy unless the folder has its own.
 - Both agents install the whole `path` folder and load only the listed skills.
@@ -258,8 +142,6 @@ It monitors every fork used by this marketplace:
 | `ramtoshiya/mattpocock-skills:main` | `mattpocock/skills:main` |
 | `ramtoshiya/claude-codex-settings:main` | `fcakyon/claude-codex-settings:main` |
 | `ramtoshiya/ouroboros:main` | `Q00/ouroboros:main` |
-| `ramtoshiya/im-not-ai:main` | `epoko77-ai/im-not-ai:main` |
-| `ramtoshiya/oh-my-design:main` | `kwakseongjae/oh-my-design:main` |
 | `ramtoshiya/pstack-mode:main` | `backnotprop/pstack:main` |
 
 The Ouroboros fork first runs its own [upstream sync workflow](https://github.com/ramtoshiya/ouroboros/blob/main/.github/workflows/sync-upstream.yml)
@@ -307,7 +189,7 @@ below after reviewing a synchronized fork. Deterministic tests run with
    can tell a customization from an accident.
 3. If the fork's plugin manifests have a `version`, bump it when releasing
    changed plugin contents. Keep the version consistent across the agent
-   manifests. Claude Code and Codex label the `humanize` install with this
+   manifests. Claude Code and Codex label an install with this
    version, not the marketplace's commit SHA.
 4. Change `sha` in the entry, and `path` if upstream moved the folder. That
    commit is the release.
@@ -327,9 +209,3 @@ below after reviewing a synchronized fork. Deterministic tests run with
    selected commit. A displayed version alone does not prove that the installed
    files or an active runtime are current. Reusing a manifest version can keep
    changed fork contents from reaching an installed copy.
-
-For `humanize`, check a normal shell call and a file write containing a flagged
-word in a disposable directory. The shell call should succeed, and the file
-write should complete with an advisory warning. Run this check in the fresh
-Codex process without links between cached version directories. A direct call
-to `humanize.py` does not verify that Codex loaded the updated hook.

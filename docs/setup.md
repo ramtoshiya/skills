@@ -274,10 +274,8 @@ Agents:
 | `~/.local/bin/takeaturn` | The [takeaturn](https://github.com/ramtoshiya/takeaturn) lease CLI, built with `go install` at the commit that `COMMIT` in `setup/agents/takeaturn.py` pins. Agents use it to take turns on shared devices, as the shared instructions say. The repository is private, so the build needs Git access to it. `mise run takeaturn:install` installs it, `main:sync` installs it again when the pin changes, and `main:status` reports `drift` when the installed build is not the pinned commit |
 
 The managed plugin synchronization workflow reads host selections from
-`setup/agents/hosts.json`. Both humanizers are paused on Claude Code and
-selected together on Codex so Korean delegation has an installed
-target. Add `claude` back to both entries and run the sync to resume them. This
-policy file does not install plugins during `mise bootstrap`.
+`setup/agents/hosts.json`. This policy file does not install plugins during
+`mise bootstrap`.
 
 The shared instructions distinguish missing configuration and invalid or incompatible
 tools from an absent installation. They direct agents to inspect documented trusted
@@ -612,9 +610,9 @@ the seven skills above. Knowing a skill lets Hermes plan around it and name it
 in a brief. It does not let Hermes do the skill's work, because the
 operator-handoff skill sends anything beyond conversation and reading to a
 coding agent. The exception is `self-compact`, which Hermes follows
-through the `self_compact` tool described below. An entry that ships a native Hermes plugin (a `plugin.yaml`,
-such as `humanize-korean`) is installed as that plugin, and Hermes loads its
-skills as `<plugin>:<skill>`, such as `humanize-korean:humanize-korean`. The
+through the `self_compact` tool described below. An entry that ships a native Hermes plugin (a `plugin.yaml`)
+is installed as that plugin, and Hermes loads its
+skills as `<plugin>:<skill>`. The
 plugin's `name` must match its marketplace entry, or the task stops. Hermes's
 own bundled skills are deleted, as the next sections describe.
 
@@ -761,7 +759,7 @@ an entry whose id is `hermes-agent` in the ACP providers plugin's
 - It starts `hermes -p operator acp`.
 - Its skill menu adds the operator's `skills/` and each native plugin's
   `hermes/skills/` with the `<plugin>:` prefix. bb lists
-  `humanize-korean:humanize-korean`, the name Hermes loads it by. It also
+  each such skill by the name Hermes loads it by. It also
   adds the trusted repositories' skill folders that the operator loads, when
   they are inside your home folder, because bb takes only home-relative roots.
 - It sets reasoning through Hermes's `reasoning_effort` option.
@@ -777,8 +775,8 @@ so. bb still lists `~/.hermes/skills/` for the entry, which is why the base
 load that skill.
 
 Adding the operator's skills to the base `skills.external_dirs` instead would
-make every session in the base profile load them, and `humanize-korean` would
-load a second time without its prefix.
+make every session in the base profile load them, and a native plugin's skills would
+load a second time without their prefix.
 
 Unlike the shipped provider, the custom entry cannot fork a Hermes thread in
 bb, shows a generic icon and sign-in hint, and has no `none` level in the

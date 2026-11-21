@@ -272,13 +272,9 @@ selects the hosts for each entry:
 | --- | --- |
 | `ramtoshiya` | Claude Code, Codex |
 | `ramtoshiya-cc` | Claude Code |
-| `omd-kr-writer` | Claude Code, Codex |
-| `humanize`, `humanize-korean` | Codex |
 | `open-pencil`, `mattpocock-productivity`, `fcakyon-test-audit`, `ouroboros-interview`, `pstack-mode` | Claude Code, Codex |
-| `omd` | None |
 
-Full `omd` is excluded from user-level sync and installed only in explicitly
-selected projects. An entry missing from the policy applies to every host.
+An entry missing from the policy applies to every host.
 Adding an entry therefore declares an installation, not just a marketplace
 listing, when using these tasks.
 
@@ -362,7 +358,7 @@ help distinguish shared-server state from the installed files.
 
 Do not repair a missing plugin version with cache edits or links to another
 version. Use the install and runtime lifecycle above. For versioned third-party
-plugins such as `humanize`, also follow [Third-party skills](upstream-skills.md).
+plugins, also follow [Third-party skills](upstream-skills.md).
 
 ## How the files fit together
 
