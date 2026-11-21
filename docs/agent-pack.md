@@ -111,7 +111,9 @@ The `worker-routing` skill is the one policy for choosing a worker's model.
   weekly use at its scheduled reset from the last 24 hours of use. New work
   moves to the other side when the route's side is projected to run out and
   the other side is projected to have room. It also moves when the route's
-  side hits a usage limit and the other side reads below 100%. No fixed
+  side hits a usage limit and the other side reads below 100%. A running
+  worker that hits a usage limit moves the same way, by handoff to a new
+  thread, without asking you first. No fixed
   percentage moves work. A side that hit a limit comes back when a reading
   shows its quota renewed, or after the reset time that a shorter limit's
   error named. Urgent work moves only on a limit.

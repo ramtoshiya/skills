@@ -154,6 +154,10 @@ within its brief, the rest belongs to the same worker:
    before it reports a blocker. Do not start another worker or ask the user
    again. If the thread is archived or gone, tell the user and ask.
 
+When a usage limit stopped the worker, the rest goes to the handoff that
+`worker-routing` describes for that case, not back to the same thread. The
+handoff needs no new approval.
+
 A missing command option is not a blocker, and neither is a diverged branch or
 a push rejected as non-fast-forward. Send them back, and point the worker to the
 Diverged branches section of the shared preferences. When another of your

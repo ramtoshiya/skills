@@ -92,7 +92,8 @@ bb thread tell <id> 'Continue the task on the new model.'
 When urgency ends, the new model can wait for the next turn, so skip the stop and the
 continue message and run only `bb thread update <id> --model <model>`.
 
-To move a worker to another provider, such as a GPT worker whose work became urgent, hand it off:
+To move a worker to another provider, such as a GPT worker whose work became urgent or a worker
+stopped by a usage limit, hand it off:
 
 1. `bb thread stop <old-id>`. Leave the old thread idle and do not archive it yet.
 2. Read where it stands: `bb thread log <old-id>`, and `git status` and `git diff` in its

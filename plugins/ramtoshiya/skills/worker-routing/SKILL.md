@@ -91,13 +91,9 @@ worker's current provider and change the model on the same thread, so a worker m
 to Claude for urgency stays on Claude. Report why urgency ended and the row before
 and after.
 
-A running thread cannot change provider. Move a running GPT worker to Claude, or a
-worker that hits a usage limit to the other side, by handoff: stop its running turn
-and leave it idle, start a new thread on the target provider in the same environment
-with a brief that carries the state, the uncommitted changes it now owns, and what
-is left, move the old worker's child threads under the new one, and archive the old
-worker after the new one finishes. [BB workers](references/bb-workers.md) has the
-commands, including a model change that stays on one provider.
+A running thread cannot change provider. Move a running GPT worker to Claude by the
+handoff in [BB workers](references/bb-workers.md#move), which also covers a model
+change that stays on one provider.
 
 ## Route and quota {:#worker-route}
 
@@ -156,6 +152,14 @@ When `route.side` is `null`, no eligible side has confirmed capacity. Do not sta
 worker and do not move it to another model family. Tell the user which role is
 blocked, each side's scheduled reset, and the `reset_options`. A calling workflow's
 own fallback for a seat that cannot run still applies.
+
+A worker stopped by a usage-limit error moves now. Add the error with `--limited`,
+run the script for the worker's row, and hand the worker off to `route.side` as
+[BB workers](references/bb-workers.md#move) describes, without asking the user or
+waiting for a reset credit. The work was approved when it started. `route.side`
+already weighs each side's projection, so a projection that the new side runs out
+before its reset does not hold the work. Only a `null` `route.side` leaves the role
+waiting, as the paragraph above describes.
 
 Only a person redeems a reset credit. Never redeem one, call a redemption endpoint,
 or route work into a limit to make a credit usable, even when every side is limited.

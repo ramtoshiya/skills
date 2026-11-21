@@ -5,7 +5,8 @@ Read this when a worker stopped, failed, or seems to have outgrown its row. The 
 
 A worker that stopped or failed reruns on the same row by default. Read its thread first, with
 `bb thread log <id>` for a BB worker, not only the reply it returned. Fix what stopped it, or say in
-the new brief how to get past it.
+the new brief how to get past it. A worker stopped by a usage limit moves to another provider
+instead, as [Route and quota](../SKILL.md#worker-route) describes.
 
 Step up one row only when the worker's own work shows that the task outgrew its row: it produced a
 design that misses the requirement, or its checks kept failing while it kept changing the code. Say
