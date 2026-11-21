@@ -158,10 +158,12 @@ When a usage limit stopped the worker, the rest goes to the handoff that
 `worker-routing` describes for that case, not back to the same thread. The
 handoff needs no new approval.
 
-A missing command option is not a blocker, and neither is a diverged branch or
-a push rejected as non-fast-forward. Send them back, and point the worker to the
-Diverged branches section of the shared preferences. When another of your
-threads is integrating the same branch, name it to the worker.
+A missing command option is not a blocker, and neither is a broken tool or
+environment, a diverged branch, or a push rejected as non-fast-forward. Send
+them back. Point the worker to the Task completion section of the shared
+preferences for a broken tool, and to its Diverged branches section for a
+branch. When another of your threads is integrating the same branch, name it
+to the worker.
 
 These need the user's answer in conversation before any worker acts on them:
 
@@ -202,8 +204,9 @@ thread's model. Read `model` and `reasoningLevel` from the
 
 A child's completion notification quotes a reply of up to 4,000 characters
 and replaces a longer one with one line. Read the result in full with
-`bb thread output <threadId>`, or `bb thread log <threadId> --limit 2` when that
-prints nothing. Read a linked message (`#msg=<seq>`) with
+`bb thread output <threadId>`. When that prints nothing or only `[no-op]`,
+read `bb thread log <threadId>` back to its last other reply. Read a linked
+message (`#msg=<seq>`) with
 `bb thread log <threadId> --message <seq> --context 2`. Then, in the same turn:
 
 1. Check each claim you will relay that something does not exist, that a step

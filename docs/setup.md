@@ -685,9 +685,10 @@ Separate worktrees allow parallel work even when both results target `main`.
 When an approved worker stops short, the operator checks the brief it sent,
 says whether its own brief imposed the stop, and sends the rest back to that
 worker. A diverged branch also goes back to the worker, which waits for any
-other thread that is integrating the same branch. New scope, new authority, a
-shared-resource conflict that waiting does not resolve, or a failed safety
-check still goes to you first.
+other thread that is integrating the same branch. So does a broken tool or
+environment, which the worker diagnoses and fixes itself. New scope, new
+authority, a shared-resource conflict that waiting does not resolve, or a
+failed safety check still goes to you first.
 For BB customizations, the shared BB instructions and operator handoff direct
 agents to supported settings or plugins. An application fork, personal core
 patch, or installed bundle patch requires an explicit request for that route.

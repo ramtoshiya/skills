@@ -49,6 +49,12 @@ turn open instead of backgrounding it and ending the turn. Report a tool
 timeout or failure as it is. If a turn must end before a scheduled resume and
 has nothing to report, reply with only `[no-op]`.
 
+`bb thread output <child>` prints only the child's last reply. A reply that is
+only `[no-op]`, or empty, is not the child's result, because the child may have
+answered later notices after it reported. Before you report the child as
+stalled or finished, page back through `bb thread log <child>` to its last
+other reply and read that.
+
 ## BB references and customizations {:#bb-references-customizations}
 
 Separate a thread or message reference from adjacent text with spaces, including

@@ -40,6 +40,19 @@ downloading launchers. Use a compatible existing tool and rerun the check if fou
 Report evidence and any locations that could not be inspected as unresolved. Do not
 scan the home directory blindly or install, build, or update without authorization.
 
+When a broken or missing tool or environment blocks the task or its
+verification, find the root cause and fix it as part of the task, in any
+project. This covers tooling the task did not name, such as a simulator
+runtime that launches no app or a VM tool that cannot send key input. Do not
+stop, work around the gap, or hand the problem to the user. Repairing,
+restarting, or reconfiguring an existing tool is in scope, and so is changing
+a repository's own tooling. Installing new software, or building or updating
+software outside the repository, still needs authorization. Ask for it with
+the cause you found and the fix you propose. Before you restart or reconfigure
+something other sessions may be using, check that no other session is using
+it. When Shared devices names it, take a turn with `takeaturn`. Report the
+cause and the fix.
+
 Requests to change repository files include permission to commit completed,
 validated work locally. Commit only changes you own, without asking for a
 separate commit instruction. Leave unrelated or pre-existing changes alone.
@@ -108,6 +121,14 @@ failed on the stated one.
 Fragility and reliance on internals are costs to report with a route. They
 are not reasons to leave the route out, or to recommend an upstream request
 in its place when the user asked for something that works now.
+
+## Research scope {:#research-scope}
+
+Sources, tools, and projects that the user names in a research or design
+request are starting points, not the scope. Survey the wider field as well,
+such as other tools and published discussion of the topic, unless the user
+limits the scope. In a worker's brief, pass the named ones on as the user's
+examples, not as the list to cover.
 
 ## Diverged branches {:#diverged-branches}
 
