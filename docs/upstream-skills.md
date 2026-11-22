@@ -33,6 +33,9 @@ requested work assesses test quality, including read-only audits. The fork
 excludes test reads used as evidence for research, diagnosis, source review,
 packaging, and validation planning. A research assignment does not become a
 test audit because its parent workflow will later change tests.
+Its audit discovery step runs a bundled read-only script that needs Node 22 or
+later. The script lists candidates from the files in the repository and makes no
+network calls.
 
 `ouroboros-interview` packages the interview and unstuck skills with their
 bundled review and lateral-thinking prompts. Both use the host's native tools

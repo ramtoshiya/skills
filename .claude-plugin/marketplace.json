@@ -36,7 +36,7 @@
         "source": "git-subdir",
         "url": "ramtoshiya/claude-codex-settings",
         "path": "plugins/test-audit/skills",
-        "sha": "bbb9ce6be6f9cfbe6d5b2e10b6d795ba23c7f690"
+        "sha": "acd05efae7057b48a4da5c044704b46f93ed128c"
       },
       "skills": ["./test-audit"],
       "author": { "name": "Fatih C. Akyon" },
