@@ -114,7 +114,8 @@ def fingerprint(sources: dict[str, Any], op: dict[str, Any]) -> str:
 def owner(sources: dict[str, Any], name: str) -> str:
     skill = sources.get("skills", {}).get(name)
     if skill is None:
-        return f"a new skill. Place it in `{sources['defaultRepo']}` where that repository's docs say"
+        return ("not an installed skill from `sources.json`: a new skill, or one that a trusted project's "
+                "`skills.external_dirs` loads")
     if skill.get("upstream"):
         return (f"`{skill['path']}` in {skill['upstream']} at `{skill['commit']}`, pinned in "
                 f"`.claude-plugin/marketplace.json` of `{skill['repo']}`. Change the fork, then update the "
@@ -403,10 +404,15 @@ def analyst_brief(sources: dict[str, Any], turn: Turn, packet: Path, parent: str
         "",
         "## Goal",
         "",
-        "Decide whether the skill change that Hermes's automatic background skill review proposed is "
-        "warranted. If the evidence supports it, prepare it as a held bb draft for a coding agent, which "
-        "the user approves by sending. If it does not, create nothing and say why. State your confidence "
-        "either way.",
+        "Hermes's background skill review proposed a skill change. Treat it as a hypothesis about a miss "
+        "in the session, not as the change to make. Find the miss the conversation shows, then prevent it "
+        "at the highest level that works, in the order of the mode's `correct` workflow. The outcome can "
+        "be no change, deleting or replacing existing text, a change in another file or repository (an "
+        "AGENTS.md, a product doc, code, a check, or the skill-drafts plugin), or, last, new prose. Judge "
+        "it by every workflow and principle of the mode that applies, not only by whether the evidence "
+        "shows a gap. "
+        "Prepare a warranted change as a held bb draft for a coding agent, which the user approves by "
+        "sending.",
         "",
         "## Context",
         "",
@@ -422,19 +428,15 @@ def analyst_brief(sources: dict[str, Any], turn: Turn, packet: Path, parent: str
         f"- `{sources['sourcesPath']}`: every installed skill and the repository it comes from.",
         f"- Operator thread: {f'@thread:{parent}' if parent else 'none found'}.",
         "",
-        "The reviewer is told to be active, so many of its proposals are generic. Treat the calls as a "
-        "hypothesis, not as an observed defect.",
-        "",
         "## Constraints",
         "",
         "- Do not edit files, commit, push, or install anything. Do not run `skill_manage`, `mise`, or a "
         "`hermes` command that changes state.",
-        "- The only bb changes you may make are one `bb draft create` per repository that owns a warranted "
-        "change, and the parent update below. Never send a draft, never change plugin settings, and never "
-        "message, update, or archive another thread.",
-        "- A change goes ahead only when you can point to what in the conversation or the reviewer's "
-        "messages shows the skill falling short. Merge related calls into one change. Drop speculative or "
-        "generic edits.",
+        "- The only bb changes you may make are replay runs you start and archive, one `bb draft create` "
+        "per repository that owns a warranted change, and the parent update below. Never send a draft, "
+        "never change plugin settings, and never message, update, or archive another thread.",
+        f"- New prose needs a replay, as `{handoff.parent / 'references/replay.md'}` describes, that shows "
+        "it changes the behavior. Without one, label it unproven.",
         "- Before creating a draft, look for an open draft that covers the change: list threads with "
         "`bb thread list --json` and read those titled `Skill change:` with `bb thread show <id> --json` "
         "and `bb thread queue list <id> --json`. If one covers it, create nothing and name it.",
@@ -456,9 +458,10 @@ def analyst_brief(sources: dict[str, Any], turn: Turn, packet: Path, parent: str
         "## Expected result",
         "",
         "Your final message is the result. Give the decision (`@thread:<draftId>` held, none, or covered by "
-        "`@thread:<id>`), the observations with their sources, your inferences kept separate, your "
-        "confidence (high, medium, or low) with what would change it, and the draft's row, provider, model, "
-        "and effort.",
+        "`@thread:<id>`), what the mode's workflows and principles ask for, the size in lines and words "
+        "of each touched instruction file before and after, the observations with their sources, your "
+        "inferences kept separate, your confidence (high, medium, or low) with what would change it, and "
+        "the draft's row, provider, model, and effort.",
         "",
     ])
 

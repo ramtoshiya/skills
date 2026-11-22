@@ -416,7 +416,6 @@ def main() -> None:
     sources = {
         "profile": profile,
         "modePath": str(mode_md),
-        "defaultRepo": str(shared),
         "researchProject": RESEARCH_PROJECT,
         "skillsDir": str(skills_dir),
         "sourcesPath": str(sources_json),

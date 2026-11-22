@@ -819,9 +819,16 @@ calls after the review ends:
 - It starts the analyst with `bb thread spawn` in the personal workspace, on
   `claude-code` with the highest-numbered Opus model at `high` effort. When
   the bb thread that shows the session is known, the analyst is its child.
-- The analyst decides whether the evidence supports a change. If it does, the
-  analyst writes a brief with a confidence and gaps section and creates a held
-  draft titled `Skill change: <skills>`, parented to the same operator thread.
+- The analyst treats the proposal as a hypothesis about a miss in the session
+  and judges it by the whole pstack mode. It prevents the miss at the highest
+  level that works, in the order of the mode's `correct` workflow. The result
+  can be no change, deleting or replacing text, a change to another file or
+  repository such as a product doc, code, or a check, or, last, new prose. New
+  prose needs a replay showing it changes the behavior, or it is labeled
+  unproven. The analyst reports each touched instruction file's size before
+  and after. For a warranted change it writes a brief with a confidence and
+  gaps section and creates a held draft titled `Skill change: <skills>`,
+  parented to the same operator thread.
   If the held-drafts plugin's `mode` is not `draft`, it creates no draft and
   reports the brief instead. A worker started by sending the draft makes the
   change at the source and pushes it to `origin/main`. The push refreshes the

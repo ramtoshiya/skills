@@ -110,7 +110,7 @@ class SkillDraftsHookTests(unittest.TestCase):
         self.skill_md.write_text("# Unslop\n\nCut filler.\n")
         sources = root / "sources.json"
         sources.write_text(json.dumps({
-            "profile": "operator", "modePath": "/pstack/mode.md", "defaultRepo": str(self.repo),
+            "profile": "operator", "modePath": "/pstack/mode.md",
             "researchProject": "proj_personal", "skillsDir": str(root / "profile/skills"),
             "sourcesPath": str(sources),
             "skills": {"unslop": {"repo": str(self.repo), "path": "skills/unslop", "installed": str(installed)}},
@@ -201,7 +201,7 @@ class SkillDraftsHookTests(unittest.TestCase):
         evidence = self.evidence()
         self.assertIn("-Cut filler.\n+Cut all filler.", evidence)
         self.assertIn("+name: fresh", evidence)
-        self.assertIn("a new skill. Place it in", evidence)
+        self.assertIn("- `fresh`: not an installed skill from `sources.json`", evidence)
         self.assertLess(evidence.index("Checking unslop"), evidence.index("asked twice for shorter"))
         self.assertIn("keep it short", next(self.state.glob("proposals/*/session.jsonl")).read_text())
         self.assertEqual(self.skill_md.read_text(), "# Unslop\n\nCut filler.\n")
