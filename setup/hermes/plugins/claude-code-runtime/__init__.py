@@ -187,6 +187,32 @@ def usage_totals(result: dict) -> dict:
             "output": int(usage.get("output_tokens") or 0)}
 
 
+def windows_path() -> Path:
+    return runtime_dir() / "context-windows.json"
+
+
+def known_windows() -> dict[str, int]:
+    path = windows_path()
+    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+
+
+def record_window(model: str, events: list[dict], result: dict) -> None:
+    """Keeps the context window that Claude Code reported for the model this run started on."""
+    started = next((e.get("model") for e in events if e.get("subtype") == "init"), None)
+    window = ((result.get("modelUsage") or {}).get(started) or {}).get("contextWindow")
+    if type(window) is not int or window <= 0:
+        return
+    with _STATE_LOCK:
+        windows = known_windows()
+        if windows.get(model) == window:
+            return
+        windows[model] = window
+        path = windows_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.with_suffix(".tmp").write_text(json.dumps(windows, indent=1), encoding="utf-8")
+        path.with_suffix(".tmp").replace(path)
+
+
 def log_usage(row: dict) -> None:
     path = runtime_dir() / "usage.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -479,6 +505,7 @@ class ClaudeCodeClient:
         if process.returncode != 0 or result is None or result.get("is_error"):
             detail = (result or {}).get("result") or err.strip()[-800:] or f"exit {process.returncode}"
             raise RuntimeError(f"{command_for(model)} failed: {detail}")
+        record_window(model, events, result)
         return result, events
 
     def cancel(self):
@@ -609,6 +636,9 @@ class ClaudeCodeProfile(ProviderProfile):
 
     def fetch_models(self, **_):
         return [*CLAUDE_MODELS, *gpt_models()]
+
+    def get_model_context_length(self, model: str) -> int | None:
+        return known_windows().get(model) or self.model_capabilities.get(model, {}).get("context_window")
 
 
 register_provider(ClaudeCodeProfile(

@@ -1109,6 +1109,16 @@ bundled skills stay out. Every call also passes `--disallowedTools Agent`, so
 coding turns and review forks offer the same tools and the fork still reads
 the coding run's cache.
 
+Hermes asks the plugin for each model's context window, and bb shows that
+window for the thread. The plugin answers with the `contextWindow` that Claude
+Code reported for the model in the profile's last run of it, kept in
+`claude-code-runtime/context-windows.json`. Claude Code runs the Claude
+aliases with 1,000,000 tokens, and `claudex` runs each GPT model with the
+window its catalog gives. Before a model's first run the plugin answers
+1,000,000 for a Claude alias and nothing for a GPT model, so Hermes uses its
+own estimate until that run ends. Without an answer, Hermes cannot probe
+`acp://claude-code-runtime` and falls back to 256,000 tokens.
+
 A coding turn is one Claude Code run, so Hermes would show nothing until the
 run ends. The plugin reads Claude Code's events while it runs and passes them
 to the session's agent in the Hermes gateway. bb then shows each tool call as
