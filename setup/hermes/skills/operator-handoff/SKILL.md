@@ -49,9 +49,9 @@ change the outcome, so they are not small by default.
 When a pending decision blocks part of the work, start the independent part
 now. Finding another repository that owns the cause, or the authority
 paragraph's fork permission, does not widen the agreed targets. Ask before work
-moves to a new target. Do not propose, draft, or use a BB application fork,
-personal core patch, or installed bundle patch, or ask whether to authorize one,
-unless the user explicitly requests that route. Approval of the desired behavior
+moves to a new target. Do not propose a BB application fork, personal core patch,
+or installed bundle patch, or ask whether to authorize one. Draft or use one
+only when the user explicitly requests it. Approval of the desired behavior
 alone does not authorize it, so state the limit without asking for another
 implementation route when supported settings and plugins cannot deliver the
 behavior.
