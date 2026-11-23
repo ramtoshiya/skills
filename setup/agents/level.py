@@ -21,6 +21,10 @@ HOOK_VARIABLES = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX", "G
                   "GIT_CONFIG_COUNT")
 OPERATOR_PROFILE = "operator"
 BB_PLUGINS = "bb-plugins"
+TOOLS = "tools"
+# A plugin that wraps a CLI under tools/ keeps state from it, such as the model list its provider caches, so a
+# change to these files rebuilds the plugin even when the plugin's own folder is unchanged.
+PLUGIN_INPUTS = {"claudex-native": ("tools/claudex/claudex.cjs",)}
 
 
 class Stop(Exception):
@@ -142,7 +146,13 @@ class BbPlugins:
         return self.shared / BB_PLUGINS / plugin_id
 
     def tree(self, plugin_id):
-        return git(self.shared, "rev-parse", f"HEAD:{BB_PLUGINS}/{plugin_id}")
+        """Identify what a build of the plugin reads: its folder, then each file in PLUGIN_INPUTS that exists."""
+        stamp = [git(self.shared, "rev-parse", f"HEAD:{BB_PLUGINS}/{plugin_id}")]
+        for path in PLUGIN_INPUTS.get(plugin_id, ()):
+            found = git(self.shared, "rev-parse", "--verify", "--quiet", f"HEAD:{path}", check=False)
+            if found.returncode == 0:
+                stamp.append(found.stdout.strip())
+        return "+".join(stamp)
 
     def from_this_repository(self):
         """Return (plugin, installed from the shared checkout) for each path plugin this repository provides."""
@@ -231,6 +241,80 @@ class BbPlugins:
         return not failed
 
 
+@dataclass(frozen=True)
+class Tool:
+    """A CLI under tools/ whose install step copies files into place, with the copies a status check compares."""
+    name: str
+    command: str
+    files: tuple
+
+    def install_step(self, shared):
+        return shared / TOOLS / self.name / "install.sh"
+
+    def differing(self, shared, home):
+        return [source for source, target in self.files
+                if not (home / target).is_file()
+                or (home / target).read_bytes() != (shared / TOOLS / self.name / source).read_bytes()]
+
+
+def copies(directory, names):
+    return tuple((name, f"{directory}/{name}") for name in names)
+
+
+CLI_TOOLS = (
+    Tool("claudex", ".local/bin/claudex", copies(".local/share/claudex", ["claudex.cjs"])),
+    Tool("excalidraw-board", ".local/bin/excalidraw-board", copies(".local/share/excalidraw-board", [
+        "excalidraw-board.mjs", "rooms.mjs", "protocol.mjs", "scene.mjs", "images.mjs", "request.mjs",
+        "snapshot.mjs", "size-limit.mjs"])),
+    Tool("excalidraw-web-export", ".local/bin/excalidraw-web-export", copies(".local/share/excalidraw-web-export", [
+        "export.mjs", "size-limit.mjs", "package.json", "package-lock.json", ".npmrc"])),
+    Tool("sidecar", ".local/bin/sidecar", copies(".local/share/sidecar/0.1.0", ["sidecar.m"])),
+    Tool("worktreeinclude", ".local/bin/worktreeinclude", (("worktreeinclude.mjs", ".local/bin/worktreeinclude"),)),
+)
+
+
+class CliTools:
+    """CLIs under tools/ that this machine already has, reinstalled when an installed copy differs from the checkout.
+
+    A CLI whose command is not installed is left alone, because installing one is the person's choice.
+    """
+
+    def __init__(self, shared, home):
+        self.shared = shared
+        self.home = home
+
+    def present(self):
+        return [tool for tool in CLI_TOOLS
+                if tool.install_step(self.shared).is_file() and os.path.lexists(self.home / tool.command)]
+
+    def status_rows(self):
+        rows = []
+        for tool in CLI_TOOLS:
+            if tool not in self.present():
+                rows.append(row("cli", tool.name, "absent", "not installed on this machine"))
+                continue
+            differing = tool.differing(self.shared, self.home)
+            rows.append(row("cli", tool.name, "drift" if differing else "ok",
+                            f"installed copy differs from the shared checkout in {', '.join(differing)}"
+                            if differing else f"{self.home / tool.command}"))
+        return rows
+
+    def sync(self):
+        failed = []
+        for tool in self.present():
+            if not tool.differing(self.shared, self.home):
+                continue
+            result = subprocess.run(["sh", str(tool.install_step(self.shared))], cwd=self.shared, env=environment(),
+                                    stdin=subprocess.DEVNULL, text=True, capture_output=True)
+            if result.returncode:
+                print(f"main:sync: reinstalling {tool.name} failed: {(result.stderr or result.stdout).strip()}",
+                      file=sys.stderr)
+                failed.append(tool.name)
+            else:
+                print(f"main:sync: reinstalled the CLI {tool.name}", file=sys.stderr)
+        return not failed
+
+
 def remote_head(shared):
     output = git(shared, "ls-remote", "--exit-code", REMOTE, f"refs/heads/{BRANCH}", timeout=60)
     return output.split()[0]
@@ -286,7 +370,7 @@ class Installers:
                             detail[-1] if detail else ""))
         else:
             rows.append(row("hermes", f"profile:{OPERATOR_PROFILE}", "absent", "not installed on this machine"))
-        return rows + BbPlugins(self.shared).status_rows()
+        return rows + CliTools(self.shared, self.home).status_rows() + BbPlugins(self.shared).status_rows()
 
     def steps(self, hermes, extra):
         agents = ("agents:sync", [*self.python, str(self.shared / "setup/agents/sync.py"), "sync"])
@@ -299,6 +383,7 @@ class Installers:
         elif hermes:
             preferences_for_the_new_profile_soul = [agents, operator]
             steps = [*steps, operator, *preferences_for_the_new_profile_soul]
+        steps.append(("cli tools", CliTools(self.shared, self.home).sync))
         if shutil.which("bb"):
             steps.append(("bb plugins", BbPlugins(self.shared).sync))
         return steps

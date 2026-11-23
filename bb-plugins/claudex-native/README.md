@@ -32,7 +32,9 @@ link. bb rebuilds path plugins when its version changes.
 If you already use Claudex, install from a different provider's thread after
 active Claudex turns finish. Install over the existing plugin so bb keeps its
 settings. Do not remove it first. After an install from the shared checkout,
-`main:sync` reinstalls the plugin when its folder changes on `main`. It
+`main:sync` reinstalls the plugin when its folder or `tools/claudex/claudex.cjs`
+changes on `main`, because the plugin caches the model list that `claudex`
+reports. It
 postpones the reinstall while a Claudex turn is running, as
 [setup](../../docs/setup.md) describes.
 

@@ -24,6 +24,7 @@ xcrun clang -O2 -fobjc-arc -Wall -Wextra -Werror \
     "$sidecar_source_dir/sidecar.m" -o "$sidecar_build_dir/sidecar"
 mkdir -p "$sidecar_install_dir" "$HOME/.local/bin"
 install -m 755 "$sidecar_build_dir/sidecar" "$sidecar_install_dir/sidecar"
+install -m 644 "$sidecar_source_dir/sidecar.m" "$sidecar_install_dir/sidecar.m"
 if [ ! -L "$sidecar_link" ]; then
     ln -s "$sidecar_install_dir/sidecar" "$sidecar_link"
 fi

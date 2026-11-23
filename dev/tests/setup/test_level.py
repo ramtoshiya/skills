@@ -37,6 +37,13 @@ elif args[:1] == ["exec"]:
 """
 
 
+CLAUDEX_INSTALL = """set -eu
+mkdir -p "$HOME/.local/share/claudex" "$HOME/.local/bin"
+cp "$(dirname "$0")/claudex.cjs" "$HOME/.local/share/claudex/claudex.cjs"
+ln -sfn "$HOME/.local/share/claudex/claudex.cjs" "$HOME/.local/bin/claudex"
+"""
+
+
 def uv_python_dir():
     return subprocess.run(["uv", "python", "dir"], capture_output=True, text=True, check=True).stdout.strip()
 
@@ -311,6 +318,102 @@ class LevelTests(unittest.TestCase):
                       rows[("bb", "plugin:demo")]["detail"])
         self.assertIn(f"npm ci --ignore-scripts --prefix {self.shared}/bb-plugins/demo",
                       rows[("bb", "plugin:demo")]["detail"])
+
+    def push_claudex(self, text, env=None):
+        """Push a change under tools/claudex. Its install step copies into the paths the real one writes."""
+        target = self.worktree / "tools/claudex"
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "install.sh").write_text(CLAUDEX_INSTALL)
+        (target / "claudex.cjs").write_text(f"// {text}\n")
+        self.git(self.worktree, "add", "tools/claudex")
+        self.run_git(self.worktree, "commit", "-q", "-m", f"claudex {text}", env=env)
+        return self.run_git(self.worktree, "push", "-q", "origin", "HEAD:main", env=env)
+
+    def installed_claudex(self):
+        return (self.home / ".local/share/claudex/claudex.cjs").read_text()
+
+    def test_cli_tool_the_machine_already_has_follows_main_and_one_it_lacks_is_left_alone(self):
+        self.assertEqual(self.push_claudex("first").returncode, 0)
+        code, rows = self.status()
+        self.assertEqual((code, rows[("cli", "claudex")]["status"]), (0, "absent"))
+        self.assertFalse((self.home / ".local/bin/claudex").exists())
+
+        install = subprocess.run(["sh", str(self.shared / "tools/claudex/install.sh")], env=self.env,
+                                 capture_output=True, text=True)
+        self.assertEqual(install.returncode, 0, install.stderr)
+        self.assertEqual(self.status()[1][("cli", "claudex")]["status"], "ok")
+
+        self.assertEqual(self.push_claudex("second").returncode, 0)
+
+        self.assertIn("// second", self.installed_claudex())
+        code, rows = self.status()
+        self.assertEqual(code, 0, rows)
+        self.assertEqual(rows[("cli", "claudex")]["status"], "ok")
+
+    def test_status_fails_while_the_installed_claudex_differs_from_the_shared_checkout(self):
+        self.assertEqual(self.push_claudex("first").returncode, 0)
+        subprocess.run(["sh", str(self.shared / "tools/claudex/install.sh")], env=self.env, check=True,
+                       capture_output=True)
+
+        self.assertEqual(self.push_claudex("second", env=self.without_hook()).returncode, 0)
+        self.git(self.shared, "merge", "-q", "--ff-only", "origin/main", env=self.without_hook())
+
+        code, rows = self.status()
+        self.assertEqual(code, 1)
+        self.assertEqual(rows[("cli", "claudex")]["status"], "drift")
+        self.assertIn("claudex.cjs", rows[("cli", "claudex")]["detail"])
+        self.assertNotIn("// second", self.installed_claudex())
+
+        self.assertEqual(self.level("sync").returncode, 0)
+
+        self.assertIn("// second", self.installed_claudex())
+        self.assertEqual(self.status()[0], 0)
+
+    def test_claudex_provider_is_rebuilt_after_claudex_changes_and_waits_for_a_running_turn(self):
+        self.assertEqual(self.push_claudex("first").returncode, 0)
+        plugin = self.worktree / "bb-plugins/claudex-native"
+        plugin.mkdir(parents=True)
+        (plugin / "package.json").write_text('{"name": "claudex-native"}\n')
+        self.git(self.worktree, "add", "bb-plugins/claudex-native")
+        self.run_git(self.worktree, "commit", "-q", "-m", "plugin")
+        self.assertEqual(self.run_git(self.worktree, "push", "-q", "origin", "HEAD:main").returncode, 0)
+        home = self.shared / "bb-plugins/claudex-native"
+        (self.home / "bb-plugins.json").write_text(json.dumps(
+            [{"id": "claudex-native", "source": f"path:{home}", "providerIds": ["claudex"]}]))
+        subprocess.run(["sh", str(self.shared / "tools/claudex/install.sh")], env=self.env, check=True,
+                       capture_output=True)
+        self.assertEqual(self.level("sync").returncode, 0)
+        Path(self.env["CALLS"]).write_text("")
+        self.assertEqual(self.status()[0], 0)
+
+        (self.home / "bb-threads.json").write_text(json.dumps([{"id": "thr_2", "providerId": "claudex",
+                                                                 "status": "active"}]))
+        push = self.push_claudex("second")
+
+        self.assertEqual(push.returncode, 0)
+        self.assertIn("postponed claudex-native", push.stderr)
+        self.assertIn("// second", self.installed_claudex())
+        self.assertEqual(self.install_calls(), [])
+        code, rows = self.status()
+        self.assertEqual((code, rows[("bb", "plugin:claudex-native")]["status"]), (1, "drift"))
+
+        (self.home / "bb-threads.json").write_text("[]")
+        self.assertEqual(self.level("sync").returncode, 0)
+
+        self.assertEqual(self.install_calls(), [["plugin", "install", f"path:{home}", "--yes"]])
+        self.assertEqual(self.status()[0], 0)
+
+    def test_every_cli_tool_lists_the_files_and_directory_its_install_step_writes(self):
+        sys.path.insert(0, str(ROOT / "setup/agents"))
+        self.addCleanup(sys.path.remove, str(ROOT / "setup/agents"))
+        import level
+        for tool in level.CLI_TOOLS:
+            script = (ROOT / "tools" / tool.name / "install.sh").read_text()
+            for source, target in tool.files:
+                self.assertTrue((ROOT / "tools" / tool.name / source).is_file(), (tool.name, source))
+                self.assertIn(source, script)
+                self.assertIn(f"$HOME/{Path(target).parent}", script)
+            self.assertIn(f"$HOME/{Path(tool.command).parent}", script)
 
     def test_takeaturn_follows_the_pin_and_status_names_an_old_build(self):
         bin_dir = self.tmp / "mise-bin"

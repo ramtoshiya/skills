@@ -96,9 +96,9 @@ any worktree of the repository. `main:sync` fetches `origin/main`, then
 fast-forwards the shared checkout to it or pushes the shared checkout's own new
 commits without force. Then it runs each installer from the shared checkout:
 `agents:sync`, `mise dotfiles apply`, `hermes:operator` when the operator
-profile is installed, and `bb plugin install` for each bb plugin described
-below. The command that moved the ref waits for the installers
-and shows their output. A failed install never fails that command, and its
+profile is installed, each CLI under `tools/` that this machine already has,
+and `bb plugin install` for each bb plugin described below. The command that
+moved the ref waits for the installers and shows their output. A failed install never fails that command, and its
 output names the failed step.
 
 `main:sync` changes nothing and prints `STOPPED` with the reason in these
@@ -123,8 +123,8 @@ rebase reattaches `main`, which runs it again.
 `main:status` makes no changes. It asks the remote for `main` with
 `git ls-remote`, then prints a row for `origin/main`, the shared checkout, each
 agent package and settings target, each `mise.toml` dotfile entry that is not
-applied, the Hermes operator profile, and each bb plugin from this
-repository. It exits 1 and names the target when
+applied, the Hermes operator profile, each CLI under `tools/`, and each bb
+plugin from this repository. It exits 1 and names the target when
 any of them is behind. A merge made on GitHub shows as not fetched until the
 next fetch or `main:sync` on this machine.
 
@@ -143,7 +143,7 @@ visible.
 | Bootstrap packages in `mise.toml` | `mise bootstrap` | No |
 | bb plugins under `bb-plugins/` | `bb plugin install` | Yes, when installed from the shared checkout |
 | `takeaturn` CLI | `takeaturn:install` | Yes |
-| CLIs under `tools/` | Each CLI's install step | No |
+| CLIs under `tools/` | Each CLI's `install.sh` | Yes, for a CLI whose command is already installed |
 
 Claude Code reads the `ramtoshiya` and `ramtoshiya-cc` plugins straight from
 the shared checkout, so a fast-forward changes them at once. Codex and Hermes
@@ -162,6 +162,17 @@ record yet installs once on the next run. A reinstall restarts the plugin's
 provider worker. While a turn on that provider is running, `main:sync`
 postpones the plugin and reports it as a failed step. Run `mise run main:sync`
 after the turn finishes.
+
+`main:sync` runs a CLI's `install.sh` when a file it copied into `~/.local/share`
+or `~/.local/bin` differs from the shared checkout, and `main:status` reports
+that CLI as drift. A CLI whose command is not installed is left alone, because
+installing it is your choice. `CLI_TOOLS` in `setup/agents/level.py` lists the
+copies to compare, and a test checks that list against each `install.sh`. The
+`sidecar` installer also copies `sidecar.m` next to the binary it compiles, so
+the check has a file to compare. The `claudex-native` plugin caches the model
+list that `claudex` reports. A change to `tools/claudex/claudex.cjs` therefore
+rebuilds that plugin even when its own folder is unchanged, under the same
+postponement rule.
 
 `main:status` reports a bb plugin as drift when bb runs it from anywhere else.
 That covers a worktree of this repository and the `preserved-source` copy bb

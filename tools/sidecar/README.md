@@ -21,7 +21,8 @@ cd skills
 sh tools/sidecar/install.sh
 ```
 
-The installer compiles `sidecar.m` into `~/.local/share/sidecar/0.1.0/` and
+The installer compiles `sidecar.m` into `~/.local/share/sidecar/0.1.0/`, copies
+the source beside it so `main:status` can compare it, and
 links `~/.local/bin/sidecar` to it. It refuses to replace a different command
 at that path. Run it again after changing the source. If `~/.local/bin` is not
 on your `PATH`, add it or run `~/.local/bin/sidecar` by its full path. The
