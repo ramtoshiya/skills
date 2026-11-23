@@ -21,11 +21,7 @@ PROVIDER = "claude-code-runtime"
 PLUGINS = ("claude-code-commands", "bb-thread-env", "bb-title-input")
 DEFAULT_MODEL = "sonnet"
 STAMP = "hermes-coder.json"
-LAUNCHER = "coder_acp.py"
-BB_AGENT_ID = "hermes-coder"
-BB_PROVIDER = f"acp-{BB_AGENT_ID}"
-RETIRED_AGENT_IDS = ("hermes-coder-child",)
-BB_AGENT = {"id": BB_AGENT_ID, "displayName": "Hermes Coder",
+BB_AGENT = {"command": "hermes",
             "nativeReasoning": {"configId": "reasoning_effort", "defaultLevel": "medium",
                                 "supportedLevels": ["none", "low", "medium", "high", "xhigh", "max"]}}
 
@@ -33,6 +29,8 @@ BB_AGENT = {"id": BB_AGENT_ID, "displayName": "Hermes Coder",
 @dataclass(frozen=True)
 class Profile:
     name: str
+    agent_id: str
+    display_name: str
     learner: Profile | None = None
 
     @property
@@ -40,8 +38,8 @@ class Profile:
         return Path.home() / ".hermes" / "profiles" / self.name
 
 
-LEARNER = Profile("coder")
-CHILD = Profile("coder-child", learner=LEARNER)
+LEARNER = Profile("coder", "hermes-coder", "Hermes Coder")
+CHILD = Profile("coder-child", "hermes-coder-child", "Hermes Coder (agents only)", learner=LEARNER)
 PROFILES = (LEARNER, CHILD)
 
 
@@ -50,7 +48,7 @@ def config(profile: Profile, pstack_root: Path) -> dict[str, str]:
     # there would bypass Claude Code.
     shared = {"model.provider": PROVIDER, "compression.enabled": "false",
               "model_catalog.excluded_providers": '["anthropic"]',
-              "claude_code_runtime.subagent_provider": BB_PROVIDER,
+              "claude_code_runtime.subagent_provider": f"acp-{CHILD.agent_id}",
               "claude_code_runtime.pstack_root": str(pstack_root)}
     if profile.learner is None:
         return shared
@@ -70,17 +68,8 @@ def plugin_targets(home: Path) -> dict[str, Path]:
             **{name: home / "plugins" / name for name in PLUGINS}}
 
 
-def installed_launcher() -> Path:
-    return LEARNER.home / LAUNCHER
-
-
 def installed_plugins() -> dict[str, Path]:
     return {f"{profile.name}/{name}": path for profile in PROFILES for name, path in plugin_targets(profile.home).items()}
-
-
-def loaded_launcher() -> dict[str, bytes]:
-    path = installed_launcher()
-    return {"launcher": path.read_bytes()} if path.is_file() else {}
 
 
 def fingerprint(trees: dict[str, Path], extra: dict[str, bytes | str]) -> str:
@@ -100,23 +89,17 @@ def digest(entries: dict[str, bytes | str]) -> str:
     return hasher.hexdigest()
 
 
-def install_launcher() -> None:
-    target = installed_launcher()
-    shutil.copyfile(HERE / LAUNCHER, target)
-    target.chmod(0o755)
-
-
 def bb_catalog_agents() -> None:
     bb = os.environ.get("BB_CLI") or shutil.which("bb")
     if bb is None:
-        print("hermes-coder: bb is not on PATH, so bb has no Hermes Coder entry")
+        print("hermes-coder: bb is not on PATH, so bb has no Hermes Coder entries")
         return
     values = json.loads(run(bb, "plugin", "config", "provider-acp", "--json"))["values"]
-    ours = {BB_AGENT_ID, *RETIRED_AGENT_IDS}
+    ours = {profile.agent_id for profile in PROFILES}
     custom = [agent for agent in json.loads(values.get("customAgents") or "[]") if agent.get("id") not in ours]
     skills = {"path": f"{LEARNER.home.relative_to(Path.home()).as_posix()}/skills", "recursive": True}
-    custom.append({**BB_AGENT, "command": str(installed_launcher()), "args": [BB_PROVIDER, LEARNER.name, CHILD.name],
-                   "nativeSkillRoots": {"user": [skills]}})
+    custom += [{"id": profile.agent_id, "displayName": profile.display_name, **BB_AGENT,
+                "args": ["-p", profile.name, "acp"], "nativeSkillRoots": {"user": [skills]}} for profile in PROFILES]
     run(bb, "plugin", "config", "provider-acp", "set", "customAgents", json.dumps(custom))
 
 
@@ -168,8 +151,7 @@ def main() -> None:
     sources = {PROVIDER: HERE / "plugins" / PROVIDER, **{name: HERE / "plugins" / name for name in PLUGINS}}
     root = pstack_root(Path(options.pstack).expanduser())
     configs = {profile.name: config(profile, root) for profile in PROFILES}
-    wanted = fingerprint(sources, {"installer": Path(__file__).read_bytes(), "launcher": (HERE / LAUNCHER).read_bytes(),
-                                   "config": json.dumps(configs)})
+    wanted = fingerprint(sources, {"installer": Path(__file__).read_bytes(), "config": json.dumps(configs)})
     stamp = level.state_dir() / STAMP
     previous = json.loads(stamp.read_text(encoding="utf-8")) if stamp.is_file() else {}
     names = " and ".join(profile.name for profile in PROFILES)
@@ -180,7 +162,7 @@ def main() -> None:
         if wanted != previous.get("wanted"):
             sys.exit(f"hermes-coder: profiles {names} are out of date: their sources changed since the install "
                      f"from {previous.get('commit', '?')[:12]}")
-        if fingerprint(installed_plugins(), loaded_launcher()) != previous.get("loaded"):
+        if fingerprint(installed_plugins(), {}) != previous.get("loaded"):
             sys.exit(f"hermes-coder: profiles {names} are out of date: their plugin files changed since the last install")
         print(f"hermes-coder: profiles {names} match their sources, installed from {previous['commit'][:12]}")
         return
@@ -190,13 +172,12 @@ def main() -> None:
         print(f"hermes-coder: {warning}", file=sys.stderr)
     for profile in PROFILES:
         install(profile, sources, configs)
-    install_launcher()
     bb_catalog_agents()
     stamp.parent.mkdir(parents=True, exist_ok=True)
     stamp.write_text(json.dumps({
         "commit": run("git", "-C", str(checkout), "rev-parse", "HEAD").strip(),
         "wanted": wanted,
-        "loaded": fingerprint(installed_plugins(), loaded_launcher()),
+        "loaded": fingerprint(installed_plugins(), {}),
     }, indent=2) + "\n", encoding="utf-8")
     print(f"hermes-coder: enabled plugins {', '.join(PLUGINS)}")
 
