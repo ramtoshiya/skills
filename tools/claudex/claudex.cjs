@@ -37,7 +37,7 @@ function selectModels(data) {
     candidates.sort((a, b) => b.major - a.major || b.minor - a.minor || tiers.indexOf(a.tier) - tiers.indexOf(b.tier));
     return candidates[0]?.id;
   }
-  const main = pick(['astra', 'sol', 'codex', '', 'terra']) || models[0].id;
+  const main = pick(['sol', 'codex', '', 'terra']) || (models.find(model => model.tier !== 'astra') || models[0]).id;
   return { main, fable: pick(['astra']) || main,
     standard: pick(['terra', 'sol', 'codex', '']) || main,
     light: pick(['luna', 'mini', 'nano']) || main };

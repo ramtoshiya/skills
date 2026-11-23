@@ -74,13 +74,16 @@ then the first available tier in each row:
 | Claude Code role | Preferred tiers |
 | --- | --- |
 | Fable | `astra` |
-| Main and Opus | `astra`, `sol`, `codex`, no suffix, `terra` |
+| Main and Opus | `sol`, `codex`, no suffix, `terra` |
 | Sonnet and subagents | `terra`, `sol`, `codex`, no suffix |
 | Haiku | `luna`, `mini`, `nano` |
 
-If a role has no matching tier, it uses the main model. If no main tier
-matches, the main model is the first recognized model in the catalog.
-Discovery still runs when you pass `--model`, which overrides the main model.
+Main and Opus never use `astra`, which is the most expensive tier. Only the
+Fable role does, and an explicit `--model` can name an Astra model. If a role
+has no matching tier, it uses the main model. If no main tier matches, the main
+model is the first recognized model in the catalog that is not Astra, or the
+first Astra model when the catalog has nothing else. Discovery still runs when
+you pass `--model`, which overrides the main model.
 The Fable slot in `/model` shows the selected Astra model ID, even when a newer
 Sol model is selected for main and Opus. If no Astra is available, it shows
 the main model instead.

@@ -149,6 +149,27 @@ test('resolves startup context from route metadata and falls back when unavailab
   }
 });
 
+test('never picks Astra for main or Opus unless --model asks for it', async t => {
+  const catalog = ['gpt-6.1-astra', 'gpt-6-sol', 'gpt-6-terra', 'gpt-6-luna'].map(id => ({ id, owned_by: 'openai' }));
+  const f = await fixture(t, catalog);
+  assert.equal((await f.run()).code, 7);
+  const settings = JSON.parse((await f.capture()).args[1]);
+  assert.equal(settings.model, 'gpt-6-sol');
+  assert.equal(settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL, 'gpt-6-sol');
+  assert.equal(settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL, 'gpt-6.1-astra');
+  const explicit = await fixture(t, catalog);
+  assert.equal((await explicit.run(['--model', 'gpt-6.1-astra'])).code, 7);
+  assert.deepEqual((await explicit.capture()).args.slice(2), ['--model', 'gpt-6.1-astra']);
+});
+
+test('falls back to a non-Astra model for main', async t => {
+  const light = await fixture(t, ['gpt-6-astra', 'gpt-6-luna'].map(id => ({ id, owned_by: 'openai' })));
+  assert.equal((await light.run()).code, 7);
+  const settings = JSON.parse((await light.capture()).args[1]);
+  assert.equal(settings.model, 'gpt-6-luna');
+  assert.equal(settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL, 'gpt-6-astra');
+});
+
 test('uses the main model for missing roles and honors connection overrides', async t => {
   const f = await fixture(t, [{ id: 'gpt-6-codex', owned_by: 'openai' }]);
   assert.equal((await f.run([], { CLIPROXY_API_KEY: 'override-key' })).code, 7);
