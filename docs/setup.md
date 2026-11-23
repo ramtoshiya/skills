@@ -1131,6 +1131,11 @@ The `a` column is the review cost divided by the coding cost.
   browser, are not offered to Claude Code.
 - Memory that Hermes saves during a session reaches Claude Code in the next
   session.
+- A review fork still sees Claude Code's own tools, because removing them
+  would change the cached prompt. Models often call one of them first, and GPT
+  models do so in almost every review. Claude Code refuses the call, and each
+  refused call is one more request that reads the whole conversation from
+  cache.
 
 ## How mise applies each entry
 
