@@ -100,9 +100,9 @@ The `worker-routing` skill is the one policy for choosing a worker's model.
   work runs on Claude, and a top-tier row moves from Opus to Fable. A running
   GPT worker is handed off to a new Claude thread in the same environment.
   For anything else the agent proposes urgency to you instead of switching.
-- The file `~/.config/ramtoshiya/worker-route.json` decides where Haiku- and
+- The file `~/.config/ramtoshiya/worker-route.json` decides where
   Sonnet-level workers run in bb. With `{"workers": "codex"}` or
-  `{"workers": "claudex"}` they run on GPT Luna and Terra models through that
+  `{"workers": "claudex"}` they run on GPT Terra models through that
   provider. Without the file they run on Claude. Opus-level work stays on
   Claude, except that a Terra worker whose task outgrew it reruns on GPT Sol
   through the same provider.

@@ -22,8 +22,8 @@ It sits in `scripts/` next to this file:
 <skill-dir>/scripts/newest-model <family> [<provider>]
 ```
 
-- Families are `haiku`, `sonnet`, `opus`, and `fable` on `claude-code`, and `luna`,
-  `terra`, and `sol` on `codex` and `claudex`. The provider defaults to `claude-code`
+- Worker families are `sonnet`, `opus`, and `fable` on `claude-code`, and `terra`
+  and `sol` on `codex` and `claudex`. The provider defaults to `claude-code`
   for Claude families and `codex` for GPT families.
 - Pass the output as it is. Never type a model ID yourself or copy one from memory,
   an earlier brief, or a catalog listing. For Claude it prints the family alias,
@@ -44,7 +44,6 @@ which may be `low`, and a BB worker runs on your own model and effort.
 
 | Row | On a GPT route | Work |
 | --- | --- | --- |
-| `haiku` `high` | `luna` `high` | A spelled-out edit, rename, or mechanical change across files that needs a worker |
 | `sonnet` `high` | `terra` `high` | The default for implementation: the brief states the behavior and acceptance criteria, the change stays inside one component, and no design decision is open. Also sorting and summarizing results against fixed criteria, and reads that need interpretation, including explanations, research, calculations, and reconciling mismatches, even when read-only. Split input over about 100K tokens across several workers |
 | `opus` `high` | Stays on Claude | Top-tier work: design questions and memos, reviews, changes across components or boundaries such as a file format or persisted state, concurrency, recovery, security, and debugging an unknown cause |
 
@@ -52,8 +51,8 @@ Use `fable` in place of `opus` only when the user asks for it or the work is urg
 as [Urgency](#urgency) describes. Under claudex these aliases select its GPT tiers,
 so the same table applies. When a piece of work fits no row, split it instead of
 picking a combination in between. Work that mixes design decisions with many
-mechanical edits becomes an `opus` `high` design unit and a `sonnet` `high` or
-`haiku` `high` implementation unit.
+mechanical edits becomes an `opus` `high` design unit and a `sonnet` `high`
+implementation unit.
 
 When a worker stopped, failed, or seems to have outgrown its row, or a workflow needs
 a seat outside the Claude family, read [Retries and step-ups](references/retries.md).
@@ -75,10 +74,10 @@ gate blocks keep their row and provider. Before you spawn a fixer, read
 
 When work becomes urgent, judge its row again at that moment:
 
-- `haiku` and `sonnet` rows keep their row. An `opus` row becomes `fable`. Urgent
+- A `sonnet` row keeps its row. An `opus` row becomes `fable`. Urgent
   work does not use `opus`.
 - Never lower a model at this moment. A worker already on Sol moves to `fable`.
-- Urgent work runs on Claude, whatever the route: `haiku`, `sonnet`, or `fable`.
+- Urgent work runs on Claude, whatever the route: `sonnet` or `fable`.
 - Urgent work runs `quota-pace` with `--prefer claude --no-spill`, so a pace
   projection never moves it. Pass `--eligible claude,codex` unless the calling
   workflow ties the role to the Claude family. When the Fable window is
