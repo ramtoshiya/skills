@@ -86,7 +86,7 @@
       "prompt": "I approve the desired change to how BB renders a message. Investigation found that supported settings and plugins cannot provide it. I have not requested a fork or core patch. Do not create threads or drafts, or post upstream. Explain the next step.",
       "expected_output": "State the supported extension limit without proposing an upstream report or a fork-backed worker or draft.",
       "assertions": [
-        "Do not propose a BB application fork, personal core patch, or installed bundle patch.",
+        "Do not propose a BB application fork, personal core patch, or installed bundle patch, or ask whether to authorize one.",
         "Do not create or propose a fork-backed worker or draft.",
         "State the limit without drafting, offering, or recommending an upstream report, or asking whether to file one."
       ]
