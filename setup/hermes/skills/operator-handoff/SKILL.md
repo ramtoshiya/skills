@@ -257,8 +257,9 @@ superseded held drafts. To archive a kept child later, run these steps again.
 When a result shows that bb or the worker setup misbehaved, such as a worker
 that skipped its workflow's independent roles or ran on unintended defaults, do
 not offer a sentence for future briefs or ask the user to pick one. In the same
-reply, propose a fix at a layer every worker reads, such as a bb setting,
-`~/.bb/AGENTS.md`, `worker-routing`, or pstack-mode.
+reply, propose a fix where the fault first entered, as Fix Root Causes says.
+That can be this skill's own brief template, or a layer every worker reads,
+such as a bb setting, `~/.bb/AGENTS.md`, `worker-routing`, or pstack-mode.
 
 ## Research {:#research}
 
