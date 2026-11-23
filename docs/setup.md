@@ -322,9 +322,10 @@ such as `git commit --no-verify`, is out of scope for them. A check that fails
 and then passes on a rerun counts as a defect to fix or report, not a pass.
 
 Every agent, including the Hermes operator, follows one delegation rule. It
-owns the goal and how it is checked, delegates large reads, searches, and
-fixed-scope implementation to cheaper models, and does small work and
-judgement itself. Before it starts a worker it follows the `worker-routing`
+owns the goal and how it is checked, uses tools when they can answer a question,
+and delegates large reads that need interpretation and fixed-scope implementation
+to the row that fits. It does small work and judgement itself when its role permits.
+Before it starts a worker it follows the `worker-routing`
 skill described in [Agent plugins](agent-pack.md). A stricter role
 instruction, such as the operator's rule never to implement, wins.
 After a compaction it rereads in full the mode and skill files its brief or

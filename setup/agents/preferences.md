@@ -110,8 +110,9 @@ and the command, screen, or number that shows it. Delegate mainly to save cost,
 because each step down the model table in the `worker-routing` skill is several
 times cheaper per token.
 
-- Delegate down the table: large reads, searches, and implementation whose
-  scope the brief fixes.
+- Use a search, lint, check, or script when it can answer the question. Delegate
+  large reads that need interpretation and fixed-scope implementation down the
+  table, using the row that fits the work.
 - Delegate at your own tier: a large piece of work that does not depend on
   what you are doing.
 - Do it yourself: small tasks, checking a worker's result, and judgement where

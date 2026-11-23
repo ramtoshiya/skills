@@ -11,7 +11,7 @@ instead, as [Route and quota](../SKILL.md#worker-route) describes.
 Step up one row only when the worker's own work shows that the task outgrew its row: it produced a
 design that misses the requirement, or its checks kept failing while it kept changing the code. Say
 which one you saw. A worker that stopped before either happened has shown nothing about its row,
-whatever its reason. `haiku` moves to `sonnet` `high`, and `sonnet` `high` moves to `opus` `high`.
+whatever its reason. `haiku` `high` moves to `sonnet` `high`, and `sonnet` `high` moves to `opus` `high`.
 If `opus` `high` outgrows its row, split the work or change the approach. A step-up never goes to
 `fable`. Only urgency does.
 

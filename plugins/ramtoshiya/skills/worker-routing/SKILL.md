@@ -34,6 +34,9 @@ It sits in `scripts/` next to this file:
 
 ## Choose the row {:#models}
 
+Use a search, lint, check, or script when it can answer the question. Do small
+tasks yourself when your role permits. Choose a row below when work needs a worker.
+
 Pass the row's model and effort every time you start a worker: `model` and `effort`
 on an Agent call, and `--model` and `--reasoning-level` on `bb nest spawn`.
 Without them, an Agent subagent on another model runs at that model's saved effort,
@@ -41,9 +44,8 @@ which may be `low`, and a BB worker runs on your own model and effort.
 
 | Row | On a GPT route | Work |
 | --- | --- | --- |
-| `haiku` `low` | `luna` `low` | Nothing to decide: an edit the brief spells out, a rename or one pattern across files, a search with a fixed source and scope, a direct lookup |
-| `haiku` `high` | `luna` `high` | Reading a large file or log closely and reporting what it says. Split input over about 100K tokens across several workers |
-| `sonnet` `high` | `terra` `high` | The default for implementation: the brief states the behavior and acceptance criteria, the change stays inside one component, and no design decision is open. Also sorting and summarizing results against fixed criteria |
+| `haiku` `high` | `luna` `high` | A spelled-out edit, rename, or mechanical change across files that needs a worker |
+| `sonnet` `high` | `terra` `high` | The default for implementation: the brief states the behavior and acceptance criteria, the change stays inside one component, and no design decision is open. Also sorting and summarizing results against fixed criteria, and reads that need interpretation, including explanations, research, calculations, and reconciling mismatches, even when read-only. Split input over about 100K tokens across several workers |
 | `opus` `high` | Stays on Claude | Top-tier work: design questions and memos, reviews, changes across components or boundaries such as a file format or persisted state, concurrency, recovery, security, and debugging an unknown cause |
 
 Use `fable` in place of `opus` only when the user asks for it or the work is urgent,
@@ -51,7 +53,7 @@ as [Urgency](#urgency) describes. Under claudex these aliases select its GPT tie
 so the same table applies. When a piece of work fits no row, split it instead of
 picking a combination in between. Work that mixes design decisions with many
 mechanical edits becomes an `opus` `high` design unit and a `sonnet` `high` or
-`haiku` `low` implementation unit.
+`haiku` `high` implementation unit.
 
 When a worker stopped, failed, or seems to have outgrown its row, or a workflow needs
 a seat outside the Claude family, read [Retries and step-ups](references/retries.md).
