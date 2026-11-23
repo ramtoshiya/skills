@@ -66,9 +66,9 @@ MODE_NOTE = """## Working mode
 Read `{root}/mode.md` and `{root}/HOSTS.md` before work, and again after compaction. Follow this mode for the whole \
 session. You are a Claude Code coding session that a Hermes coder profile runs, so the Claude Code rules in HOSTS.md \
 apply to you and its Hermes operator section does not."""
-TURN_CHECK = ("[pstack-mode turn check] Before you answer, check the principle index in {root}/mode.md against this "
-              "turn. For each principle whose trigger fits, read its leaf and apply it. In the reply, name each "
-              "principle that shaped a decision and the choice it changed.")
+TURN_CHECK = ("[pstack-mode turn check] Make this your first step, before any other tool call: check the principle "
+              "index in {root}/mode.md against this turn and read the leaf of each principle whose trigger fits. "
+              "Apply them. In the reply, name each principle that shaped a decision and the choice it changed.")
 SUBAGENTS_NOTE = """## Subagents
 
 Claude Code's Agent tool is off in this session. When the task needs a subagent, start a child coder as a bb thread, \

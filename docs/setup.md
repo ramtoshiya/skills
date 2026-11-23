@@ -1142,9 +1142,11 @@ reaches Claude Code, so the plugin delivers the mode in the Claude Code run:
   that started before the setting existed has no note.
 - Every coding run carries a `UserPromptSubmit` hook that adds the
   `[pstack-mode turn check]` line to the prompt. The line asks Claude Code to
-  check the principle index in `mode.md` against the turn, read the leaf of
-  each principle that fits, and name in the reply each principle that shaped
-  a decision. The review fork runs without it.
+  check the principle index in `mode.md` against the turn and read the leaf of
+  each principle that fits before any other tool call, then name in the reply
+  each principle that shaped a decision. A session that investigates first
+  reaches its reply without the leaves and cites none. The review fork runs
+  without the line.
 
 Neither changes the fork's cached prefix: the fork passes the same context
 file, and a hook changes no part of the request prefix.
