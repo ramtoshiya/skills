@@ -1,0 +1,405 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import signal
+import subprocess
+import threading
+import time
+import urllib.request
+import uuid
+from dataclasses import dataclass
+from pathlib import Path
+from types import SimpleNamespace
+
+from agent import background_review
+from agent.acp_openai_bridge import (completion_to_stream_chunks, extract_tool_calls_from_text,
+                                     render_tool_bridge_sections)
+from agent.runtime_cwd import resolve_agent_cwd
+from hermes_cli.plugins_session_env import resolve_session_env
+from hermes_constants import get_hermes_home
+from providers import register_provider
+from providers.base import ProviderProfile
+
+NAME = "claude-code-runtime"
+CLAUDE_MODELS = ("sonnet", "haiku", "opus", "fable")
+GPT_MODEL = re.compile(r"^gpt-\d+(?:\.\d+)?-(?:astra|sol|terra|luna)$")
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+REVIEW_PROMPTS = (background_review._MEMORY_REVIEW_PROMPT, background_review._SKILL_REVIEW_PROMPT,
+                  background_review._COMBINED_REVIEW_PROMPT)
+REVIEW_TOOLS = ("memory", "skill_manage", "skill_view", "skills_list", "read_file", "search_files")
+FORK_NOTE = ("You are running as a forked copy of the coding session above, for a Hermes background review. "
+             "The Hermes tools listed above are the only way to save memory or skills. They are not Claude Code "
+             "tools, so ToolSearch and your own tool calls cannot reach them. To call one, write its "
+             "<tool_call> block as plain text in your reply. Hermes runs it and sends you the result. Do not "
+             "use your own Claude Code tools in this review and do not change any repository file.")
+# A hook, unlike a tool or permission rule, leaves the request prefix alone, so the fork still reads the
+# coding run's cache. dontAsk alone lets Skill and ToolSearch through, and GPT models kept calling them.
+REVIEW_SETTINGS = json.dumps({"hooks": {"PreToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": (
+    "echo 'Hermes background review: Claude Code tools are off. Call a Hermes tool by writing its "
+    "<tool_call> block as plain text in your reply.' >&2; exit 2")}]}]}})
+INVALID_CALL_NOTE = ("Your <tool_call> block was not valid JSON, so Hermes did not run it. Write the call again as "
+                     "one <tool_call> block that holds one valid JSON object.")
+RESULTS_NOTE = ("Continue the review. Call more Hermes tools in the same format, or reply with a short final "
+                "summary and no tool call.")
+GATEWAY_ONLY = re.compile(r"^(HERMES_|BB_THREAD_ID$|BB_PROJECT_ID$|BB_ENVIRONMENT_ID$|BB_THREAD_STORAGE$|PYTHONPATH$)")
+EXTRA_BODY_KEY = "claude_code_runtime"
+
+_STATE_LOCK = threading.Lock()
+_LOG_LOCK = threading.Lock()
+
+
+@dataclass
+class Fork:
+    session: str
+    sent: int
+
+
+ForkKey = tuple[str, int, str]
+_FORKS: dict[ForkKey, Fork] = {}
+
+
+def command_for(model: str) -> str:
+    return "claudex" if model.startswith("gpt-") else "claude"
+
+
+def text_of(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(part["text"] for part in content
+                         if isinstance(part, dict) and isinstance(part.get("text"), str))
+    return ""
+
+
+def review_index(messages: list[dict]) -> int | None:
+    for index in range(len(messages) - 1, -1, -1):
+        message = messages[index]
+        if message.get("role") == "user" and text_of(message.get("content")).startswith(REVIEW_PROMPTS):
+            return index
+    return None
+
+
+def purpose_of(messages: list[dict], tools) -> str:
+    if review_index(messages) is not None:
+        return "review"
+    if not tools:
+        system = " ".join(text_of(m.get("content")) for m in messages if m.get("role") == "system").lower()
+        return "title" if "title" in system else "aux"
+    return "coding"
+
+
+def effort_of(reasoning_config) -> str | None:
+    if not isinstance(reasoning_config, dict) or reasoning_config.get("enabled") is False:
+        return None
+    effort = str(reasoning_config.get("effort") or "").lower()
+    return {"minimal": "low"}.get(effort, effort) if effort in (*EFFORTS, "minimal") else None
+
+
+def runtime_dir() -> Path:
+    return Path(get_hermes_home()) / NAME
+
+
+def claude_dir() -> Path:
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+
+
+def transcript_exists(session: str) -> bool:
+    return any((claude_dir() / "projects").glob(f"*/{session}.jsonl"))
+
+
+def usage_totals(result: dict) -> dict:
+    usage = result.get("usage") or {}
+    return {"fresh_input": int(usage.get("input_tokens") or 0) + int(usage.get("cache_creation_input_tokens") or 0),
+            "cache_read": int(usage.get("cache_read_input_tokens") or 0),
+            "output": int(usage.get("output_tokens") or 0)}
+
+
+def log_usage(row: dict) -> None:
+    path = runtime_dir() / "usage.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with _LOG_LOCK, open(path, "a", encoding="utf-8") as log:
+        log.write(json.dumps(row) + "\n")
+
+
+def memory_context() -> str:
+    memories = Path(get_hermes_home()) / "memories"
+    parts = []
+    for name, label in (("USER.md", "User profile"), ("MEMORY.md", "Environment memory")):
+        path = memories / name
+        text = path.read_text(encoding="utf-8").strip() if path.is_file() else ""
+        if text:
+            parts.append(f"## Hermes {label} ({name})\n\n{text}")
+    if not parts:
+        return ""
+    return ("# Hermes profile memory\n\nThis Claude Code session runs inside a Hermes session. These notes are "
+            "the snapshot Hermes held when the session started.\n\n" + "\n\n".join(parts))
+
+
+def learned_skills() -> dict[str, Path]:
+    root = Path(get_hermes_home()) / "skills"
+    manifest = root / ".bundled_manifest"
+    bundled = ({line.split(":", 1)[0] for line in manifest.read_text(encoding="utf-8").split()}
+               if manifest.is_file() else set())
+    found = {}
+    for skill_md in sorted(root.rglob("SKILL.md")) if root.is_dir() else ():
+        parts = skill_md.relative_to(root).parts
+        if not any(part.startswith(".") for part in parts) and skill_md.parent.name not in bundled:
+            found[skill_md.parent.name] = skill_md.parent
+    return found
+
+
+def sync_skills_plugin() -> Path:
+    root = runtime_dir() / "skills-plugin"
+    skills = root / "skills"
+    skills.mkdir(parents=True, exist_ok=True)
+    manifest = root / ".claude-plugin" / "plugin.json"
+    if not manifest.is_file():
+        manifest.parent.mkdir(exist_ok=True)
+        manifest.write_text(json.dumps({"name": "hermes-skills",
+                                        "description": "Skills the Hermes profile learned"}) + "\n")
+    wanted = learned_skills()
+    for link in skills.iterdir():
+        if link.name not in wanted or not link.is_symlink() or Path(os.readlink(link)) != wanted[link.name]:
+            link.unlink()
+    for name, target in wanted.items():
+        if not (skills / name).is_symlink():
+            (skills / name).symlink_to(target, target_is_directory=True)
+    return root
+
+
+def conversation(key: str, cwd: str) -> dict:
+    path = runtime_dir() / "sessions.json"
+    with _STATE_LOCK:
+        state = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        entry = state.get(key)
+        if entry is None:
+            session = str(uuid.uuid5(uuid.NAMESPACE_URL, f"hermes:{get_hermes_home()}:{key}"))
+            context = memory_context()
+            context_file = None
+            if context:
+                context_file = runtime_dir() / "context" / f"{session}.md"
+                context_file.parent.mkdir(parents=True, exist_ok=True)
+                context_file.write_text(context, encoding="utf-8")
+            entry = state[key] = {"session": session, "cwd": cwd,
+                                  "context": str(context_file) if context_file else None}
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.with_suffix(".tmp").write_text(json.dumps(state, indent=1), encoding="utf-8")
+            path.with_suffix(".tmp").replace(path)
+    return entry
+
+
+def cache_prefix_flags(entry: dict, model: str, effort: str | None, plugin_dir: Path) -> list[str]:
+    flags = ["--model", model]
+    if effort:
+        flags += ["--effort", effort]
+    if entry["context"]:
+        flags += ["--append-system-prompt-file", entry["context"]]
+    return flags + ["--plugin-dir", str(plugin_dir)]
+
+
+def completion(text: str, model: str, totals: dict, tool_calls=None, **extra) -> SimpleNamespace:
+    message = SimpleNamespace(content=text, tool_calls=tool_calls or None, reasoning=None,
+                              reasoning_content=None, reasoning_details=None)
+    prompt = totals["fresh_input"] + totals["cache_read"]
+    usage = SimpleNamespace(prompt_tokens=prompt, completion_tokens=totals["output"],
+                            total_tokens=prompt + totals["output"],
+                            prompt_tokens_details=SimpleNamespace(cached_tokens=totals["cache_read"]))
+    return SimpleNamespace(choices=[SimpleNamespace(message=message,
+                                                    finish_reason="tool_calls" if tool_calls else "stop")],
+                           usage=usage, model=model, **extra)
+
+
+def projection(events: list[dict]) -> tuple[list[dict], int]:
+    rows, steps = [], set()
+    for event in events:
+        message = event.get("message") or {}
+        blocks = [b for b in message.get("content") or [] if isinstance(b, dict)]
+        if event.get("type") == "assistant":
+            calls = [b for b in blocks if b.get("type") == "tool_use"]
+            if calls:
+                steps.add(message.get("id"))
+                rows.append({"role": "assistant", "content": "", "tool_calls": [
+                    {"id": b["id"], "type": "function",
+                     "function": {"name": b["name"], "arguments": json.dumps(b.get("input") or {})}}
+                    for b in calls]})
+        elif event.get("type") == "user":
+            rows += [{"role": "tool", "tool_call_id": b.get("tool_use_id"), "content": text_of(b.get("content"))}
+                     for b in blocks if b.get("type") == "tool_result"]
+    return rows, len(steps)
+
+
+class ClaudeCodeClient:
+    HERMES_SKIP_TRANSPORT_WRAP = True
+    HERMES_SKIP_ASYNC_WRAP = True
+
+    def __init__(self, **_):
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
+        self.is_closed = False
+        self._lock = threading.Lock()
+        self._running: set[subprocess.Popen] = set()
+        self._cancelled: set[int] = set()
+
+    def run(self, model: str, argv: list[str], prompt: str, cwd: str, session_id: str, env=None) -> tuple[dict, list[dict]]:
+        child_env = {k: v for k, v in os.environ.items() if not GATEWAY_ONLY.match(k)}
+        for name, value in resolve_session_env(session_id).items():
+            if value is None:
+                child_env.pop(name, None)
+            else:
+                child_env[name] = value
+        child_env.update(env or {})
+        process = subprocess.Popen([command_for(model), "-p", "--output-format", "stream-json", "--verbose", *argv],
+                                   cwd=cwd, env=child_env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, text=True, start_new_session=True)
+        with self._lock:
+            self._running.add(process)
+        try:
+            out, err = process.communicate(prompt)
+        finally:
+            with self._lock:
+                self._running.discard(process)
+        if process.pid in self._cancelled:
+            raise InterruptedError("Claude Code run cancelled")
+        events = [json.loads(line) for line in out.splitlines() if line.startswith("{")]
+        result = next((e for e in reversed(events) if e.get("type") == "result"), None)
+        if process.returncode != 0 or result is None or result.get("is_error"):
+            detail = (result or {}).get("result") or err.strip()[-800:] or f"exit {process.returncode}"
+            raise RuntimeError(f"{command_for(model)} failed: {detail}")
+        return result, events
+
+    def cancel(self):
+        with self._lock:
+            running = tuple(self._running)
+        for process in running:
+            self._cancelled.add(process.pid)
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+
+    def close(self):
+        self.is_closed = True
+        self.cancel()
+
+    def create(self, *, model: str, messages=None, tools=None, tool_choice=None, stream=False, extra_body=None, **_):
+        messages = list(messages or [])
+        context = (extra_body or {}).get(EXTRA_BODY_KEY) or {}
+        key = context.get("session") or ""
+        purpose = purpose_of(messages, tools)
+        started = time.time()
+        if purpose == "coding":
+            answer, row = self.coding(model, messages, key, context)
+        elif purpose == "review":
+            answer, row = self.review(model, messages, tools, tool_choice, key, context)
+        else:
+            answer, row = self.auxiliary(model, messages, key, context)
+        log_usage({"ts": round(started, 3), "seconds": round(time.time() - started, 1), "conversation": key,
+                   "purpose": purpose, "model": model, "command": command_for(model), **row})
+        return completion_to_stream_chunks(answer) if stream else answer
+
+    def coding(self, model, messages, key, context):
+        if not key:
+            raise RuntimeError(f"{NAME}: the request carries no Hermes session id")
+        entry = conversation(key, str(resolve_agent_cwd()))
+        argv = cache_prefix_flags(entry, model, context.get("effort"), sync_skills_plugin())
+        argv += ["--permission-mode", "bypassPermissions"]
+        argv += ["--resume" if transcript_exists(entry["session"]) else "--session-id", entry["session"]]
+        result, events = self.run(model, argv, text_of(messages[-1].get("content")), entry["cwd"], key)
+        rows, steps = projection(events)
+        totals = usage_totals(result)
+        answer = completion(result.get("result") or "", model, totals,
+                            hermes_projected_messages=rows, hermes_provider_tool_iterations=steps)
+        return answer, {"claude_session": entry["session"], **totals}
+
+    def review(self, model, messages, tools, tool_choice, key, context):
+        path = runtime_dir() / "sessions.json"
+        entry = json.loads(path.read_text(encoding="utf-8")).get(key) if path.is_file() else None
+        if entry is None or not transcript_exists(entry["session"]):
+            raise RuntimeError(f"{NAME}: review before any coding turn of conversation {key!r}")
+        index = review_index(messages)
+        fork_key: ForkKey = (key, index, hashlib.sha1(text_of(messages[index]["content"]).encode()).hexdigest())
+        fork = _FORKS.get(fork_key)
+        flags = cache_prefix_flags(entry, model, context.get("effort"), runtime_dir() / "skills-plugin")
+        flags += ["--permission-mode", "dontAsk", "--settings", REVIEW_SETTINGS]
+        if fork is None:
+            prompt = "\n\n".join([text_of(messages[index]["content"]),
+                                  *render_tool_bridge_sections(tools, tool_choice, allowlist=REVIEW_TOOLS), FORK_NOTE])
+            argv = flags + ["--resume", entry["session"], "--fork-session"]
+        else:
+            results = [f'<tool_result id="{m.get("tool_call_id")}">\n{text_of(m.get("content"))}\n</tool_result>'
+                       for m in messages[fork.sent:] if m.get("role") == "tool"]
+            prompt = "Results of your Hermes tool calls:\n\n" + "\n\n".join(results) + "\n\n" + RESULTS_NOTE
+            argv = flags + ["--resume", fork.session]
+        env = {}
+        if command_for(model) == "claudex":
+            # CLIProxyAPI picks the upstream account, and so the cache, by this header.
+            env["ANTHROPIC_CUSTOM_HEADERS"] = f"X-Claude-Code-Session-Id: {entry['session']}"
+        result, _ = self.run(model, argv, prompt, entry["cwd"], key, env)
+        fork_session = result.get("session_id") if fork is None else fork.session
+        _FORKS[fork_key] = Fork(fork_session, len(messages))
+        totals = usage_totals(result)
+        calls, text = extract_tool_calls_from_text(result.get("result") or "")
+        if not calls and "<tool_call>" in (result.get("result") or ""):
+            result, _ = self.run(model, flags + ["--resume", fork_session], INVALID_CALL_NOTE, entry["cwd"], key, env)
+            totals = {name: totals[name] + value for name, value in usage_totals(result).items()}
+            calls, text = extract_tool_calls_from_text(result.get("result") or "")
+        return completion(text, model, totals, calls), {"claude_session": fork_session,
+                                                        "parent_session": entry["session"],
+                                                        "tool_calls": [c.function.name for c in calls], **totals}
+
+    def auxiliary(self, model, messages, key, context):
+        system = "\n\n".join(text_of(m.get("content")) for m in messages if m.get("role") == "system")
+        turns = [f"{m.get('role', 'user').capitalize()}:\n{text_of(m.get('content')).strip()}"
+                 for m in messages if m.get("role") != "system" and text_of(m.get("content")).strip()]
+        argv = ["--model", model, "--tools", "", "--no-session-persistence", "--strict-mcp-config",
+                "--setting-sources", "", "--system-prompt", system or "You are a helpful assistant."]
+        if context.get("effort"):
+            argv += ["--effort", context["effort"]]
+        result, _ = self.run(model, argv, "\n\n".join(turns), str(runtime_dir()), key,
+                          {"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"})
+        totals = usage_totals(result)
+        return completion(result.get("result") or "", model, totals), totals
+
+
+def gpt_models() -> list[str]:
+    config_path = Path(os.environ.get("CLAUDEX_CONFIG") or Path.home() / ".config/claudex/config.json")
+    config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.is_file() else {}
+    key = os.environ.get("CLIPROXY_API_KEY") or config.get("apiKey") or ""
+    reference = re.fullmatch(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?", key)
+    if reference:
+        key = os.environ.get(reference[1], "")
+    base = (os.environ.get("CLIPROXY_BASE_URL") or config.get("baseUrl") or "http://127.0.0.1:8317").rstrip("/")
+    request = urllib.request.Request(base.removesuffix("/v1") + "/v1/models", headers={"Authorization": f"Bearer {key}"})
+    with urllib.request.urlopen(request, timeout=5) as response:
+        catalog = json.load(response).get("data") or []
+    ids = [m["id"] for m in catalog if isinstance(m, dict) and GPT_MODEL.match(str(m.get("id")))
+           and m.get("owned_by") == "openai" and m.get("visibility") != "hide"]
+    return sorted(ids, key=lambda model: [int(n) for n in re.findall(r"\d+", model)], reverse=True)
+
+
+class ClaudeCodeProfile(ProviderProfile):
+    def create_client(self, **client_kwargs):
+        return ClaudeCodeClient(**client_kwargs)
+
+    def build_api_kwargs_extras(self, *, reasoning_config=None, **context):
+        body = {"session": context.get("session_id") or "", "effort": effort_of(reasoning_config)}
+        return {EXTRA_BODY_KEY: body}, {}
+
+    def fetch_models(self, **_):
+        return [*CLAUDE_MODELS, *gpt_models()]
+
+
+register_provider(ClaudeCodeProfile(
+    name=NAME,
+    display_name="Claude Code (claude and claudex)",
+    description="Coding turns run in Claude Code. Claude models use claude, GPT models use claudex.",
+    auth_type="external_process",
+    process_command="claude",
+    base_url=f"acp://{NAME}",
+    supports_health_check=False,
+    fallback_models=CLAUDE_MODELS,
+    model_capabilities={name: {"supports_tools": True, "supports_reasoning": True, "supports_vision": False,
+                               "context_window": 1_000_000} for name in CLAUDE_MODELS},
+))

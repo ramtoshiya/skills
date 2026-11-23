@@ -96,9 +96,10 @@ any worktree of the repository. `main:sync` fetches `origin/main`, then
 fast-forwards the shared checkout to it or pushes the shared checkout's own new
 commits without force. Then it runs each installer from the shared checkout:
 `agents:sync`, `mise dotfiles apply`, `hermes:operator` when the operator
-profile is installed, each CLI under `tools/` that this machine already has,
-and `bb plugin install` for each bb plugin described below. The command that
-moved the ref waits for the installers and shows their output. A failed install never fails that command, and its
+profile is installed, `hermes:coder` when the coder profile is installed,
+each CLI under `tools/` that this machine already has, and `bb plugin install`
+for each bb plugin described below. The command that moved the ref waits for
+the installers and shows their output. A failed install never fails that command, and its
 output names the failed step.
 
 `main:sync` changes nothing and prints `STOPPED` with the reason in these
@@ -123,12 +124,13 @@ rebase reattaches `main`, which runs it again.
 `main:status` makes no changes. It asks the remote for `main` with
 `git ls-remote`, then prints a row for `origin/main`, the shared checkout, each
 agent package and settings target, each `mise.toml` dotfile entry that is not
-applied, the Hermes operator profile, each CLI under `tools/`, and each bb
-plugin from this repository. It exits 1 and names the target when
+applied, the Hermes operator profile, the Hermes coder profile once installed,
+each CLI under `tools/`, and each bb plugin from this repository. It exits 1
+and names the target when
 any of them is behind. A merge made on GitHub shows as not fetched until the
 next fetch or `main:sync` on this machine.
 
-The `agents:*` tasks and `hermes:operator` still run alone. `hermes:operator`
+The `agents:*` and `hermes:*` tasks still run alone. `hermes:operator`
 reads the shared checkout even when you start it from another worktree. When
 the tree an installer reads is not `origin/main`, it prints a warning that
 names the gap, and `main:status` keeps reporting the gap until `main:sync`
@@ -140,6 +142,7 @@ visible.
 | Claude Code and Codex plugin packages, Claude settings and instructions, the preferences block in Hermes `SOUL.md` files | `agents:sync` | Yes |
 | Dotfile entries in `mise.toml` | `mise dotfiles apply` | Yes |
 | Hermes operator profile | `hermes:operator` | Yes, once installed |
+| Hermes coder profile | `hermes:coder` | Yes, once installed |
 | Bootstrap packages in `mise.toml` | `mise bootstrap` | No |
 | bb plugins under `bb-plugins/` | `bb plugin install` | Yes, when installed from the shared checkout |
 | `takeaturn` CLI | `takeaturn:install` | Yes |
@@ -997,6 +1000,135 @@ at a reboot, blocks `compact` for its thread until the agent calls `clear`,
 because whether it compacted is unknown. The helper has no atomic send-if-idle
 operation, so a prompt that arrives after its last idle check can still race
 the resume.
+
+## Hermes coder profile
+
+`mise run hermes:coder` sets up a Hermes profile named `coder` for coding. You
+talk to Hermes in a bb thread with the **Hermes Coder** provider, and every
+turn runs in Claude Code with Claude Code's own tools. Claude models run
+through `claude`, and GPT models through [`claudex`](../tools/claudex/README.md).
+Hermes keeps the session, its memory, and the skills it learns.
+`mise bootstrap` does not run this task.
+
+It needs:
+
+- Hermes Agent with its `hermes` command on `PATH`.
+- Claude Code with a login. The profile uses that login the way `claude` does
+  in a terminal and copies no credentials.
+- For GPT models, `claudex` on `PATH` and its CLIProxyAPI server running.
+- bb, for the provider entry. Without bb the task skips that step.
+
+The task creates the profile with
+`hermes profile create coder --no-skills --no-credentials --no-alias` if it is
+missing. It does not make `coder` the default profile. Then it changes these
+things:
+
+- It copies four plugins into `~/.hermes/profiles/coder/plugins/`:
+  `model-providers/claude-code-runtime`, which runs each request in Claude
+  Code, `claude-code-commands`, which prints token use, and the operator's
+  `bb-thread-env` and `bb-title-input`, described above.
+- It sets `model.provider` to `claude-code-runtime` and
+  `compression.enabled` to `false`. Claude Code compacts its own context, and
+  the Hermes session id that names the Claude Code session must stay fixed.
+- It sets `model_catalog.excluded_providers` to `["anthropic"]`. Hermes lists
+  its direct Anthropic provider wherever a Claude Code login exists, and a
+  model picked there would skip Claude Code.
+- It asks the running Hermes gateway to reload the profile's plugins.
+- It adds a `hermes-coder` entry to the custom agents of bb's `provider-acp`
+  plugin. The entry runs `hermes -p coder acp`. Other custom agents stay as
+  they are.
+- It records the install in
+  `~/.local/state/ramtoshiya-agents/hermes-coder.json`. From then on
+  `main:status` checks the profile and `main:sync` reinstalls it.
+
+Running the task again replaces the plugin copies. It leaves the model choice,
+memory, skills, and sessions alone. Unlike `hermes:operator`, it installs from
+the checkout that holds the script, so you can try unpushed work from a
+worktree. It prints a warning when that checkout is not the shared one.
+
+### Choose the model
+
+`model.default` in the profile's config is the model a new session starts on.
+The first install sets it to `sonnet`, the model this repository uses for
+ordinary implementation work. Change it with
+`hermes -p coder config set model.default <model>`, or pick a model for one
+thread in bb. bb lists the Claude aliases `sonnet`, `haiku`, `opus`, and
+`fable`, and the GPT models that CLIProxyAPI offers. Every Claude Code call
+passes the model with `--model`.
+
+The background review runs on the same model as the coding turn. A review on
+another model cannot read the coding session's prompt cache and would pay for
+the whole conversation again.
+
+When you switch a thread from a Claude model to a GPT model or back, the next
+turn resumes the same Claude Code session under the other command. The
+conversation carries over. That first turn reads nothing from the other
+family's cache, so it pays for the whole context once.
+
+### How a request runs
+
+The plugin sorts each request Hermes makes into one of three kinds:
+
+- A coding turn resumes the Claude Code session of the Hermes session, with
+  `--session-id` on the first turn and `--resume` after it. Claude Code gets
+  your message, runs in the thread's workspace with the
+  `bypassPermissions` permission mode, and returns its tool calls to Hermes as
+  part of the turn. Hermes counts those calls toward its skill review.
+- Hermes's background review runs at Hermes's default cadence: a skill review
+  after 10 tool steps and a memory review after 10 user turns. It runs in a
+  fork of the coding session, `--resume <session> --fork-session`, with the
+  same model, flags, and environment. The conversation so far is then a prompt
+  cache read. The fork calls Hermes's memory and skill tools by writing
+  `<tool_call>` blocks as text, and Hermes runs them. A `PreToolUse` hook
+  refuses every Claude Code tool in the fork, and the `dontAsk` permission
+  mode refuses writes. Neither changes the cached prompt. A `<tool_call>`
+  block that is not valid JSON goes back to the fork once to be written
+  again.
+- A title or another call without tools is one Claude Code run with no tools
+  and no saved session.
+
+Each call also passes the profile's `USER.md` and `MEMORY.md` from the
+session's first turn with `--append-system-prompt-file`, and the skills Hermes
+learned in the profile as a Claude Code plugin with `--plugin-dir`. Hermes's
+bundled skills stay out.
+
+### Read token use
+
+Each call appends one JSON line to
+`~/.hermes/profiles/coder/claude-code-runtime/usage.jsonl` with these fields:
+
+| Field | Meaning |
+| --- | --- |
+| `ts`, `seconds` | Start time and duration |
+| `conversation` | Hermes session id. Empty for title calls, which Hermes sends without one |
+| `purpose` | `coding`, `review`, `title`, or `aux` |
+| `model`, `command` | The model and `claude` or `claudex` |
+| `claude_session` | The Claude Code session, or the review's fork |
+| `fresh_input` | Input tokens plus cache writes |
+| `cache_read` | Tokens read from the prompt cache |
+| `output` | Output tokens |
+
+The numbers come from the `usage` that Claude Code reports for that run. Its
+`modelUsage` is not used, because on a resumed or forked session it also
+counts the earlier runs.
+
+`hermes -p coder claude-code usage` prints one line per Hermes session, and
+`--json` prints the same summary as JSON. The cost of a request is
+`fresh_input + 0.1 × cache_read`, the ratio of cache-read to input prices.
+The `a` column is the review cost divided by the coding cost.
+
+### Limits
+
+- The plugin recognizes a review request by its last review prompt, which
+  must start with one of the prompts in Hermes's
+  `agent/background_review.py`. If a Hermes update changes those prompts,
+  reviews run as coding turns. Hermes does not tell a provider whether a
+  request is a review. The smallest Hermes change that would remove this
+  dependency passes that fact to `build_api_kwargs_extras`.
+- Coding turns use Claude Code's tools only. Hermes's own tools, such as its
+  browser, are not offered to Claude Code.
+- Memory that Hermes saves during a session reaches Claude Code in the next
+  session.
 
 ## How mise applies each entry
 

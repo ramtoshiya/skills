@@ -1,0 +1,3 @@
+name: claude-code-commands
+version: "0.1.0"
+description: "Adds `hermes claude-code usage`, which prints the token use the claude-code-runtime provider logged, and `hermes claude-code reload`, which loads the profile's plugin files into the running gateway."

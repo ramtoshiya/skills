@@ -20,6 +20,7 @@ HOOK_VARIABLES = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX", "G
                   "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG_PARAMETERS",
                   "GIT_CONFIG_COUNT")
 OPERATOR_PROFILE = "operator"
+CODER_PROFILE = "coder"
 BB_PLUGINS = "bb-plugins"
 TOOLS = "tools"
 # A plugin that wraps a CLI under tools/ keeps state from it, such as the model list its provider caches, so a
@@ -330,6 +331,9 @@ class Installers:
         sources = self.home / ".hermes/profiles" / OPERATOR_PROFILE / "plugins/skill-drafts/sources.json"
         return shutil.which("hermes") is not None and sources.is_file()
 
+    def coder_installed(self):
+        return shutil.which("hermes") is not None and (state_dir() / f"hermes-{CODER_PROFILE}.json").is_file()
+
     def run(self, command, check=False, capture=True):
         return subprocess.run(command, cwd=self.shared, env=environment(), stdin=subprocess.DEVNULL,
                               capture_output=capture, text=True, check=check)
@@ -370,6 +374,11 @@ class Installers:
                             detail[-1] if detail else ""))
         else:
             rows.append(row("hermes", f"profile:{OPERATOR_PROFILE}", "absent", "not installed on this machine"))
+        if self.coder_installed():
+            result = self.run([*self.python, str(self.shared / "setup/hermes/coder_profile.py"), "--check"])
+            detail = (result.stdout or result.stderr).strip().splitlines()
+            rows.append(row("hermes", f"profile:{CODER_PROFILE}", "ok" if result.returncode == 0 else "drift",
+                            detail[-1] if detail else ""))
         return rows + CliTools(self.shared, self.home).status_rows() + BbPlugins(self.shared).status_rows()
 
     def steps(self, hermes, extra):
@@ -383,6 +392,8 @@ class Installers:
         elif hermes:
             preferences_for_the_new_profile_soul = [agents, operator]
             steps = [*steps, operator, *preferences_for_the_new_profile_soul]
+        if self.coder_installed():
+            steps.append(("hermes:coder", [*self.python, str(self.shared / "setup/hermes/coder_profile.py")]))
         steps.append(("cli tools", CliTools(self.shared, self.home).sync))
         if shutil.which("bb"):
             steps.append(("bb plugins", BbPlugins(self.shared).sync))
