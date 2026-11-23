@@ -82,6 +82,8 @@ bb nest spawn --provider {provider} --model claude-code-runtime:<model> --reason
 bb thread wait <child id> --timeout 600 && bb thread output <child id>
 ```
 
+- Every worker that the mode or a workflow asks for is such a child coder. `--provider {provider}` replaces the \
+provider that ramtoshiya:worker-routing and its BB workers reference name.
 - Choose the model and effort by the rows of the ramtoshiya:worker-routing skill, and pass both on every spawn: `sonnet` \
 `high` for implementation and reads that need interpretation, and `opus` `high` for top-tier work. On a GPT route, the \
 model is the output of `newest-model <family> claudex`, or the Claude row when that exits 1. Never pass an Astra model.

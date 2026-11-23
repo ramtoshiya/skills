@@ -1154,7 +1154,9 @@ file, and a hook changes no part of the request prefix.
 Claude Code's Agent tool is off in coder sessions. When a coder session needs
 a subagent, it starts a child coder as a bb thread with `bb nest spawn` on the
 same **Hermes Coder** provider, `acp-hermes-coder`. The context file that
-every coder session loads gives the command. bb starts the launcher for every
+every coder session loads gives the command. It also says that this provider
+replaces the one the `worker-routing` skill names, because the mode sends a
+session to that skill before its first worker. bb starts the launcher for every
 Hermes Coder thread. The launcher reads the thread's caller from bb: the
 lifecycle owner when the nest plugin set one, and otherwise the parent thread.
 When the caller runs on Hermes Coder, the launcher starts

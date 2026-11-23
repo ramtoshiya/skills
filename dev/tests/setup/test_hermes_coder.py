@@ -290,6 +290,7 @@ class ClaudeCodeRuntimeInstalledHermesTests(unittest.TestCase):
         self.assertEqual(option(coding, "--disallowedTools"), "Agent")
         context = Path(option(coding, "--append-system-prompt-file")).read_text()
         self.assertIn("bb nest spawn --provider acp-child-coders", context)
+        self.assertIn("`--provider acp-child-coders` replaces the provider that ramtoshiya:worker-routing", context)
         self.assertNotIn("Learning proposals", context)
 
     def test_coding_session_hook_refuses_a_subagent_spawn_that_can_wake_this_session(self):
