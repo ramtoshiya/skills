@@ -52,7 +52,9 @@ paragraph's fork permission, does not widen the agreed targets. Ask before work
 moves to a new target. Do not propose, draft, or use a BB application fork,
 personal core patch, or installed bundle patch, or ask whether to authorize one,
 unless the user explicitly requests that route. Approval of the desired behavior
-alone does not authorize it.
+alone does not authorize it, so state the limit without asking for another
+implementation route when supported settings and plugins cannot deliver the
+behavior.
 
 ## Write the brief {:#brief}
 

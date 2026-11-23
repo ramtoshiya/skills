@@ -705,8 +705,8 @@ agents to supported settings or plugins. An application fork, personal core
 patch, or installed bundle patch requires an explicit request for that route.
 Approval of the behavior alone does not authorize that route. If supported
 settings and plugins cannot deliver the behavior, the operator states the limit
-without proposing a fork or patch, asking whether to authorize one, or proposing
-an upstream report.
+without proposing a fork or patch, asking for another implementation route, or
+proposing an upstream report.
 Before starting a worker, the operator asks in conversation when an unresolved
 choice would change the requested outcome or consequential change targets. It
 decides incidental implementation choices itself and reports the target of
