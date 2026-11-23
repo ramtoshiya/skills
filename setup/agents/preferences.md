@@ -30,6 +30,16 @@ or review artifact.
 Do not append AI attribution trailers, bot co-author identities, or private
 session URLs to commits or pull requests.
 
+## Third-party reports {:#third-party-reports}
+
+Do not report anything to third-party projects or their communities through
+any channel. Do not file, draft for filing, offer, or recommend bug reports,
+issues, pull requests, discussions, forum posts, or comments. Do not ask
+whether to file one. Fix or work around defects in the user's code, fork, or
+configuration, and record useful evidence in the task result or repository.
+If no workaround exists, state the limit. Pushing to the user's own fork and
+pulling upstream changes remain allowed.
+
 ## Task completion {:#task-completion}
 
 Distinguish missing configuration, an invalid selected path, an incompatible tool,
@@ -119,8 +129,8 @@ requirement instead, say that you changed it, and show the attempt that
 failed on the stated one.
 
 Fragility and reliance on internals are costs to report with a route. They
-are not reasons to leave the route out, or to recommend an upstream request
-in its place when the user asked for something that works now.
+are not reasons to leave the route out when the user asked for something that
+works now.
 
 ## Research scope {:#research-scope}
 

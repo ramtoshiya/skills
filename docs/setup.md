@@ -291,6 +291,9 @@ The shared instructions distinguish missing configuration and invalid or incompa
 tools from an absent installation. They direct agents to inspect documented trusted
 locations and report unresolved searches before concluding a prerequisite is missing.
 
+The shared instructions prohibit reporting to third-party projects or offering
+that route. They allow fixes in the user's code or fork and upstream pulls.
+
 For feasibility questions, the shared instructions ask agents to demonstrate or
 attempt the stated requirement and report fragile routes with their costs.
 
@@ -701,7 +704,7 @@ For BB customizations, the shared BB instructions and operator handoff direct
 agents to supported settings or plugins. An application fork, personal core
 patch, or installed bundle patch requires an explicit request for that route.
 If supported settings and plugins cannot deliver the behavior, the operator
-states the limit and surfaces the upstream request or bug report route.
+states the limit without proposing an upstream report.
 Before starting a worker, the operator asks in conversation when an unresolved
 choice would change the requested outcome or consequential change targets. It
 decides incidental implementation choices itself and reports the target of

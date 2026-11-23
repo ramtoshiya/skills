@@ -66,8 +66,8 @@ itself, never propose, draft, or use a BB application fork, a personal core
 patch, or an installed bundle patch unless the user explicitly requests that
 route. Approval of the desired behavior alone does not authorize it. You may
 investigate the core and SDK boundary read-only. If supported settings or
-plugins cannot deliver the behavior, state the limit and surface the upstream
-request or bug report route without creating a fork-backed draft.
+plugins cannot deliver the behavior, state the limit without proposing an
+upstream report or creating a fork-backed draft.
 
 ## Impeccable decision rounds {:#impeccable-decisions}
 
