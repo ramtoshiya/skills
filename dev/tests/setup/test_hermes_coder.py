@@ -34,7 +34,8 @@ if "--resume" in args and "--fork-session" not in args:
 transcript = Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects" / "work" / f"{{session}}.jsonl"
 transcript.parent.mkdir(parents=True, exist_ok=True)
 transcript.touch()
-events = [{{"type": "system", "subtype": "init", "session_id": session}}]
+model = reply.get("model_id") or args[args.index("--model") + 1]
+events = [{{"type": "system", "subtype": "init", "session_id": session, "model": model}}]
 if reply.get("tool"):
     events += [
         {{"type": "assistant", "message": {{"id": "m1", "content": [
@@ -46,8 +47,9 @@ events.append({{"type": "result", "subtype": "success", "is_error": False, "resu
                 "session_id": session,
                 "usage": {{"input_tokens": 10, "cache_creation_input_tokens": 5, "cache_read_input_tokens": 100,
                           "output_tokens": 7}},
-                "modelUsage": {{"any": {{"inputTokens": 90000, "cacheCreationInputTokens": 90000,
-                                        "cacheReadInputTokens": 900000, "outputTokens": 9000}}}}}})
+                "modelUsage": {{model: {{"inputTokens": 90000, "cacheCreationInputTokens": 90000,
+                                        "cacheReadInputTokens": 900000, "outputTokens": 9000,
+                                        "contextWindow": reply.get("window", 1000000)}}}}}})
 print("\\n".join(json.dumps(event) for event in events))
 """
 
@@ -89,6 +91,9 @@ out["gpt_review"] = summary(client.chat.completions.create(model="gpt-6-luna", m
                                                            tools=tools, extra_body=extras("sess-2", None)))
 out["settings"] = runtime.REVIEW_SETTINGS
 out["review_prompt"] = runtime.REVIEW_PROMPTS[1]
+# Hermes asks the provider profile for the window before it probes the endpoint, and the probe of
+# acp://claude-code-runtime falls back to 256,000 tokens in the gateway.
+out["windows"] = {model: profile.get_model_context_length(model) for model in ("haiku", "opus", "gpt-6-luna")}
 print(json.dumps(out))
 """
 
@@ -122,6 +127,7 @@ out["turn"] = attempt(model="haiku", messages=[system, user], tools=tools, extra
 review = {"role": "user", "content": runtime.REVIEW_PROMPTS[0]}
 out["review"] = attempt(model="haiku", messages=[system, user, review], tools=tools, extra_body=extras("child-1", None))
 out["astra"] = attempt(model="gpt-6.2-astra", messages=[system, user], tools=tools, extra_body=extras("child-2", None))
+out["window"] = profile.get_model_context_length("haiku")
 print(json.dumps(out))
 """
 
@@ -218,7 +224,7 @@ class ClaudeCodeRuntimeInstalledHermesTests(unittest.TestCase):
         cls.out, cls.calls, runtime = probe(Path(cls.tmp.name), PROBE, [
             {"text": "done", "tool": True}, {"text": "still done", "tool": True},
             {"text": INVALID_CALL}, {"text": VALID_CALL},
-            {"text": "gpt done"}, {"text": VALID_CALL}],
+            {"text": "gpt done", "window": 872000}, {"text": VALID_CALL, "window": 872000}],
             f"claude_code_runtime:\n  subagent_provider: acp-child-coders\n  pstack_root: {PSTACK_ROOT}\n")
         cls.usage = rows(runtime)
 
@@ -311,6 +317,9 @@ class ClaudeCodeRuntimeInstalledHermesTests(unittest.TestCase):
             self.assertIn("[pstack-mode turn check]", check)
             self.assertIn(f"{PSTACK_ROOT}/mode.md", check)
 
+    def test_hermes_knows_the_context_window_claude_code_runs_with(self):
+        self.assertEqual(self.out["windows"], {"haiku": 1_000_000, "opus": 1_000_000, "gpt-6-luna": 872_000})
+
     def test_the_review_fork_runs_no_turn_check(self):
         self.assertEqual(turn_context(self.calls[2]["args"]), "")
 
@@ -386,7 +395,8 @@ class ChildCoderProfileTests(unittest.TestCase):
                   "  subagent_provider: acp-child-coders\n"
                   f"  pstack_root: {PSTACK_ROOT}\n"
                   "auxiliary:\n  background_review:\n    enabled: false\n")
-        cls.out, cls.calls, cls.runtime = probe(tmp, CHILD_PROBE, [{"text": "found it", "tool": True}], config)
+        cls.out, cls.calls, cls.runtime = probe(tmp, CHILD_PROBE, [{"text": "found it", "tool": True, "window": 990000}],
+                                                config)
         cls.work = tmp
 
     @classmethod
@@ -406,6 +416,9 @@ class ChildCoderProfileTests(unittest.TestCase):
         coding = self.calls[0]["args"]
         self.assertIn(MODE_POINTER, Path(option(coding, "--append-system-prompt-file")).read_text())
         self.assertIn("[pstack-mode turn check]", turn_context(coding))
+
+    def test_child_profile_knows_the_context_window_its_runs_report(self):
+        self.assertEqual(self.out["window"], 990000)
 
     def test_child_session_runs_no_review(self):
         self.assertIn("runs no review", self.out["review"]["error"])
