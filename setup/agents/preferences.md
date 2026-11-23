@@ -63,6 +63,14 @@ something other sessions may be using, check that no other session is using
 it. When Shared devices names it, take a turn with `takeaturn`. Report the
 cause and the fix.
 
+A dependency that the design acquires on demand is not a prerequisite. In your
+own work and in a worker brief, do not check, start, or wait for it before the
+step that uses it. Check it at that step. When a missing dependency blocks a
+step, make the system acquire it at that moment, within the task's
+authorization. Do not keep it running all the time or ask a person to start it.
+For example, a collector that connects to its driver daemon only at the first
+tap fallback needs no daemon check before the work that never taps.
+
 Requests to change repository files include permission to commit completed,
 validated work locally. Commit only changes you own, without asking for a
 separate commit instruction. Leave unrelated or pre-existing changes alone.
