@@ -1,11 +1,12 @@
 #!/bin/sh
 set -eu
 case "${1-}" in virtual|fallback) mode=$1 ;; *) echo 'Usage: focus.sh virtual|fallback' >&2; exit 2 ;; esac
-: "${CODEX_THREAD_ID:?Set CODEX_THREAD_ID to the desktop lease owner}"
-takeaturn check desktop --owner "$CODEX_THREAD_ID" >/dev/null
+owner=${CODEX_THREAD_ID:-${CLAUDE_CODE_SESSION_ID:-${HERMES_SESSION_ID:-}}}
+: "${owner:?Set the session ID used for the desktop lease}"
+takeaturn check desktop --owner "$owner" >/dev/null
 root=$(git rev-parse --show-toplevel)
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/${CODEX_THREAD_ID}.focus.XXXXXXXX")
-profile="focus-${CODEX_THREAD_ID}-$$"
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/${owner}.focus.XXXXXXXX")
+profile="focus-${owner}-$$"
 launcher="$root/plugins/ramtoshiya/skills/visible-chrome/scripts/chrome.mjs"
 swiftc "$root/dev/verification/visible-chrome/focus.swift" -o "$tmp/focus"
 set -- $("$tmp/focus" capture)
@@ -58,6 +59,7 @@ if awk -v expected="[$finder]" '$NF != expected { bad = 1 } END { exit !bad }' "
   echo 'The frontmost app changed' >&2
   focus_status=1
 fi
+node "$launcher" open "$profile" corner >/dev/null
 "$tmp/focus" sample > "$tmp/front-trace" &
 sampler=$!
 printf '%s open front\n' "$(date +%s)"

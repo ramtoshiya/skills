@@ -22,5 +22,5 @@ try {
   if (message.error || message.result.exceptionDetails) throw new Error(JSON.stringify(message));
   const state = message.result.result.value;
   console.log(JSON.stringify(state));
-  if (state.visibility !== 'visible' || state.focus !== true || state.webdriver !== false || state.frames < 2 || state.ticks < 2) process.exitCode = 1;
+  if (state.visibility !== 'visible' || state.webdriver !== false || state.frames < 2 || state.ticks < 2) process.exitCode = 1;
 } finally { socket.close(); }

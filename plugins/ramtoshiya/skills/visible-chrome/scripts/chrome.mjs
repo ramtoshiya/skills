@@ -17,6 +17,14 @@ const displayMarker = join(profile, 'virtual-display');
 const displayName = `agent-chrome-${name}`;
 const displayScript = join(dirname(fileURLToPath(import.meta.url)), 'display.swift');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+function activateChrome(url) {
+  const port = new URL(url).port;
+  const process = spawnSync('/usr/sbin/lsof', ['-n', '-P', '-t', `-iTCP:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8' });
+  const pid = Number(process.stdout.trim());
+  if (process.status !== 0 || !Number.isInteger(pid) || pid <= 0) throw new Error('Cannot find the Chrome process for the DevTools port');
+  const result = spawnSync('/usr/bin/osascript', ['-l', 'JavaScript', '-e', `ObjC.import('AppKit'); $.NSRunningApplication.runningApplicationWithProcessIdentifier(${pid}).activateWithOptions(0)`], { encoding: 'utf8' });
+  if (result.status !== 0 || result.stdout.trim() !== 'true') throw new Error(`Cannot activate Chrome: ${result.stderr}`);
+}
 function betterDisplay(...args) {
   let result = spawnSync('betterdisplaycli', args, { encoding: 'utf8', timeout: 10000 });
   if (result.error?.code === 'ENOENT') {
@@ -129,24 +137,30 @@ if (action === 'close') {
       await mkdir(profile, { recursive: true });
       await rm(portFile, { force: true });
       const app = process.env.CHROME_APP || '/Applications/Google Chrome.app';
-      const args = [...(placement === 'corner' ? ['-g'] : []), '-n', '-a', app, '--args', `--user-data-dir=${profile}`, '--remote-debugging-port=0', '--no-first-run', '--no-default-browser-check', '--mute-audio', '--disable-blink-features=AutomationControlled', '--test-type', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling', '--window-size=1100,800', ...(position ? [`--window-position=${position.left},${position.top}`] : []), 'about:blank'];
+      const args = [...(placement === 'corner' ? ['-g'] : []), '-n', '-a', app, '--args', `--user-data-dir=${profile}`, '--remote-debugging-port=0', '--no-first-run', '--no-default-browser-check', '--mute-audio', '--disable-blink-features=AutomationControlled', '--test-type', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling', '--window-size=1100,800', ...(position ? [`--window-position=${position.left},${position.top}`] : []), ...(placement === 'corner' ? ['--no-startup-window'] : ['about:blank'])];
       const opened = spawnSync('open', args, { encoding: 'utf8' });
       if (opened.status !== 0) throw new Error(`open failed: ${opened.stderr}`);
       for (let i = 0; i < 150 && !url; i++) { await sleep(100); url = await endpoint(); }
       if (!url) throw new Error('Chrome did not open a DevTools port within 15 seconds');
     }
-    const targets = await (await fetch(`${url}/json/list`)).json();
+    const version = await (await fetch(`${url}/json/version`)).json();
+    let targets = await (await fetch(`${url}/json/list`)).json();
+    if (placement === 'corner' && !targets.some(target => target.type === 'page')) {
+      await cdp(version.webSocketDebuggerUrl, send => send('Target.createTarget', { url: 'about:blank', newWindow: true, background: true, ...(position || { left: 100000, top: 100000 }), width: 1100, height: 800 }));
+      targets = await (await fetch(`${url}/json/list`)).json();
+    }
     const page = targets.find(target => target.type === 'page');
     if (!page) throw new Error('Chrome opened no page');
     await cdp(page.webSocketDebuggerUrl, async send => {
       const { windowId } = await send('Browser.getWindowForTarget', { targetId: page.id });
       const { bounds } = await send('Browser.getWindowBounds', { windowId });
-      await send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
+      if (bounds.windowState !== 'normal') await send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
       if (bounds.windowState === 'minimized') await sleep(500);
       await send('Browser.setWindowBounds', { windowId, bounds: placement === 'corner' ? position ? { ...position, width: 1100, height: 800 } : { left: 100000, top: 100000 } : { left: 80, top: 60, width: 1100, height: 800 } });
       if (placement === 'front') await send('Page.bringToFront');
     });
     if (placement === 'front') {
+      activateChrome(url);
       try { discardDisplay(); } catch (error) { console.error(`Virtual display cleanup unavailable: ${error.message}`); process.exitCode = 1; }
     }
     console.log(url);
