@@ -39,7 +39,7 @@ class Profile:
 
 
 LEARNER = Profile("coder", "hermes-coder", "Hermes Coder")
-CHILD = Profile("coder-child", "hermes-coder-child", "Hermes Coder (child)", learner=LEARNER)
+CHILD = Profile("coder-child", "hermes-coder-child", "Hermes Coder (agents only)", learner=LEARNER)
 PROFILES = (LEARNER, CHILD)
 
 

@@ -329,6 +329,84 @@ def queue_review(session_id: str) -> None:
         logger.warning("%s: could not queue /refine on %s: %s", NAME, thread, (result.stderr or result.stdout).strip())
 
 
+def running_agent(session_id: str):
+    """The gateway agent that runs this Hermes session's turn, or None outside a gateway turn."""
+    try:
+        from gateway.run_api import _ACTIVE_RUNNER
+    except Exception:  # noqa: BLE001 -- a plain `hermes` CLI run has no gateway
+        return None
+    if _ACTIVE_RUNNER is None or not session_id:
+        return None
+    try:
+        agents = _ACTIVE_RUNNER._snapshot_running_agents().values()
+    except Exception:  # noqa: BLE001
+        logger.debug("%s: could not read the gateway's running agents", NAME, exc_info=True)
+        return None
+    return next((agent for agent in agents if getattr(agent, "session_id", None) == session_id), None)
+
+
+class LiveProgress:
+    """Shows a running Claude Code turn to the session's viewers, such as bb, while it runs.
+
+    Without it a viewer sees nothing until Claude Code exits, because the whole run is one provider call.
+    Tool calls become the agent's tool start and complete events. Text that Claude Code writes before more work
+    becomes an interim assistant message. The last text is the turn's answer, which Hermes shows itself.
+    """
+
+    def __init__(self, agent):
+        self.agent = agent
+        self.calls: dict[str, tuple[str, dict, float]] = {}
+        self.held_text = ""
+
+    def fire(self, name: str, *args, **kwargs) -> None:
+        callback = getattr(self.agent, name, None)
+        if not callable(callback):
+            return
+        try:
+            callback(*args, **kwargs)
+        except Exception:  # noqa: BLE001 -- a display sink must never fail the coding run
+            logger.debug("%s: %s raised", NAME, name, exc_info=True)
+
+    def show_held_text(self) -> None:
+        text, self.held_text = self.held_text.strip(), ""
+        if text:
+            self.fire("_emit_interim_assistant_message", {"role": "assistant", "content": text})
+
+    def event(self, event: dict) -> None:
+        kind = event.get("type")
+        if kind not in ("assistant", "user"):
+            return
+        self.show_held_text()
+        blocks = [b for b in (event.get("message") or {}).get("content") or [] if isinstance(b, dict)]
+        if kind == "assistant":
+            self.held_text = "\n\n".join(b.get("text") or "" for b in blocks if b.get("type") == "text")
+            for block in blocks:
+                if block.get("type") == "tool_use":
+                    self.show_held_text()
+                    self.started(block)
+        else:
+            for block in blocks:
+                if block.get("type") == "tool_result":
+                    self.completed(block)
+
+    def started(self, block: dict) -> None:
+        call_id, name, args = block.get("id") or "", block.get("name") or "tool", block.get("input") or {}
+        self.calls[call_id] = (name, args, time.monotonic())
+        preview = next((str(args[k]) for k in ("command", "file_path", "pattern", "url", "description")
+                        if args.get(k)), "")[:200]
+        self.fire("tool_progress_callback", "tool.started", name, preview or None, args)
+        self.fire("tool_start_callback", call_id, name, args)
+
+    def completed(self, block: dict) -> None:
+        call_id = block.get("tool_use_id") or ""
+        name, args, started = self.calls.pop(call_id, ("tool", {}, None))
+        result = text_of(block.get("content"))
+        self.fire("tool_progress_callback", "tool.completed", name, None, None,
+                  duration=None if started is None else time.monotonic() - started,
+                  is_error=bool(block.get("is_error")), result=result)
+        self.fire("tool_complete_callback", call_id, name, args, result)
+
+
 class ClaudeCodeClient:
     HERMES_SKIP_TRANSPORT_WRAP = True
     HERMES_SKIP_ASYNC_WRAP = True
@@ -340,7 +418,8 @@ class ClaudeCodeClient:
         self._running: set[subprocess.Popen] = set()
         self._cancelled: set[int] = set()
 
-    def run(self, model: str, argv: list[str], prompt: str, cwd: str, session_id: str, env=None) -> tuple[dict, list[dict]]:
+    def run(self, model: str, argv: list[str], prompt: str, cwd: str, session_id: str, env=None,
+            progress: LiveProgress | None = None) -> tuple[dict, list[dict]]:
         child_env = {k: v for k, v in os.environ.items() if not GATEWAY_ONLY.match(k)}
         for name, value in resolve_session_env(session_id).items():
             if value is None:
@@ -353,14 +432,33 @@ class ClaudeCodeClient:
                                    stderr=subprocess.PIPE, text=True, start_new_session=True)
         with self._lock:
             self._running.add(process)
+        events: list[dict] = []
         try:
-            out, err = process.communicate(prompt)
+            # Read events as Claude Code writes them, so viewers see the run's progress. stderr drains on its own
+            # thread, so a full stderr pipe cannot stall the run.
+            errors: list[str] = []
+            drain = threading.Thread(target=lambda: errors.append(process.stderr.read()), daemon=True)
+            drain.start()
+            try:
+                process.stdin.write(prompt)
+                process.stdin.close()
+            except BrokenPipeError:
+                pass
+            for line in process.stdout:
+                if not line.startswith("{"):
+                    continue
+                event = json.loads(line)
+                events.append(event)
+                if progress is not None:
+                    progress.event(event)
+            process.wait()
+            drain.join()
+            err = "".join(errors)
         finally:
             with self._lock:
                 self._running.discard(process)
         if process.pid in self._cancelled:
             raise InterruptedError("Claude Code run cancelled")
-        events = [json.loads(line) for line in out.splitlines() if line.startswith("{")]
         result = next((e for e in reversed(events) if e.get("type") == "result"), None)
         if process.returncode != 0 or result is None or result.get("is_error"):
             detail = (result or {}).get("result") or err.strip()[-800:] or f"exit {process.returncode}"
@@ -407,7 +505,9 @@ class ClaudeCodeClient:
         argv = cache_prefix_flags(entry, model, context.get("effort"), sync_skills_plugin(current.learner_home))
         argv += ["--permission-mode", "bypassPermissions", "--settings", guard_settings(current)]
         argv += ["--resume" if transcript_exists(entry["session"]) else "--session-id", entry["session"]]
-        result, events = self.run(model, argv, text_of(messages[-1].get("content")), entry["cwd"], key)
+        agent = running_agent(key)
+        result, events = self.run(model, argv, text_of(messages[-1].get("content")), entry["cwd"], key,
+                                  progress=None if agent is None else LiveProgress(agent))
         rows, steps = projection(events)
         if not current.child and read_child_proposals(rows):
             queue_review(key)
@@ -497,7 +597,7 @@ class ClaudeCodeProfile(ProviderProfile):
 
 register_provider(ClaudeCodeProfile(
     name=NAME,
-    display_name="Claude Code (claude and claudex)",
+    display_name="Claude Code",
     description="Coding turns run in Claude Code. Claude models use claude, GPT models use claudex.",
     auth_type="external_process",
     process_command="claude",

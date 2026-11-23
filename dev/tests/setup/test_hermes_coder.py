@@ -37,6 +37,7 @@ events = [{{"type": "system", "subtype": "init", "session_id": session}}]
 if reply.get("tool"):
     events += [
         {{"type": "assistant", "message": {{"id": "m1", "content": [
+            *([{{"type": "text", "text": reply["narration"]}}] if reply.get("narration") else []),
             {{"type": "tool_use", "id": "t1", "name": "Bash", "input": {{"command": reply.get("command", "pwd")}}}}]}}}},
         {{"type": "user", "message": {{"content": [
             {{"type": "tool_result", "tool_use_id": "t1", "content": reply.get("output", "/work")}}]}}}}]
@@ -120,6 +121,31 @@ out["turn"] = attempt(model="haiku", messages=[system, user], tools=tools, extra
 review = {"role": "user", "content": runtime.REVIEW_PROMPTS[0]}
 out["review"] = attempt(model="haiku", messages=[system, user, review], tools=tools, extra_body=extras("child-1", None))
 out["astra"] = attempt(model="gpt-6.2-astra", messages=[system, user], tools=tools, extra_body=extras("child-2", None))
+print(json.dumps(out))
+"""
+
+LIVE_PROBE = PROBE.split("user = {")[0] + """
+import gateway.run_api
+seen = []
+
+class Agent:
+    session_id = "live-1"
+    def __getattr__(self, name):
+        if name.endswith("callback") or name == "_emit_interim_assistant_message":
+            return lambda *args, **kwargs: seen.append([name, *args])
+        raise AttributeError(name)
+
+class Runner:
+    def _snapshot_running_agents(self):
+        return {"route": Agent()}
+
+gateway.run_api._ACTIVE_RUNNER = Runner()
+user = {"role": "user", "content": "list the files"}
+out["turn"] = summary(client.chat.completions.create(model="haiku", messages=[system, user], tools=tools,
+                                                     extra_body=extras("live-1", None)))
+out["other"] = summary(client.chat.completions.create(model="haiku", messages=[system, user], tools=tools,
+                                                      extra_body=extras("other-1", None)))
+out["seen"] = seen
 print(json.dumps(out))
 """
 
@@ -306,6 +332,22 @@ GUARD_EVENTS = {
 
 
 @unittest.skipUnless(shutil.which("hermes"), "Hermes is not installed")
+@unittest.skipUnless(shutil.which("hermes"), "Hermes is not installed")
+class LiveProgressTests(unittest.TestCase):
+    def test_the_running_sessions_viewers_see_claude_codes_steps_before_the_answer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out, _, _ = probe(Path(tmp), LIVE_PROBE, [
+                {"text": "done", "tool": True, "narration": "Checking the files.", "output": "a.txt"},
+                {"text": "other done", "tool": True}], "")
+        self.assertEqual(out["turn"], {"text": "done", "calls": [], "steps": 1})
+        self.assertEqual([event[0] for event in out["seen"]], [
+            "_emit_interim_assistant_message", "tool_progress_callback", "tool_start_callback",
+            "tool_progress_callback", "tool_complete_callback"])
+        self.assertEqual(out["seen"][0][1], {"role": "assistant", "content": "Checking the files."})
+        self.assertEqual(out["seen"][2][1:], ["t1", "Bash", {"command": "pwd"}])
+        self.assertEqual(out["seen"][4][1:], ["t1", "Bash", {"command": "pwd"}, "a.txt"])
+
+
 class ChildCoderProfileTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

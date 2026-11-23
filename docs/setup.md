@@ -1103,12 +1103,24 @@ bundled skills stay out. Every call also passes `--disallowedTools Agent`, so
 coding turns and review forks offer the same tools and the fork still reads
 the coding run's cache.
 
+A coding turn is one Claude Code run, so Hermes would show nothing until the
+run ends. The plugin reads Claude Code's events while it runs and passes them
+to the session's agent in the Hermes gateway. bb then shows each tool call as
+it starts and ends, and the text Claude Code writes between tool calls. The
+last text is the answer, which Hermes shows as usual. A run outside the
+gateway, such as a test, shows no progress.
+
 ### Subagents
 
 Claude Code's Agent tool is off in coder sessions. When a coder session needs
 a subagent, it starts a child coder as a bb thread with `bb nest spawn` on the
-**Hermes Coder (child)** provider, `acp-hermes-coder-child`. The context file
-that every coder session loads gives the command. The parent passes
+**Hermes Coder (agents only)** provider, `acp-hermes-coder-child`. The context file
+that every coder session loads gives the command. bb also lists this provider
+in its model picker. bb cannot hide a provider from the picker without also
+refusing new turns on it, so the name tells a person not to pick it. bb gives
+every custom ACP agent the same toolbox icon. The
+[Agent Icons](https://github.com/ponomr/bb-plugin-agent-icons) bb plugin can
+give each Hermes provider its own icon. The parent passes
 `--model` and `--reasoning-level` from the rows of the `worker-routing` skill
 on every spawn, with `--parent-notifications off`, and waits with
 `bb thread wait` in the same turn. `bb thread wait` exits 4 when the child
