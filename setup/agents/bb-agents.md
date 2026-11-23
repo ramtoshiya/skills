@@ -126,3 +126,23 @@ and relay the person's decisions to the engine:
    `receipt.visualDecision` and the number of decisions match the reply. Tell
    the person where you placed each missing item, then act on the receipt as
    `component-review.md` describes.
+
+## Admin password {:#admin-password}
+
+When a privileged command needs the macOS admin password, request it with the
+`secrets` skill. Do not ask for it in chat and do not hand the command back to
+the user. Request it once per task, before the first privileged command, and
+reuse the file for the task's other privileged steps.
+
+1. Create a private directory:
+   `d="${TMPDIR:-/tmp}/$BB_THREAD_ID/admin"; install -d -m 700 "$d"`.
+2. Notify the user as the shared preferences' "Questions and conversation
+   checkpoints" section says, because the request waits on them. Then run
+   `bb secret request ADMIN_PASSWORD --purpose "<command> for <task>" --describe ADMIN_PASSWORD "macOS admin password" --write-env "$d/secret.env"`.
+   If the user cancels, stop and report it. Do not ask again.
+3. Run each privileged command with the password on stdin only:
+   `( . "$d/secret.env"; printf '%s\n' "$ADMIN_PASSWORD" | sudo -S -p '' <command> )`.
+   `printf` is a shell builtin, so the password never reaches an argument list.
+   Keep `set -x` off and do not read or print the file.
+4. When the task's privileged steps are done, or the task fails or stops, run
+   `rm -rf "$d"`. The user enters the password again for the next task.

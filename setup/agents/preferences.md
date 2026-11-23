@@ -264,6 +264,20 @@ also use. Name it `iphone`, `desktop` for computer use, `tart:<vm>`, or
 `check:<repository>`. Pass your session id as `--owner`: `$CLAUDE_CODE_SESSION_ID`,
 `$CODEX_THREAD_ID`, or `$HERMES_SESSION_ID`. `takeaturn --help` has the rest.
 
+## Privileged commands {:#privileged-commands}
+
+When a task needs a command that asks for the macOS admin password, such as
+`sudo`, run it yourself. Do not hand it back to the user as "needs your
+password". Run only the privileged steps the task already covers. The password
+does not widen your authority, so installing or updating software and every
+other action these preferences gate still need the user's authorization.
+
+Pass the password only on stdin, with the command's own stdin-password option
+(`sudo -S`). Never put it in arguments, logs, messages, or chat, and never print
+the file that holds it. Delete that file when the task's privileged steps are
+done. In bb, the bb instructions' "Admin password" section says how to get the
+password.
+
 ## Questions and conversation checkpoints {:#conversation-checkpoints}
 
 Ask necessary questions in ordinary chat and wait for the user's reply. Do
