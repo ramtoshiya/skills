@@ -64,7 +64,7 @@ check, or a fix changes the situation. Urgency belongs to a piece of work.
 
 | Signal | What you do |
 | --- | --- |
-| The user says the task is urgent or top priority | The task is urgent. Workers it starts are urgent too |
+| The user says the task is urgent or top priority | The task is urgent |
 | A shared gate that every worker passes to land, such as `main`'s `./check` or a shared device, failed and stopped landing on 2 or more different branches or worktrees | Judge whether it is actually urgent. If it is, switch the work that fixes the gate and report the signal, what is blocked, what a delay costs, the row before and after, and the provider. If not, change nothing |
 | Anything else | Do not switch. Propose urgency to the user with the evidence |
 
