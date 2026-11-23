@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -27,6 +29,7 @@ from providers import register_provider
 from providers.base import ProviderProfile
 
 NAME = "claude-code-runtime"
+logger = logging.getLogger(__name__)
 CLAUDE_MODELS = ("sonnet", "haiku", "opus", "fable")
 GPT_MODEL = re.compile(r"^gpt-\d+(?:\.\d+)?-(?:astra|sol|terra|luna)$")
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
@@ -54,7 +57,9 @@ RESULTS_NOTE = ("Continue the review. Call more Hermes tools in the same format,
                 "summary and no tool call.")
 GATEWAY_ONLY = re.compile(r"^(HERMES_|BB_THREAD_ID$|BB_PROJECT_ID$|BB_ENVIRONMENT_ID$|BB_THREAD_STORAGE$|PYTHONPATH$)")
 EXTRA_BODY_KEY = "claude_code_runtime"
-CHILD_GUARD = Path(__file__).with_name("child_guard.py")
+CODER_GUARD = Path(__file__).with_name("coder_guard.py")
+CHILD_OUTPUT = re.compile(r"\bthread\s+output\b")
+REFINE = "/refine Check the child coder's learning proposals in this session and save the ones a tool result confirms."
 SUBAGENTS_NOTE = """## Subagents
 
 Claude Code's Agent tool is off in this session. When the task needs a subagent, start a child coder as a bb thread, \
@@ -63,16 +68,17 @@ and wait for it in the same turn:
 ```sh
 bb thread show "$BB_THREAD_ID" --json   # thread.projectId and environment.id
 bb nest spawn --provider {provider} --model claude-code-runtime:<model> --reasoning-level <effort> \\
-  --project <project id> --environment <environment id> --title <role> --prompt-file <brief file>
-bb thread update <child id> --parent-notifications stuck
+  --parent-notifications off --project <project id> --environment <environment id> --title <role> \\
+  --prompt-file <brief file>
 bb thread wait <child id> --timeout 600 && bb thread output <child id>
 ```
 
 - Choose the model and effort by the rows of the ramtoshiya:worker-routing skill, and pass both on every spawn: `sonnet` \
 `high` for implementation and reads that need interpretation, and `opus` `high` for top-tier work. On a GPT route, the \
 model is the output of `newest-model <family> claudex`, or the Claude row when that exits 1. Never pass an Astra model.
-- bb cannot see your wait command. Without the `stuck` setting, the child's completion notice starts a new turn \
-right after this one and cancels Hermes's review of this session. Run the wait again when it exits 2 (timeout).
+- A notice from the child would start a new turn right after this one and cancel Hermes's review of this session, so \
+a hook refuses a spawn without `--parent-notifications off`. Run the wait again when it exits 2 (timeout). Exit 4 \
+means the child failed: read it with `bb thread log <child id>`.
 - A child coder reads this profile's skills and memory but saves neither. Its answer ends with learning proposals. \
 Hermes's review of this session decides which of them to keep, so leave them in the conversation."""
 CHILD_NOTE = """## You are a child coder
@@ -260,8 +266,9 @@ def cache_prefix_flags(entry: dict, model: str, effort: str | None, plugin_dir: 
     return flags + ["--plugin-dir", str(plugin_dir), "--disallowedTools", "Agent"]
 
 
-def child_settings(current: Role) -> str:
-    command = shlex.join([sys.executable, str(CHILD_GUARD), str(current.learner_home), current.subagent_provider or ""])
+def guard_settings(current: Role) -> str:
+    learner = [str(current.learner_home)] if current.child else []
+    command = shlex.join([sys.executable, str(CODER_GUARD), current.subagent_provider or "", *learner])
     return json.dumps({"hooks": {"PreToolUse": [{"matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
                                                  "hooks": [{"type": "command", "command": command}]}]}})
 
@@ -295,6 +302,31 @@ def projection(events: list[dict]) -> tuple[list[dict], int]:
             rows += [{"role": "tool", "tool_call_id": b.get("tool_use_id"), "content": text_of(b.get("content"))}
                      for b in blocks if b.get("type") == "tool_result"]
     return rows, len(steps)
+
+
+def read_child_proposals(rows: list[dict]) -> bool:
+    commands = {call["id"]: json.loads(call["function"]["arguments"]).get("command") or ""
+                for row in rows for call in row.get("tool_calls") or []}
+    return any(row["role"] == "tool" and CHILD_OUTPUT.search(commands.get(row["tool_call_id"], ""))
+               and "Learning proposals" in row["content"] for row in rows)
+
+
+# Hermes reviews memory every memory.nudge_interval user turns and never at session end, so proposals that
+# arrive in a shorter session would never reach a memory review.
+def queue_review(session_id: str) -> None:
+    thread = resolve_session_env(session_id).get("BB_THREAD_ID")
+    bb = os.environ.get("BB_CLI") or shutil.which("bb")
+    if not thread or not bb:
+        logger.warning("%s: no bb thread for session %s, so its child proposals wait for the next review",
+                       NAME, session_id)
+        return
+    # bb puts a sender header before a message from another thread, and Hermes runs /refine only when the
+    # message starts with it.
+    env = {k: v for k, v in os.environ.items() if k != "BB_THREAD_ID"}
+    result = subprocess.run([bb, "thread", "tell", thread, "--mode", "queue", REFINE], env=env,
+                            capture_output=True, text=True, timeout=60)
+    if result.returncode != 0:
+        logger.warning("%s: could not queue /refine on %s: %s", NAME, thread, (result.stderr or result.stdout).strip())
 
 
 class ClaudeCodeClient:
@@ -373,12 +405,12 @@ class ClaudeCodeClient:
             raise RuntimeError(f"{NAME}: child coders do not run Astra models. Start the child with --model.")
         entry = conversation(key, str(resolve_agent_cwd()), current)
         argv = cache_prefix_flags(entry, model, context.get("effort"), sync_skills_plugin(current.learner_home))
-        argv += ["--permission-mode", "bypassPermissions"]
-        if current.child:
-            argv += ["--settings", child_settings(current)]
+        argv += ["--permission-mode", "bypassPermissions", "--settings", guard_settings(current)]
         argv += ["--resume" if transcript_exists(entry["session"]) else "--session-id", entry["session"]]
         result, events = self.run(model, argv, text_of(messages[-1].get("content")), entry["cwd"], key)
         rows, steps = projection(events)
+        if not current.child and read_child_proposals(rows):
+            queue_review(key)
         totals = usage_totals(result)
         answer = completion(result.get("result") or "", model, totals,
                             hermes_projected_messages=rows, hermes_provider_tool_iterations=steps)
@@ -407,7 +439,6 @@ class ClaudeCodeClient:
             argv = flags + ["--resume", fork.session]
         env = {}
         if command_for(model) == "claudex":
-            # CLIProxyAPI picks the upstream account, and so the cache, by this header.
             env["ANTHROPIC_CUSTOM_HEADERS"] = f"X-Claude-Code-Session-Id: {entry['session']}"
         result, _ = self.run(model, argv, prompt, entry["cwd"], key, env)
         fork_session = result.get("session_id") if fork is None else fork.session

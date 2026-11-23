@@ -1110,10 +1110,17 @@ a subagent, it starts a child coder as a bb thread with `bb nest spawn` on the
 **Hermes Coder (child)** provider, `acp-hermes-coder-child`. The context file
 that every coder session loads gives the command. The parent passes
 `--model` and `--reasoning-level` from the rows of the `worker-routing` skill
-on every spawn. It then sets the child's parent notifications to `stuck` and
-waits with `bb thread wait` in the same turn. bb does not see a wait that runs
-inside Claude Code, so without `stuck` the child's completion notice starts a
-new parent turn, and that turn cancels Hermes's review of the parent session.
+on every spawn, with `--parent-notifications off`, and waits with
+`bb thread wait` in the same turn. `bb thread wait` exits 4 when the child
+fails, so the parent still learns of a failure.
+
+Every coder coding run, parent or child, carries a `PreToolUse` hook,
+`coder_guard.py`. The hook refuses a `bb nest spawn` or `bb thread spawn`
+command without `--parent-notifications off`. Any notice from the child would
+start a new parent turn, and a new turn cancels Hermes's running review of the
+parent session. The nest plugin applies the same setting to a relay worker
+that it places past bb's thread depth limit, so a relay message does not wake
+the parent either.
 
 The parent coder is the only profile that learns. A coder session is a child
 when its profile's `claude_code_runtime.learner_home` names another profile.
@@ -1124,21 +1131,29 @@ not from the prompt. A child coder works as follows:
 - Hermes starts no background review for it, because
   `auxiliary.background_review.enabled` is `false`. The plugin also refuses a
   review request in a child profile.
-- Its coding runs carry a `PreToolUse` hook, `child_guard.py`. The hook refuses
-  `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` into `coder`'s `skills` or
-  `memories` folder, a Bash command that names either folder, and a spawn
-  with a `--provider` other than `acp-hermes-coder-child`.
+- In a child, `coder_guard.py` also refuses `Write`, `Edit`, `MultiEdit`, and
+  `NotebookEdit` into `coder`'s `skills` or `memories` folder, a Bash command
+  that names either folder, and a spawn with a `--provider` other than
+  `acp-hermes-coder-child`.
 - The plugin refuses Astra models in a child.
 - It ends its final answer with a `Learning proposals` list of at most five
   items, each with the command or file that shows it.
 
-The child's answer reaches the parent's conversation, and the parent's next
-background review reads it. The review saves a proposal only when a tool
-result in the conversation, or a file it reads itself, confirms it. It names
-each proposal it leaves out, with the reason. Facts about one checkout, such as
-a test command, are memory, so the memory review saves them. With Hermes's
-default cadence of one memory review every 10 user turns, a proposal can wait
-several turns.
+The child's answer reaches the parent's conversation through
+`bb thread output`. Hermes reviews memory once every `memory.nudge_interval`
+user turns, 10 by default, and never at the end of a session. So a session
+shorter than that would lose the proposals, because facts about one checkout,
+such as a test command, are memory. When a parent coding turn ran
+`bb thread output` and its result holds `Learning proposals`, the plugin
+queues `/refine` on the parent's own bb thread with `bb thread tell --mode
+queue`. After the turn ends, Hermes runs a combined memory and skill review
+of the session. The plugin sends the message without `BB_THREAD_ID`, because
+bb puts a sender header before a message from another thread, and Hermes runs
+`/refine` only when the message starts with it.
+
+The review saves a proposal only when a tool result in the conversation, or a
+file it reads itself, confirms it. It names each proposal it leaves out, with
+the reason.
 
 ### Read token use
 
@@ -1184,14 +1199,16 @@ log to `~/.hermes/profiles/coder-child/claude-code-runtime/usage.jsonl`, and
   models do so in almost every review. Claude Code refuses the call, and each
   refused call is one more request that reads the whole conversation from
   cache.
-- A child that `bb nest spawn` places past bb's thread depth limit reports to
-  the parent through a relay message, which `stuck` does not hold back. That
-  message can start a parent turn and cancel a running review.
 - The child hook matches folder names in the Bash command text. It also
   refuses commands that only read those folders, such as `ls`, and it does
   not catch a path it cannot see in the text.
-- The `stuck` step is an instruction to the parent session. Nothing enforces
-  it.
+- A user message that starts a new turn while a review runs still cancels the
+  review, because Hermes gives a live turn priority. The queued `/refine`
+  review takes about a minute.
+- Hermes runs one review at a time. When an automatic review is already
+  running as the turn ends, Hermes drops the queued `/refine`. An automatic
+  skill review cannot save memory, so a checkout fact then waits for the next
+  memory review.
 
 ## How mise applies each entry
 

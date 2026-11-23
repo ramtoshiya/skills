@@ -16,8 +16,15 @@ bb nest spawn --new-environment worktree --provider claude-code \
 The calling thread (`BB_THREAD_ID`) is always the parent. `bb nest spawn
 --help` lists every option. They match `bb thread spawn`: `--project`,
 `--environment`, `--new-environment`, `--base-branch`, `--provider`,
-`--model`, `--reasoning-level`, `--title`, `--prompt`, `--prompt-file`, and
-`--json`. `--parent-self` is accepted and changes nothing.
+`--model`, `--reasoning-level`, `--title`, `--prompt`, `--prompt-file`,
+`--parent-notifications`, and `--json`. `--parent-self` is accepted and
+changes nothing.
+
+`--parent-notifications` chooses which of the worker's turn outcomes wake the
+caller: `auto` (every outcome, the default), `stuck` (failures and waits on an
+approval or question), or `off`. It applies to relay workers too. Use `off`
+when the caller waits with `bb thread wait` and a new turn would interrupt
+work that runs after the caller's turn ends.
 
 `--tag <tag>`, repeatable, gives the new thread a tag of the
 [mail](../mail/README.md) plugin, such as `--tag role=reviewer`. Mail selects
@@ -48,7 +55,8 @@ take a child. That ancestor is only a host:
 - The worker's first message starts with a short note. It names the caller as
   its logical parent and tells the worker not to message the host.
 - When the worker ends a turn, fails, or waits on an approval or question, the
-  plugin sends the caller a message from the worker. The message wakes the
+  plugin sends the caller a message from the worker, unless the spawn's
+  `--parent-notifications` leaves that outcome out. The message wakes the
   caller and says it needs no reply. It holds a final reply of up to 4,000
   characters. A longer reply arrives as one line with its first line, its
   length, and the `bb thread output` command that reads it.

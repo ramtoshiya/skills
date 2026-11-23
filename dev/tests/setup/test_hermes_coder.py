@@ -37,8 +37,9 @@ events = [{{"type": "system", "subtype": "init", "session_id": session}}]
 if reply.get("tool"):
     events += [
         {{"type": "assistant", "message": {{"id": "m1", "content": [
-            {{"type": "tool_use", "id": "t1", "name": "Bash", "input": {{"command": "pwd"}}}}]}}}},
-        {{"type": "user", "message": {{"content": [{{"type": "tool_result", "tool_use_id": "t1", "content": "/work"}}]}}}}]
+            {{"type": "tool_use", "id": "t1", "name": "Bash", "input": {{"command": reply.get("command", "pwd")}}}}]}}}},
+        {{"type": "user", "message": {{"content": [
+            {{"type": "tool_result", "tool_use_id": "t1", "content": reply.get("output", "/work")}}]}}}}]
 events.append({{"type": "result", "subtype": "success", "is_error": False, "result": reply["text"],
                 "session_id": session,
                 "usage": {{"input_tokens": 10, "cache_creation_input_tokens": 5, "cache_read_input_tokens": 100,
@@ -89,6 +90,24 @@ out["review_prompt"] = runtime.REVIEW_PROMPTS[1]
 print(json.dumps(out))
 """
 
+FAKE_TELL = f"""#!{sys.executable}
+import json, os, sys
+from pathlib import Path
+with open(Path(os.environ["FAKE_WORK"]) / "bb.jsonl", "a") as log:
+    log.write(json.dumps({{"args": sys.argv[1:], "BB_THREAD_ID": os.environ.get("BB_THREAD_ID")}}) + "\\n")
+"""
+
+REFINE_PROBE = PROBE.split("user = {")[0] + """
+from hermes_cli.plugins_session_env import register_session_env
+from hermes_constants import hermes_home_key
+register_session_env(hermes_home_key(), ["BB_THREAD_ID"], lambda session: {"BB_THREAD_ID": "thr_parent"})
+user = {"role": "user", "content": "run the child"}
+for session in ("plain", "proposals", "unrelated"):
+    client.chat.completions.create(model="haiku", messages=[system, user], tools=tools,
+                                   extra_body=extras(session, None))
+print(json.dumps(out))
+"""
+
 CHILD_PROBE = PROBE.split("user = {")[0] + """
 def attempt(**request):
     try:
@@ -114,11 +133,16 @@ def option(args, name):
     return args[args.index(name) + 1] if name in args else None
 
 
+def guard(args: list[str], event: dict) -> subprocess.CompletedProcess:
+    hook = json.loads(option(args, "--settings"))["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    return subprocess.run(["sh", "-c", hook], input=json.dumps(event), capture_output=True, text=True)
+
+
 def probe(tmp: Path, script: str, replies: list[dict], config: str) -> tuple[dict, list[dict], Path]:
     bin_dir = tmp / "bin"
     bin_dir.mkdir()
-    for name in ("claude", "claudex"):
-        (bin_dir / name).write_text(FAKE_CLAUDE)
+    for name, fake in (("claude", FAKE_CLAUDE), ("claudex", FAKE_CLAUDE), ("bb", FAKE_TELL)):
+        (bin_dir / name).write_text(fake)
         (bin_dir / name).chmod(0o755)
     (tmp / "replies.json").write_text(json.dumps(replies))
     (tmp / "home").mkdir()
@@ -132,6 +156,7 @@ def probe(tmp: Path, script: str, replies: list[dict], config: str) -> tuple[dic
            "HERMES_DISABLE_LAZY_INSTALLS": "1", "CLAUDE_CONFIG_DIR": str(tmp / "claude"),
            "FAKE_WORK": str(tmp)}
     env.pop("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", None)
+    env.pop("BB_CLI", None)
     result = subprocess.run([*argv[:-1], code, str(tmp / "probe.py"), str(PROVIDER)], cwd=tmp, env=env,
                             capture_output=True, text=True)
     if result.returncode != 0:
@@ -222,10 +247,44 @@ class ClaudeCodeRuntimeInstalledHermesTests(unittest.TestCase):
         context = Path(option(coding, "--append-system-prompt-file")).read_text()
         self.assertIn("bb nest spawn --provider acp-child-coders", context)
         self.assertNotIn("Learning proposals", context)
-        self.assertNotIn("--settings", coding)
+
+    def test_coding_session_hook_refuses_a_subagent_spawn_that_can_wake_this_session(self):
+        for command, code in {
+            "bb nest spawn --provider acp-child-coders --model claude-code-runtime:haiku": 2,
+            "bb nest spawn --provider acp-child-coders --parent-notifications stuck --title t": 2,
+            'bb thread spawn --parent-self --provider acp-child-coders --prompt "go"': 2,
+            "bb nest spawn --provider acp-child-coders --parent-notifications off --title t": 0,
+            '"$BB_CLI" nest spawn --parent-notifications=off --provider claude-code': 0,
+            "bb thread wait thr_1 --timeout 600 && bb thread output thr_1": 0,
+        }.items():
+            result = guard(self.calls[0]["args"], {"tool_name": "Bash", "tool_input": {"command": command}})
+            self.assertEqual(result.returncode, code, f"{command}: {result.stderr}")
+            if code:
+                self.assertIn("--parent-notifications off", result.stderr, command)
 
     def test_review_keeps_only_child_proposals_it_can_confirm(self):
         self.assertIn("proposal you cannot confirm", self.calls[2]["prompt"])
+
+
+CHILD_ANSWER = "Ran 18 tests, OK.\n\n## Learning proposals\n- Run one setup file with -p 'test_x.py'."
+
+
+@unittest.skipUnless(shutil.which("hermes"), "Hermes is not installed")
+class ChildProposalReviewTests(unittest.TestCase):
+    def test_a_turn_that_reads_child_proposals_queues_refine_on_its_own_thread(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            probe(Path(tmp), REFINE_PROBE, [
+                {"text": "listed", "tool": True},
+                {"text": "child done", "tool": True, "output": CHILD_ANSWER,
+                 "command": "bb thread wait thr_c --timeout 600 && bb thread output thr_c"},
+                {"text": "read docs", "tool": True, "output": CHILD_ANSWER, "command": "grep -n proposals docs/setup.md"}],
+                "claude_code_runtime:\n  subagent_provider: acp-child-coders\n")
+            tells = [json.loads(line) for line in (Path(tmp) / "bb.jsonl").read_text().splitlines()]
+        self.assertEqual(len(tells), 1)
+        self.assertEqual(tells[0]["args"][:4], ["thread", "tell", "thr_parent", "--mode"])
+        self.assertEqual(tells[0]["args"][4], "queue")
+        self.assertTrue(tells[0]["args"][5].startswith("/refine "))
+        self.assertIsNone(tells[0]["BB_THREAD_ID"])
 
 
 GUARD_EVENTS = {
@@ -234,11 +293,13 @@ GUARD_EVENTS = {
     "append memory from the shell": ({"tool_name": "Bash", "tool_input": {
         "command": "echo note >> {learner}/memories/MEMORY.md"}}, 2),
     "start a learner thread": ({"tool_name": "Bash", "tool_input": {
-        "command": "bb nest spawn --provider acp-learner --model claude-code-runtime:haiku"}}, 2),
+        "command": "bb nest spawn --provider acp-learner --parent-notifications off --model claude-code-runtime:haiku"}}, 2),
     "start a claude-code worker": ({"tool_name": "Bash", "tool_input": {
-        "command": "bb nest spawn --provider claude-code --model haiku"}}, 2),
+        "command": "bb nest spawn --provider claude-code --parent-notifications off --model haiku"}}, 2),
+    "start a child coder that can wake this session": ({"tool_name": "Bash", "tool_input": {
+        "command": "bb nest spawn --provider acp-child-coders --model claude-code-runtime:haiku"}}, 2),
     "start a child coder": ({"tool_name": "Bash", "tool_input": {
-        "command": "bb nest spawn --provider acp-child-coders --model claude-code-runtime:haiku"}}, 0),
+        "command": "bb nest spawn --provider acp-child-coders --parent-notifications off --model claude-code-runtime:haiku"}}, 0),
     "read memory": ({"tool_name": "Read", "tool_input": {"file_path": "{learner}/memories/MEMORY.md"}}, 0),
     "write project code": ({"tool_name": "Write", "tool_input": {"file_path": "{work}/src/app.py"}}, 0),
 }
@@ -284,14 +345,12 @@ class ChildCoderProfileTests(unittest.TestCase):
         self.assertIn("Astra", self.out["astra"]["error"])
 
     def test_child_session_hook_refuses_profile_writes_and_learner_threads(self):
-        settings = json.loads(option(self.calls[0]["args"], "--settings"))
-        hook = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
         for name, (event, code) in GUARD_EVENTS.items():
             text = json.dumps(event).replace("{learner}", str(self.learner)).replace("{work}", str(self.work))
-            result = subprocess.run(["sh", "-c", hook], input=text, capture_output=True, text=True)
+            result = guard(self.calls[0]["args"], json.loads(text))
             self.assertEqual(result.returncode, code, f"{name}: {result.stderr}")
             if code:
-                self.assertIn("child coder", result.stderr, name)
+                self.assertIn("Refused in a coder session", result.stderr, name)
 
 
 class UsageSummaryTests(unittest.TestCase):

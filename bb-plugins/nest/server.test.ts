@@ -15,11 +15,15 @@ const THREADS = {
   L4: { parentThreadId: "L3", canSpawnChild: false },
   L5: { parentThreadId: "L3", canSpawnChild: false, originPluginId: "nest" },
   OTHER: { parentThreadId: "L3", canSpawnChild: false, originPluginId: "nest" },
+  QUIET: { parentThreadId: "L3", canSpawnChild: false, originPluginId: "nest" },
+  STUCK: { parentThreadId: "L3", canSpawnChild: false, originPluginId: "nest" },
   DONE: { parentThreadId: "L3", canSpawnChild: false, originPluginId: "nest", archived: true },
 } as const;
 const METADATA: Record<string, Record<string, unknown>> = {
   L5: { logicalParentThreadId: "L4" },
   OTHER: { logicalParentThreadId: "L2" },
+  QUIET: { logicalParentThreadId: "L1", parentNotifications: "off" },
+  STUCK: { logicalParentThreadId: "L1", parentNotifications: "stuck" },
   DONE: { logicalParentThreadId: "L4" },
 };
 
@@ -158,6 +162,25 @@ describe("bb nest spawn", () => {
     expect(prompt).toContain("never message @thread:L3");
   });
 
+  it("passes --parent-notifications to a normal child", async () => {
+    const { harness, spawned } = start();
+    const result = await harness.runCli([...spawnArgs, "--parent-notifications", "off"], { threadId: "L3" });
+    expect(result.exitCode).toBe(0);
+    expect(spawned[0]).toMatchObject({ parentThreadId: "L3", parentNotifications: "off" });
+  });
+
+  it("keeps a relay worker's host quiet and records --parent-notifications for the relay", async () => {
+    const { harness, spawned } = start();
+    const result = await harness.runCli([...spawnArgs, "--parent-notifications", "off"], { threadId: "L4" });
+    expect(result.exitCode).toBe(0);
+    expect(spawned[0]).toMatchObject({
+      parentThreadId: "L3",
+      parentNotifications: "off",
+      pluginMetadata: { logicalParentThreadId: "L4", parentNotifications: "off" },
+    });
+    expect(String(spawned[0]?.prompt)).not.toContain("delivered to @thread:L4 automatically");
+  });
+
   it("saves --tag values as mail tags on the new thread", async () => {
     const { harness } = start();
     const result = await harness.runCli([...spawnArgs, "--tag", "role=reviewer", "--tag", "urgent"], { threadId: "L3" });
@@ -214,6 +237,22 @@ describe("relay", () => {
     await harness.emitThreadEvent("thread.idle", { thread: thread("L4"), lastAssistantText: "done" });
     await harness.emitThreadEvent("thread.failed", { thread: thread("L4"), error: "boom" });
     expect(sent).toEqual([]);
+  });
+
+  it("relays nothing from a worker started with --parent-notifications off", async () => {
+    const { harness, sent } = start();
+    const interaction = { id: "int_2", threadId: "QUIET", payload: { kind: "user_question", questions: [] } };
+    await harness.emitThreadEvent("thread.idle", { thread: thread("QUIET"), lastAssistantText: "FINAL: 4" });
+    await harness.emitThreadEvent("thread.failed", { thread: thread("QUIET"), error: "boom" });
+    await harness.emitThreadEvent("interaction.pending", { thread: thread("QUIET"), interaction: interaction as never });
+    expect(sent).toEqual([]);
+  });
+
+  it("relays only failures and questions from a worker started with --parent-notifications stuck", async () => {
+    const { harness, sent } = start();
+    await harness.emitThreadEvent("thread.idle", { thread: thread("STUCK"), lastAssistantText: "FINAL: 5" });
+    await harness.emitThreadEvent("thread.failed", { thread: thread("STUCK"), error: "boom" });
+    expect(sent.map((message) => message.text.includes("failed: boom"))).toEqual([true]);
   });
 
   it("delivers a failure with its error", async () => {
