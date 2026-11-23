@@ -276,7 +276,8 @@ def recovered(samples: list[Sample], reading: Sample, since: datetime) -> bool:
     return bool(before) and same_window(before[-1], reading) and reading.used < before[-1].used - ROUNDING
 
 
-def forecast(reading: Sample | None, sources: list[tuple[str, list[Sample]]], limit: Limit | None, now) -> Side:
+def forecast(side_name: str, reading: Sample | None, sources: list[tuple[str, list[Sample]]],
+             limit: Limit | None, now) -> Side:
     if limit is not None and limit.until is not None:
         return Side(
             "limited", used=reading.used if reading else None,
@@ -289,12 +290,15 @@ def forecast(reading: Sample | None, sources: list[tuple[str, list[Sample]]], li
         return Side("no-reading", note="No current weekly reading")
     side = Side("unknown", used=reading.used, resets_at=iso(reading.resets_at))
     known = sorted((s for _, samples in sources for s in samples if s.at < reading.at), key=lambda s: s.at)
-    if reading.used >= 100:
+    if side_name == "codex" and reading.used >= 100:
         side.status, side.note = "limited", "The weekly reading is at 100%"
         return side
     if limit is not None and not recovered(known, reading, limit.since):
         side.status = "limited"
         side.note = f"A usage limit was hit at {iso(limit.since)} and no reading since shows the quota renewed"
+        return side
+    if reading.used >= 100:
+        side.note = "Claude's rounded weekly reading is at 100%. No active usage-limit error is recorded"
         return side
     if reading.resets_at <= now:
         side.note = "The reading's scheduled reset has passed"
@@ -309,8 +313,9 @@ def forecast(reading: Sample | None, sources: list[tuple[str, list[Sample]]], li
     per_hour, hours = pace
     hours_left = (reading.resets_at - now).total_seconds() / 3600
     side.pace_per_hour, side.pace_hours, side.pace_source = round(per_hour, 2), round(hours, 1), name
-    side.projected_at_reset = round(reading.used + per_hour * hours_left, 1)
-    if side.projected_at_reset >= 100:
+    projected = reading.used + per_hour * hours_left
+    side.projected_at_reset = round(projected, 1)
+    if projected >= 100:
         side.status = "runs-out"
         side.runs_out_at = iso(now + timedelta(hours=(100 - reading.used) / per_hour))
     else:
@@ -331,7 +336,7 @@ def choose(prefer: str, eligible: list[str], sides: dict[str, Side], work: float
                         f"{alternative} projects {projected}% at its reset"
                     )
             return home, f"{home} projects running out, and no other eligible side projects room through its reset"
-        return home, f"{home} is the default side and has capacity"
+        return home, f"{home} is the default side and has no active usage limit"
     observed = [s for s in open_sides if sides[s].used is not None]
     if observed:
         alternative = observed[0]
@@ -339,7 +344,7 @@ def choose(prefer: str, eligible: list[str], sides: dict[str, Side], work: float
             f"{home} is limited. {alternative} reads {sides[alternative].used}%, status {sides[alternative].status}"
         )
     return None, (
-        f"{home} is limited, and no other eligible side has a current reading below 100%. "
+        f"{home} is limited, and no other eligible side has a usable current reading. "
         "Report the outage, the scheduled resets, and the reset options"
     )
 
@@ -487,7 +492,7 @@ def main(argv=None) -> int:
         if account_note:
             notes.append(account_note)
         sources = [("quotio history", series), ("samples from earlier runs", state[side])]
-        sides[side] = forecast(current.weekly if current else None, sources, limited.get(side), now)
+        sides[side] = forecast(side, current.weekly if current else None, sources, limited.get(side), now)
         if current:
             state[side].append(current.weekly)
     if readings:

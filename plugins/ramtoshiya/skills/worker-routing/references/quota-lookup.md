@@ -19,9 +19,10 @@ printf '%s' "$usage" | uv run --no-project --managed-python --python '>=3.11' py
 ```
 
 The script reads the `Weekly limit` window of `claude-code` and `codex` when `usage.status` is
-`ok`. Urgent work reads the `Weekly · Fable` window itself to tell whether the Fable window is
-exhausted. Do not combine accounts from other machines. The RPC can be callable even when
-`bb plugin rpc list` does not advertise it. Do not enable or install a plugin just for this lookup.
+`ok`. Claude's percentage is a rounded reading. Use a provider usage-limit error to confirm
+that Claude stopped accepting work. Do not combine accounts from other machines. The RPC can
+be callable even when `bb plugin rpc list` does not advertise it. Do not enable or install a
+plugin just for this lookup.
 
 For each eligible side that the piped output lacks, the script runs
 `quotio-cli usage --provider <side> --no-saved-accounts --format json` itself. It joins

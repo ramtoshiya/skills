@@ -243,6 +243,23 @@ class QuotaPaceTests(unittest.TestCase):
         self.assertEqual(report["route"]["side"], "claude")
         self.assertNear(report["reset_options"]["codex"]["scheduled_reset"], later(30))
 
+    def test_claude_at_displayed_100_remains_eligible_without_a_limit_error(self):
+        reset = later(48)
+        self.history("claude", reset, {12: 99, 1: 100})
+        self.history("codex", reset, {12: 10, 1: 15})
+        usage = bb_usage(claude=(100, reset), codex=(15, reset))
+        report = self.run_pace(usage, "--prefer", "claude", "--eligible", "claude,codex")
+        self.assertEqual(report["route"]["side"], "claude")
+        self.assertEqual(report["sides"]["claude"]["used"], 100)
+        self.assertNotIn("reset_options", report)
+
+    def test_fractional_usage_below_100_with_flat_pace_remains_eligible(self):
+        reset = later(48)
+        self.history("claude", reset, {12: 99.99})
+        report = self.run_pace(bb_usage(claude=(99.99, reset)), "--prefer", "claude", "--eligible", "claude")
+        self.assertEqual(report["route"]["side"], "claude")
+        self.assertNotIn("reset_options", report)
+
     def test_both_limited_reports_options_and_never_redeems(self):
         self.codex_response.write_text(json.dumps({"rateLimitResetCredits": {"availableCount": 3, "credits": [
             {"id": "credit-a", "resetType": "codexRateLimits", "status": "available",
@@ -254,6 +271,7 @@ class QuotaPaceTests(unittest.TestCase):
         report = self.run_pace(
             bb_usage(codex=(100, later(30)), claude=(100, later(90))),
             "--prefer", "codex", "--eligible", "claude,codex",
+            "--limited", f"claude={iso(ago(0.5))}",
             "--offer", f"claude-weekly={claim_by}", "--offer", f"claude-fable={claim_by}",
         )
         self.assertIsNone(report["route"]["side"])
@@ -270,7 +288,8 @@ class QuotaPaceTests(unittest.TestCase):
         self.assertNotIn("credit-a", json.dumps(report))
 
     def test_claude_offers_are_unknown_rather_than_absent(self):
-        report = self.run_pace(bb_usage(claude=(100, later(90))), "--prefer", "claude", "--eligible", "claude")
+        report = self.run_pace(bb_usage(claude=(100, later(90))), "--prefer", "claude", "--eligible", "claude",
+                               "--limited", f"claude={iso(ago(0.5))}")
         self.assertIn("not machine-readable", report["reset_options"]["claude"]["credits_note"])
 
     def test_both_projected_to_run_out_stay_on_the_default_side(self):
@@ -289,7 +308,7 @@ class QuotaPaceTests(unittest.TestCase):
 
     def test_ineligible_alternative_leaves_the_role_blocked(self):
         report = self.run_pace(bb_usage(codex=(5, later(48)), claude=(100, later(48))),
-                               "--prefer", "codex", "--eligible", "claude")
+                               "--prefer", "codex", "--eligible", "claude", "--limited", f"claude={iso(ago(0.5))}")
         self.assertIsNone(report["route"]["side"])
         self.assertEqual(list(report["reset_options"]), ["note", "claude"])
         self.assertEqual(self.codex_methods(), [])

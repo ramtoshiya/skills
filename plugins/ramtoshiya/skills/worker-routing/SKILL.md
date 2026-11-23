@@ -80,7 +80,7 @@ When work becomes urgent, judge its row again at that moment:
 - Urgent work runs `quota-pace` with `--prefer claude --no-spill`, so a pace
   projection never moves it. Pass `--eligible claude,codex` unless the calling
   workflow ties the role to the Claude family. When the Fable window is
-  exhausted, by a usage-limit error or 100% use, use `opus`. When the script routes
+  exhausted by a Fable usage-limit error, use `opus`. When the script routes
   urgent work to `codex`, use the row's GPT column, and `sol` for `opus` or `fable`.
 
 Urgency ends when the user says so, or when you judge that the purpose that made the
@@ -131,13 +131,14 @@ Pass these flags:
 
 Start the worker on the side in `route.side`. The script decides as follows:
 
-- A side is limited when its weekly reading is 100%. After a usage-limit error it
-  stays limited until a reading shows that its quota renewed: a window that started
-  after the error, or a lower count on the same schedule. An available reset credit
-  is not renewal. A flag with a reset time keeps the side limited until that time
-  and expires after it.
-- When the default side is limited, the work goes to another eligible side whose
-  current reading is below 100%, even when that side's pace is unknown. A side
+- Claude's reported weekly percentage can round to 100% while requests still succeed.
+  At that reading, keep Claude eligible and leave its pace status unknown unless a
+  usage-limit error is active. For Codex, a weekly reading of 100% marks it limited.
+  After a usage-limit error, a side stays limited until its reading shows a window
+  that started after the error or a lower reading on the same schedule. A flag
+  with a reset time keeps the side limited until that time.
+- When the default side is limited, the work goes to another eligible side with
+  a current reading and no active limit, even when that side's pace is unknown. A side
   without a current reading has no confirmed capacity, so it does not take the
   work. The script asks `quotio-cli` for any eligible side the piped lookup
   missed before it decides.
@@ -145,8 +146,6 @@ Start the worker on the side in `route.side`. The script decides as follows:
   work moves only to another eligible side whose projection holds the work through
   its own reset. When both project running out, or the other side's pace is unknown,
   the work stays on the default side.
-- No percentage of use moves work by itself. Without a projection, the work stays
-  on the default side until a limit.
 
 When `route.side` is `null`, no eligible side has confirmed capacity. Do not start the
 worker and do not move it to another model family. Tell the user which role is
@@ -169,7 +168,7 @@ the outage would cost. A reset that the user performs shows in the next reading.
 
 Say in your report when you switch, and quote the script's `why`. If the lookup or
 the script fails, report the specific failure once and start new work on the default
-side. When that side returned a usage-limit error or read 100%, the role is blocked,
-as when `route.side` is `null`, because no reading confirms the other side's capacity. When you compact, write the route, each side's status and
-figures from the last report, each `--limited` flag, and which work is urgent into
-the handoff note.
+side. If the default side has an active usage-limit error or is Codex at 100%,
+report the role as blocked. When you compact, write the route, each side's status
+and figures from the last report, each `--limited` flag, and which work is urgent
+into the handoff note.
