@@ -276,10 +276,11 @@ bb nest spawn --json --project {{RESEARCH_PROJECT}} --new-environment personal \
   --reasoning-level <effort> --title "<short title>" --prompt "$brief"
 ```
 
-The research brief starts with the same opening line as an implementation brief
-and states that the work is read-only, that the final message is the
-deliverable, that observations stay separate from inferences, and the language
-of the answer.
+The research brief starts with the same opening line as an implementation brief.
+Use the same Constraints part and name each protected target exactly, such as the
+user's repositories, installed settings, and other threads. State that the final
+message is the deliverable, that observations stay separate from inferences,
+and the language of the answer.
 
 A question about whether something can be done is research, even when you think
 you know. The brief quotes the user's question and requirement as stated and

@@ -45,9 +45,9 @@ installed and stop.
 If the newest-model guard plugin rejects the spawn, it fails with HTTP 409 and names the newest ID,
 and no thread is created. Spawn again with the script's output.
 
-BB has no read-only permission mode, and a worker inherits your permission mode. Keep a read-only
-role read-only through its brief. Say that it must not edit files, commit, or change anything
-outside its reply. After it finishes, run `git status` to confirm that the checkout did not change.
+BB has no read-only permission mode, and a worker inherits your permission mode. For a read-only
+role, name the protected targets in its brief. Tell it not to change the checkout or commit.
+After it finishes, run `git status` to confirm that the checkout did not change.
 
 ## Wait for workers {:#wait}
 
