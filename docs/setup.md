@@ -1062,8 +1062,10 @@ the whole conversation again.
 
 When you switch a thread from a Claude model to a GPT model or back, the next
 turn resumes the same Claude Code session under the other command. The
-conversation carries over. That first turn reads nothing from the other
-family's cache, so it pays for the whole context once.
+conversation carries over. That first turn cannot read the conversation from
+the other family's cache, so it sends the conversation as fresh input once.
+The opening part of the prompt, which every Claude Code session shares, can
+still come from cache.
 
 ### How a request runs
 
