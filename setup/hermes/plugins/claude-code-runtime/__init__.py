@@ -189,6 +189,17 @@ def usage_totals(result: dict) -> dict:
             "output": int(usage.get("output_tokens") or 0)}
 
 
+def last_prompt(events: list[dict]) -> tuple[int, int] | None:
+    """The last API call's prompt size and its cache read: what the context window holds after the run."""
+    usages = [(event.get("message") or {}).get("usage") for event in events if event.get("type") == "assistant"]
+    usage = next((u for u in reversed(usages) if u), None)
+    if usage is None:
+        return None
+    cache_read = int(usage.get("cache_read_input_tokens") or 0)
+    return (int(usage.get("input_tokens") or 0) + int(usage.get("cache_creation_input_tokens") or 0) + cache_read,
+            cache_read)
+
+
 def windows_path() -> Path:
     return runtime_dir() / "context-windows.json"
 
@@ -317,13 +328,18 @@ def guard_settings(current: Role) -> str:
     return json.dumps({"hooks": hooks})
 
 
-def completion(text: str, model: str, totals: dict, tool_calls=None, **extra) -> SimpleNamespace:
+def completion(text: str, model: str, totals: dict, tool_calls=None, context: tuple[int, int] | None = None,
+               **extra) -> SimpleNamespace:
     message = SimpleNamespace(content=text, tool_calls=tool_calls or None, reasoning=None,
                               reasoning_content=None, reasoning_details=None)
     prompt = totals["fresh_input"] + totals["cache_read"]
     usage = SimpleNamespace(prompt_tokens=prompt, completion_tokens=totals["output"],
                             total_tokens=prompt + totals["output"],
                             prompt_tokens_details=SimpleNamespace(cached_tokens=totals["cache_read"]))
+    # Hermes adds prompt_tokens to its session totals, and its compressor and context meter read the
+    # current prompt from these fields instead.
+    if context:
+        usage.initial_prompt_tokens, usage.initial_cached_tokens = context
     return SimpleNamespace(choices=[SimpleNamespace(message=message,
                                                     finish_reason="tool_calls" if tool_calls else "stop")],
                            usage=usage, model=model, **extra)
@@ -557,7 +573,7 @@ class ClaudeCodeClient:
         if not current.child and read_child_proposals(rows):
             queue_review(key)
         totals = usage_totals(result)
-        answer = completion(result.get("result") or "", model, totals,
+        answer = completion(result.get("result") or "", model, totals, context=last_prompt(events),
                             hermes_projected_messages=rows, hermes_provider_tool_iterations=steps)
         return answer, {"claude_session": entry["session"], **totals}
 

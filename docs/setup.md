@@ -1119,6 +1119,15 @@ window its catalog gives. Before a model's first run the plugin answers
 own estimate until that run ends. Without an answer, Hermes cannot probe
 `acp://claude-code-runtime` and falls back to 256,000 tokens.
 
+The used figure that bb shows next to the window is the prompt of the coding
+run's last API call, the input, cache read, and cache creation tokens
+together. A run makes one API call per tool step, so the sum of its prompts
+can exceed the window while the context holds a small part of it. The plugin
+passes the last call's prompt in the usage fields Hermes reads for its context
+meter, and the whole run's tokens in the fields Hermes adds to the session
+totals. `hermes -p coder claude-code usage` reads each run's tokens from
+`claude-code-runtime/usage.jsonl`.
+
 A coding turn is one Claude Code run, so Hermes would show nothing until the
 run ends. The plugin reads Claude Code's events while it runs and passes them
 to the session's agent in the Hermes gateway. bb then shows each tool call as
