@@ -1,9 +1,4 @@
-"""Install or update the Hermes operator profile from this checkout.
-
-Run with `mise run hermes:operator`. docs/setup.md describes what it changes.
-Every installed file is a copy. Running it again replaces the managed copies
-and leaves memories, sessions, credentials, and other settings alone.
-"""
+"""Install or update the Hermes operator profile from this checkout."""
 
 from __future__ import annotations
 
@@ -28,16 +23,16 @@ PSTACK_SKILLS = ("in-your-own-words", "why", "how", "interrogate", "statechart",
                  "technical-writing", "unslop")
 PSTACK_SKILL_DIR = "plugins/pstack-mode/skills"
 LOCAL_SKILLS = ("operator-handoff", "operator-mode")
-PLUGINS = ("skill-drafts", "bb-thread-env", "bb-title-input", "self-compact")
+PLUGINS = ("skill-drafts", "bb-thread-env", "bb-title-input", "self-compact", "pstack-turn")
 RESEARCH_PROJECT = "proj_personal"
 # Hermes seeds these into every home, opted out or not, until the home's .bundled_manifest tracks
 # them as deleted. Mirrors ESSENTIAL_SKILLS in Hermes's agent/skill_utils.py.
 ESSENTIAL_SKILLS = ("hermes-agent",)
-# Where Hermes looks for a project's own skills. Mirrors PROJECT_SKILLS_SUBDIRS in agent/skill_utils.py.
+# Mirrors PROJECT_SKILLS_SUBDIRS in agent/skill_utils.py.
 PROJECT_SKILL_DIRS = (".hermes/skills", ".agents/skills")
-# bb's shipped Hermes entry, minus the launch and skill roots that bb_catalog_agent sets. Manual
-# compaction is on because bb refuses `bb thread compact` for an entry without the flag.
-BB_AGENT = {"id": "hermes-agent", "displayName": "Hermes Agent", "command": "hermes",
+# bb's shipped Hermes entry. Manual compaction is on because bb refuses `bb thread compact` for an
+# entry without the flag.
+BB_AGENT_BASE = {"id": "hermes-agent", "displayName": "Hermes Agent", "command": "hermes",
             "supportsManualCompaction": True,
             "nativeReasoning": {"configId": "reasoning_effort", "defaultLevel": "medium",
                                 "supportedLevels": ["none", "low", "medium", "high", "xhigh", "max"]}}
@@ -56,17 +51,19 @@ CONFIG = {
 
 @dataclass(frozen=True)
 class Source:
-    """Files Git tracks under `path` in `checkout`, and the plugin they come from.
-
-    A change to them starts in the local checkout `repo`. `upstream` and `commit` name the
-    third-party fork and the commit `repo` pins, when the files come from one.
-    """
     plugin: str
     checkout: Path
     path: str
-    repo: Path
+    change_repo: Path
     upstream: str | None = None
     commit: str | None = None
+
+
+@dataclass(frozen=True)
+class Marketplace:
+    descriptions: dict[str, str]
+    skills: dict[str, Source]
+    packages: dict[str, Source]
 
 
 def run(*command: str, cwd: Path | None = None) -> str:
@@ -77,13 +74,11 @@ def run(*command: str, cwd: Path | None = None) -> str:
 
 
 def main_checkout(path: Path) -> Path:
-    """The main working tree of the repository that contains path, also from a linked worktree."""
     common = run("git", "-C", str(path), "rev-parse", "--path-format=absolute", "--git-common-dir")
     return Path(common.strip()).parent
 
 
 def with_soul_block(text: str, block: str) -> str:
-    """Return text with exactly one operator block, replacing an existing one."""
     managed = f"{SOUL_BEGIN}\n{block.strip()}\n{SOUL_END}\n"
     pattern = re.compile(re.escape(SOUL_BEGIN) + r".*?" + re.escape(SOUL_END) + r"\n?", re.S)
     if pattern.search(text):
@@ -106,12 +101,7 @@ def copy_tracked(source: Source, target: Path) -> None:
         shutil.copy2(source.checkout / name, destination)
 
 
-def marketplace(shared: Path) -> tuple[dict[str, str], dict[str, Source], dict[str, Source]]:
-    """Plugin descriptions, the skills each marketplace entry selects, and entries that are Hermes plugins.
-
-    Pinned sources come from the checkouts `mise run agents:sync` fetches. pstack-mode is left
-    to --pstack. An entry with a plugin.yaml is a native Hermes plugin and is installed whole.
-    """
+def marketplace(shared: Path) -> Marketplace:
     descriptions: dict[str, str] = {}
     skills: dict[str, Source] = {}
     packages: dict[str, Source] = {}
@@ -142,19 +132,17 @@ def marketplace(shared: Path) -> tuple[dict[str, str], dict[str, Source], dict[s
                                            path.relative_to(package.repository).as_posix(), shared, **pinned)
     except agents.ERRORS as error:
         sys.exit(f"hermes-operator: {error}. Run `mise run agents:sync` first to fetch the pinned sources.")
-    return descriptions, skills, packages
+    return Marketplace(descriptions, skills, packages)
 
 
 def plugin_skills(name: str, package: Source) -> dict[str, Source]:
-    """Skills a Hermes plugin package registers from hermes/skills, under its plugin namespace."""
     root = package.checkout / package.path / "hermes/skills"
     return {f"{name}:{path.parent.name}": Source(name, package.checkout, f"{package.path}/hermes/skills/{path.parent.name}",
-                                                 package.repo, package.upstream, package.commit)
+                                                 package.change_repo, package.upstream, package.commit)
             for path in sorted(root.glob("*/SKILL.md"))}
 
 
 def plugin_list(descriptions: dict[str, str], skills: dict[str, Source]) -> str:
-    """Markdown list of each plugin's description and skills, for operator-handoff."""
     by_plugin: dict[str, list[str]] = {}
     for name, source in sorted(skills.items()):
         by_plugin.setdefault(source.plugin, []).append(f"`{name}`")
@@ -169,7 +157,6 @@ def filled(text: str, local_values: dict[str, str]) -> str:
 
 
 def install_skill(target: Path, source: Source, local_values: dict[str, str]) -> None:
-    """Replace target with a fresh copy of the skill, filling the placeholders of this repository's own skills."""
     shutil.rmtree(target, ignore_errors=True)
     copy_tracked(source, target)
     if target.name in LOCAL_SKILLS:
@@ -206,8 +193,12 @@ def source_fingerprint(setup: Path, managed: dict[str, Source], packages: dict[s
     return digest(entries)
 
 
+def visible_skill_listing(root: Path) -> list[str]:
+    return sorted(str(md.relative_to(root)) for md in root.rglob("SKILL.md")
+                  if not any(part.startswith(".") for part in md.relative_to(root).parts)) if root.is_dir() else []
+
+
 def installed_fingerprint(home: Path, default_home: Path, managed: dict[str, Source], packages: dict[str, Source]) -> str:
-    """The skill listing shows a bundled skill that `hermes update` added back."""
     def tree(path: Path) -> dict[str, str]:
         return agents.files(path) if path.is_dir() else {}
 
@@ -218,9 +209,7 @@ def installed_fingerprint(home: Path, default_home: Path, managed: dict[str, Sou
     for plugin in (*PLUGINS, *packages):
         entries |= {f"plugins/{plugin}/{path}": value for path, value in tree(home / "plugins" / plugin).items()}
     for root in (home / "skills", default_home / "skills"):
-        listing = sorted(str(md.relative_to(root)) for md in root.rglob("SKILL.md")
-                         if not any(part.startswith(".") for part in md.relative_to(root).parts)) if root.is_dir() else []
-        entries[f"listing:{root}"] = json.dumps(listing)
+        entries[f"listing:{root}"] = json.dumps(visible_skill_listing(root))
     return digest(entries)
 
 
@@ -260,7 +249,6 @@ def drop_bundled(profile: str, home: Path, keep: set[Path]) -> None:
 
 
 def reload_gateway(profile: str) -> None:
-    """Load the plugin files just copied into the gateway that serves the profile, without a restart."""
     lines = run("hermes", "-p", profile, "skill-drafts", "reload").strip().splitlines()
     answer = json.loads(lines[-1]) if lines else None
     if answer is None:
@@ -274,9 +262,7 @@ def reload_gateway(profile: str) -> None:
 
 
 def repo_skill_dirs(profile: str) -> list[str]:
-    """The skill folders of each repository in the profile's skills.trusted_project_dirs.
-
-    Hermes loads a trusted repository's skills only when the session's nearest .git is that
+    """Hermes loads a trusted repository's skills only when the session's nearest .git is that
     repository's root. bb runs threads in linked worktrees, whose root is never on the list, and a
     worktree's branch may carry an older copy of a skill. Listing the trusted checkouts' folders in
     skills.external_dirs loads their current skills in every session of the profile.
@@ -286,26 +272,23 @@ def repo_skill_dirs(profile: str) -> list[str]:
 
 
 def bb_catalog_agent(profile: str, home: Path, packages: dict[str, Source], repo_skills: list[str]) -> None:
-    """Point bb's Hermes provider at the profile: the process it launches and the skills its composer lists.
-
-    bb's shipped Hermes entry launches the sticky profile and lists only the default home's skills.
-    A customAgents entry with id hermes-agent replaces it. The other custom agents stay.
+    """bb's shipped Hermes entry launches the sticky profile and lists only the default home's skills.
+    A customAgents entry with id hermes-agent replaces it.
     """
     bb = os.environ.get("BB_CLI") or shutil.which("bb")
     if bb is None:
         print("hermes-operator: bb is not on PATH, so bb's Hermes provider was left as it was")
         return
     values = json.loads(run(bb, "plugin", "config", "provider-acp", "--json"))["values"]
-    agents = [agent for agent in json.loads(values.get("customAgents") or "[]") if agent.get("id") != BB_AGENT["id"]]
+    agents = [agent for agent in json.loads(values.get("customAgents") or "[]") if agent.get("id") != BB_AGENT_BASE["id"]]
     relative = home.relative_to(Path.home()).as_posix()
     roots = [{"path": f"{relative}/skills", "recursive": True}]
     roots += [{"path": f"{relative}/plugins/{name}/hermes/skills", "namePrefix": f"{name}:"} for name in sorted(packages)]
-    # bb takes only roots relative to the home directory.
     listed = [Path(path) for path in repo_skills if Path(path).is_relative_to(Path.home())]
     roots += [{"path": path.relative_to(Path.home()).as_posix(), "recursive": True} for path in listed]
     for path in sorted(set(map(Path, repo_skills)) - set(listed)):
         print(f"hermes-operator: bb's skill menu cannot list {path}, which is outside your home. The operator still loads it")
-    agents.append({**BB_AGENT, "args": ["-p", profile, "acp"], "nativeSkillRoots": {"user": roots}})
+    agents.append({**BB_AGENT_BASE, "args": ["-p", profile, "acp"], "nativeSkillRoots": {"user": roots}})
     run(bb, "plugin", "config", "provider-acp", "set", "customAgents", json.dumps(agents))
 
 
@@ -326,10 +309,10 @@ def main() -> None:
         sys.exit(f"hermes-operator: {mode_md} not found. Pass --pstack <checkout>.")
     shared = main_checkout(HERE)
     setup = shared / "setup/hermes"
-    descriptions, skills, packages = marketplace(shared)
+    catalog = marketplace(shared)
+    descriptions, skills, packages = catalog.descriptions, catalog.skills, catalog.packages
     profile = options.profile
 
-    # The principle leaves are listed skills so that Hermes loads each one when its trigger applies.
     principles = sorted(path.name for path in (pstack / PSTACK_SKILL_DIR).glob("principle-*") if path.is_dir())
     pstack_skills = {name: Source(PSTACK_PLUGIN, pstack, f"{PSTACK_SKILL_DIR}/{name}", pstack)
                      for name in (*PSTACK_SKILLS, *principles)}
@@ -414,7 +397,7 @@ def main() -> None:
     installed = {name: skills_dir / name for name in managed}
     installed |= {name: home / "plugins" / source.plugin / Path(source.path).relative_to(packages[source.plugin].path)
                   for name, source in registered.items()}
-    owners = {name: {"plugin": source.plugin, "repo": str(source.repo),
+    owners = {name: {"plugin": source.plugin, "repo": str(source.change_repo),
                      "path": source.path, "installed": str(installed[name]),
                      **({"upstream": source.upstream, "commit": source.commit} if source.upstream else {})}
               for name, source in {**managed, **registered}.items()}

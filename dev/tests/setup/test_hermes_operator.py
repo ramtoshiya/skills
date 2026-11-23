@@ -29,7 +29,6 @@ if args[:3] == ["plugin", "config", "provider-acp"]:
     store = Path(os.environ["HOME"]) / "bb-provider-acp.json"
     values = json.loads(store.read_text()) if store.exists() else {{"customAgents": ""}}
     if args[3:4] == ["set"]:
-        # Like bb, refuse a skill root that is not relative to the user's home.
         for agent in (json.loads(args[5]) if args[4] == "customAgents" else []):
             for root in agent.get("nativeSkillRoots", {{}}).get("user", []):
                 path = root if isinstance(root, str) else root["path"]
@@ -468,9 +467,8 @@ class BbTitleInputInstalledHermesTests(unittest.TestCase):
         self.assertEqual(wrappers, 11)
 
 
-# Stands in for the hermes CLI. A home's settings live in fake-config.json beside its skills/.
-# Bundled skills come from $FAKE_BUNDLED. `sync` follows tools/skills_sync.sync_skills, which
-# profile creation, `skills reset`, chat and gateway startup, and `hermes update` all run.
+# `sync` follows Hermes's tools/skills_sync.sync_skills, which profile creation, `skills reset`,
+# chat and gateway startup, and `hermes update` all run.
 FAKE_HERMES = """#!PYTHON
 import hashlib, json, os, shutil, sys
 from pathlib import Path
@@ -494,7 +492,6 @@ def manifest(h):
 def save(h, entries):
     (h / "skills/.bundled_manifest").write_text("".join(f"{k}:{v}\\n" for k, v in entries.items()))
 def sync(h):
-    # Opted-out homes get only essential skills. A tracked skill missing on disk was deleted by the user.
     entries = manifest(h)
     for name, source in bundled().items():
         if (h / ".no-bundled-skills").exists() and name not in ESSENTIAL:
@@ -507,7 +504,6 @@ def sync(h):
                 entries[name] = digest(source)
     save(h, entries)
 def reload_gateway(h):
-    # A gateway serving h, marked by gateway-running, re-imports the enabled plugins' code from disk.
     marker = h / "gateway-running"
     if not marker.exists():
         return None
@@ -518,7 +514,6 @@ def reload_gateway(h):
     (h / "gateway-plugins.json").write_text(json.dumps(loaded))
     return {"reloaded": True, "plugins": sorted(loaded)}
 def run_plugin_command(h, command):
-    # Hermes attaches the CLI commands that enabled plugins register, then calls the handler.
     import argparse, importlib.util, types
     activation = types.ModuleType("hermes_cli.plugins_activation")
     activation.reload_running_gateway = lambda: reload_gateway(h)
@@ -789,7 +784,7 @@ class OperatorProfileSetupTests(unittest.TestCase):
         self.assertFalse(settings["memory.write_approval"])
         self.assertEqual(settings["compression.threshold_tokens"], 300000)
         self.assertEqual(settings["hooks.output_spill.max_chars"], 32000)
-        self.assertEqual(settings["plugins.enabled"], ["skill-drafts", "bb-thread-env", "bb-title-input", "self-compact", "korean-pack"])
+        self.assertEqual(settings["plugins.enabled"], ["skill-drafts", "bb-thread-env", "bb-title-input", "self-compact", "pstack-turn", "korean-pack"])
         self.assertTrue((self.operator / "plugins/self-compact/plugin.yaml").is_file())
         handoff = (skills["operator-handoff"][0] / "SKILL.md").read_text()
         self.assertIn(CC_DESCRIPTION, handoff)
@@ -805,6 +800,21 @@ class OperatorProfileSetupTests(unittest.TestCase):
         self.assertIn(f"# Mode\n\nRoot is `{root}`.\n", installed)
         self.assertIn(f"`{root}/HOSTS.md`", installed)
         self.assertNotIn("{{", installed)
+
+    def test_installed_pstack_hook_reminds_each_turn(self):
+        self.setup_profile()
+        hook = load("pstack_turn_installed", self.operator / "plugins/pstack-turn/__init__.py")
+        context = mock.Mock()
+        hook.register(context)
+        [event, callback] = context.register_hook.call_args.args
+        self.assertEqual(event, "pre_llm_call")
+        expected = (
+            "[pstack-mode turn check] Before you answer, check the principle index in operator-mode against this turn. "
+            "For each principle whose trigger fits, read its leaf (skill_view principle-<title>, or its inlined text when present) "
+            "and apply it. In the reply, name each principle that shaped a decision and the choice it changed."
+        )
+        for turn in ("first", "second"):
+            self.assertEqual(callback(turn_id=turn), {"context": expected})
 
     def test_installed_handoff_archives_finished_children(self):
         self.setup_profile()

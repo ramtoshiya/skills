@@ -1,0 +1,5 @@
+name: pstack-turn
+version: "0.1.0"
+description: "Reminds the operator to check and apply pstack principles on each turn."
+provides_hooks:
+  - pre_llm_call

@@ -6,7 +6,9 @@ marketplace file `.claude-plugin/marketplace.json`, which also lists the
 [third-party skills](upstream-skills.md).
 The Hermes operator profile runs in pstack mode and gets copies of the
 pstack-mode conversation workflows and principles and of the skills from every
-other entry, as [Machine setup](setup.md) describes. It does not run the hooks.
+other entry, as [Machine setup](setup.md) describes. The profile's pstack-turn
+hook asks the operator to check matching principles on every turn. Hermes does
+not run the agent-pack hooks.
 
 ## What the plugins contain
 

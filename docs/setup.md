@@ -648,6 +648,7 @@ Then it changes these files under `~/.hermes/profiles/operator/`:
 | `plugins/bb-thread-env/` | A copy of `setup/hermes/plugins/bb-thread-env` |
 | `plugins/bb-title-input/` | A copy of `setup/hermes/plugins/bb-title-input` |
 | `plugins/self-compact/` | A copy of `setup/hermes/plugins/self-compact` |
+| `plugins/pstack-turn/` | A copy of `setup/hermes/plugins/pstack-turn`. Its hook asks the operator to check and apply matching pstack principles on each turn |
 | `config.yaml` | The settings below, and the plugins enabled |
 
 | Setting | Value | Effect |
