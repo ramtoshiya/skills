@@ -329,7 +329,10 @@ def main() -> None:
     descriptions, skills, packages = marketplace(shared)
     profile = options.profile
 
-    pstack_skills = {name: Source(PSTACK_PLUGIN, pstack, f"{PSTACK_SKILL_DIR}/{name}", pstack) for name in PSTACK_SKILLS}
+    # The principle leaves are listed skills so that Hermes loads each one when its trigger applies.
+    principles = sorted(path.name for path in (pstack / PSTACK_SKILL_DIR).glob("principle-*") if path.is_dir())
+    pstack_skills = {name: Source(PSTACK_PLUGIN, pstack, f"{PSTACK_SKILL_DIR}/{name}", pstack)
+                     for name in (*PSTACK_SKILLS, *principles)}
     local_skills = {name: Source("operator", shared, f"setup/hermes/skills/{name}", shared)
                     for name in LOCAL_SKILLS}
     managed: dict[str, Source] = {}

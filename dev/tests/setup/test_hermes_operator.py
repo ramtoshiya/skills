@@ -610,6 +610,7 @@ path.parent.mkdir(parents=True, exist_ok=True)
 path.write_text(json.dumps(values))
 """.replace("PYTHON", sys.executable)
 PSTACK_ALLOWED = ["in-your-own-words", "why", "how", "interrogate", "statechart", "technical-writing", "unslop"]
+PRINCIPLE = "principle-fix-root-causes"
 CC_DESCRIPTION = "Skills that only work in Claude Code."
 SUPPORT_DIRS = {"references", "scripts", "templates", "assets"}
 OTHER_AGENT = {"id": "claude-local", "displayName": "Claude (ACP)", "command": "/opt/claude-acp", "args": []}
@@ -710,7 +711,7 @@ class OperatorProfileSetupTests(unittest.TestCase):
 
         self.pstack = self.tmp / "pstack"
         commit_repo(self.pstack, {"plugins/pstack-mode/mode.md": "# Mode\n\nRoot is `{{PLUGIN_ROOT}}`.\n", **under(
-            "plugins/pstack-mode/skills", {k: v for s in [*PSTACK_ALLOWED, "tdd"] for k, v in skill(s).items()})})
+            "plugins/pstack-mode/skills", {k: v for s in [*PSTACK_ALLOWED, PRINCIPLE, "tdd"] for k, v in skill(s).items()})})
         grill_sha = self.pinned("fork/grill-skills", {**under("skills/productivity", {
             **skill("grilling"), **skill("caveman"), "grilling/references/rounds.md": "Rounds.\n"})})
         korean_sha = self.pinned("fork/korean", under("plugins/korean-pack", {
@@ -771,7 +772,7 @@ class OperatorProfileSetupTests(unittest.TestCase):
             self.hermes("-p", profile, "sync")
 
     def expected(self):
-        return {"read-x", "self-compact", "claude-design-direct", "grilling", "operator-handoff", "operator-mode", *PSTACK_ALLOWED, "korean-pack:korean"}
+        return {"read-x", "self-compact", "claude-design-direct", "grilling", "operator-handoff", "operator-mode", *PSTACK_ALLOWED, PRINCIPLE, "korean-pack:korean"}
 
     def test_operator_knows_every_repository_skill_without_bundled_ones(self):
         self.setup_profile()
@@ -852,7 +853,7 @@ class OperatorProfileSetupTests(unittest.TestCase):
         write_tree(native.parent, {"plugin.yaml": "name: pstack-mode\n", "__init__.py": "\n"})
         self.setup_profile()
 
-        for name in PSTACK_ALLOWED:
+        for name in [*PSTACK_ALLOWED, PRINCIPLE]:
             installed = self.operator / "skills" / name / "SKILL.md"
             self.assertEqual(installed.read_text(),
                              (self.pstack / "plugins/pstack-mode/skills" / name / "SKILL.md").read_text())

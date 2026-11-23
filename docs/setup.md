@@ -606,8 +606,11 @@ It needs:
 - A Git checkout that contains `plugins/pstack-mode/mode.md` and
   `plugins/pstack-mode/skills/`, at `~/workspaces/pstack-mode` by default. Pass
   another path with `mise run hermes:operator -- --pstack <path>`. The
-  operator and its workers follow its `mode.md`, and the profile gets seven of
-  its skills.
+  operator and its workers follow its `mode.md`. The profile gets its seven
+  conversation workflows (`in-your-own-words`, `why`, `how`, `interrogate`,
+  `statechart`, `technical-writing`, `unslop`) and every `principle-*` skill.
+  Hermes lists those principles with the other skills, so the operator loads
+  each one when its trigger applies.
 - The third-party sources at their pinned commits, which
   `mise run agents:sync` fetches. The task stops and says so when one is
   missing.
@@ -620,7 +623,7 @@ The profile gets every skill that Claude Code or Codex gets from
 `.claude-plugin/marketplace.json`: both of this repository's plugins,
 including the Claude Code-only `ramtoshiya-cc`, and the skills each
 third-party entry selects. pstack-mode is the exception and contributes only
-the seven skills above. Knowing a skill lets Hermes plan around it and name it
+the skills above. Knowing a skill lets Hermes plan around it and name it
 in a brief. It does not let Hermes do the skill's work, because the
 operator-handoff skill sends anything beyond conversation and reading to a
 coding agent. The exception is `self-compact`, which Hermes follows
