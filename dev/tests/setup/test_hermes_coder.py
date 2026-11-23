@@ -57,7 +57,6 @@ print("\\n".join(json.dumps(event) for event in events))
 
 PROBE = """
 import importlib.util, json, os, sys
-# The runtime starts only from an installed Hermes home, so the scratch home applies from here on.
 os.environ["HERMES_HOME"] = os.environ["FAKE_HERMES_HOME"]
 spec = importlib.util.spec_from_file_location("claude_code_runtime_probe", sys.argv[2])
 runtime = sys.modules[spec.name] = importlib.util.module_from_spec(spec)
@@ -96,8 +95,6 @@ out["gpt_review"] = summary(client.chat.completions.create(model="gpt-6-luna", m
                                                            tools=tools, extra_body=extras("sess-2", None)))
 out["settings"] = runtime.REVIEW_SETTINGS
 out["review_prompt"] = runtime.REVIEW_PROMPTS[1]
-# Hermes asks the provider profile for the window before it probes the endpoint, and the probe of
-# acp://claude-code-runtime falls back to 256,000 tokens in the gateway.
 out["windows"] = {model: profile.get_model_context_length(model) for model in ("haiku", "opus", "gpt-6-luna")}
 print(json.dumps(out))
 """
@@ -167,7 +164,6 @@ INVALID_CALL = ('<tool_call>{"id": "c1", "type": "function", "function": {"name"
                 '"arguments": "{}"}]}</tool_call>')
 
 
-# Usage from a 16-call opus coding turn: the run's sum and its last two API calls.
 REPLAY_RUN = {"input_tokens": 26, "cache_creation_input_tokens": 53775, "cache_read_input_tokens": 945051,
               "output_tokens": 3000}
 REPLAY_CALLS = [{"input_tokens": 2, "cache_creation_input_tokens": 681, "cache_read_input_tokens": 56520, "output_tokens": 90},
@@ -189,7 +185,6 @@ MODE_POINTER = f"Read `{PSTACK_ROOT}/mode.md` and `{PSTACK_ROOT}/HOSTS.md` befor
 
 
 def turn_context(args: list[str]) -> str:
-    """What Claude Code adds to each prompt from the run's UserPromptSubmit hooks, which print plain context."""
     hooks = json.loads(option(args, "--settings"))["hooks"].get("UserPromptSubmit", [])
     return "".join(subprocess.run(["sh", "-c", hook["command"]], input="{}", capture_output=True, text=True,
                                   check=True).stdout for entry in hooks for hook in entry["hooks"])
@@ -333,8 +328,6 @@ class ClaudeCodeRuntimeInstalledHermesTests(unittest.TestCase):
             self.assertIn(f"{PSTACK_ROOT}/mode.md", check)
 
     def test_hermes_meters_the_last_api_calls_prompt_and_counts_the_whole_run(self):
-        # Hermes's session totals add usage.prompt_tokens, and its compressor and context meter read
-        # initial_prompt_tokens and initial_cached_tokens when a response carries them.
         self.assertEqual(self.out["turn1_usage"], {"prompt_tokens": 998_852, "initial_prompt_tokens": 71_742,
                                                    "initial_cached_tokens": 70_147})
 

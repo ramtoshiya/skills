@@ -47,7 +47,7 @@ FORK_NOTE = ("You are running as a forked copy of the coding session above, for 
              "proposal as contradicted. Leave out a proposal you cannot confirm, and name it with the reason in your "
              "final summary.")
 # A hook, unlike a tool or permission rule, leaves the request prefix alone, so the fork still reads the
-# coding run's cache. dontAsk alone lets Skill and ToolSearch through.
+# coding run's cache.
 REVIEW_SETTINGS = json.dumps({"hooks": {"PreToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": (
     "echo 'Hermes background review: Claude Code tools are off. Call a Hermes tool by writing its "
     "<tool_call> block as plain text in your reply.' >&2; exit 2")}]}]}})
@@ -189,15 +189,20 @@ def usage_totals(result: dict) -> dict:
             "output": int(usage.get("output_tokens") or 0)}
 
 
-def last_prompt(events: list[dict]) -> tuple[int, int] | None:
-    """The last API call's prompt size and its cache read: what the context window holds after the run."""
+@dataclass(frozen=True)
+class LastCallPrompt:
+    tokens: int
+    cache_read: int
+
+
+def last_call_prompt(events: list[dict]) -> LastCallPrompt | None:
     usages = [(event.get("message") or {}).get("usage") for event in events if event.get("type") == "assistant"]
     usage = next((u for u in reversed(usages) if u), None)
     if usage is None:
         return None
     cache_read = int(usage.get("cache_read_input_tokens") or 0)
-    return (int(usage.get("input_tokens") or 0) + int(usage.get("cache_creation_input_tokens") or 0) + cache_read,
-            cache_read)
+    return LastCallPrompt(int(usage.get("input_tokens") or 0) + int(usage.get("cache_creation_input_tokens") or 0)
+                          + cache_read, cache_read)
 
 
 def windows_path() -> Path:
@@ -210,7 +215,6 @@ def known_windows() -> dict[str, int]:
 
 
 def record_window(model: str, events: list[dict], result: dict) -> None:
-    """Keeps the context window that Claude Code reported for the model this run started on."""
     started = next((e.get("model") for e in events if e.get("subtype") == "init"), None)
     window = ((result.get("modelUsage") or {}).get(started) or {}).get("contextWindow")
     if type(window) is not int or window <= 0:
@@ -328,7 +332,7 @@ def guard_settings(current: Role) -> str:
     return json.dumps({"hooks": hooks})
 
 
-def completion(text: str, model: str, totals: dict, tool_calls=None, context: tuple[int, int] | None = None,
+def completion(text: str, model: str, totals: dict, tool_calls=None, context: LastCallPrompt | None = None,
                **extra) -> SimpleNamespace:
     message = SimpleNamespace(content=text, tool_calls=tool_calls or None, reasoning=None,
                               reasoning_content=None, reasoning_details=None)
@@ -339,7 +343,7 @@ def completion(text: str, model: str, totals: dict, tool_calls=None, context: tu
     # Hermes adds prompt_tokens to its session totals, and its compressor and context meter read the
     # current prompt from these fields instead.
     if context:
-        usage.initial_prompt_tokens, usage.initial_cached_tokens = context
+        usage.initial_prompt_tokens, usage.initial_cached_tokens = context.tokens, context.cache_read
     return SimpleNamespace(choices=[SimpleNamespace(message=message,
                                                     finish_reason="tool_calls" if tool_calls else "stop")],
                            usage=usage, model=model, **extra)
@@ -390,45 +394,26 @@ def queue_review(session_id: str) -> None:
 
 
 def running_agent(session_id: str):
-    """The gateway agent that runs this Hermes session's turn, or None outside a gateway turn."""
-    try:
-        from gateway.run_api import _ACTIVE_RUNNER
-    except Exception:  # noqa: BLE001 -- a plain `hermes` CLI run has no gateway
-        return None
+    from gateway.run_api import _ACTIVE_RUNNER
     if _ACTIVE_RUNNER is None or not session_id:
         return None
-    try:
-        agents = _ACTIVE_RUNNER._snapshot_running_agents().values()
-    except Exception:  # noqa: BLE001
-        logger.debug("%s: could not read the gateway's running agents", NAME, exc_info=True)
-        return None
+    agents = _ACTIVE_RUNNER._snapshot_running_agents().values()
     return next((agent for agent in agents if getattr(agent, "session_id", None) == session_id), None)
 
 
 class LiveProgress:
-    """Shows a running Claude Code turn to the session's viewers, such as bb, while it runs.
-
-    Without it a viewer sees nothing until Claude Code exits, because the whole run is one provider call.
-    Tool calls become the agent's tool start and complete events. Text that Claude Code writes before more work
-    becomes an interim assistant message. The last text is the turn's answer, which Hermes shows itself.
-    """
-
     def __init__(self, agent):
         self.agent = agent
         self.calls: dict[str, tuple[str, dict, float]] = {}
-        self.held_text = ""
+        self.answer_or_narration = ""
 
     def fire(self, name: str, *args, **kwargs) -> None:
         callback = getattr(self.agent, name, None)
-        if not callable(callback):
-            return
-        try:
+        if callable(callback):
             callback(*args, **kwargs)
-        except Exception:  # noqa: BLE001 -- a display sink must never fail the coding run
-            logger.debug("%s: %s raised", NAME, name, exc_info=True)
 
-    def show_held_text(self) -> None:
-        text, self.held_text = self.held_text.strip(), ""
+    def narrate(self) -> None:
+        text, self.answer_or_narration = self.answer_or_narration.strip(), ""
         if text:
             self.fire("_emit_interim_assistant_message", {"role": "assistant", "content": text})
 
@@ -436,13 +421,13 @@ class LiveProgress:
         kind = event.get("type")
         if kind not in ("assistant", "user"):
             return
-        self.show_held_text()
+        self.narrate()
         blocks = [b for b in (event.get("message") or {}).get("content") or [] if isinstance(b, dict)]
         if kind == "assistant":
-            self.held_text = "\n\n".join(b.get("text") or "" for b in blocks if b.get("type") == "text")
+            self.answer_or_narration = "\n\n".join(b.get("text") or "" for b in blocks if b.get("type") == "text")
             for block in blocks:
                 if block.get("type") == "tool_use":
-                    self.show_held_text()
+                    self.narrate()
                     self.started(block)
         else:
             for block in blocks:
@@ -494,8 +479,6 @@ class ClaudeCodeClient:
             self._running.add(process)
         events: list[dict] = []
         try:
-            # Read events as Claude Code writes them, so viewers see the run's progress. stderr drains on its own
-            # thread, so a full stderr pipe cannot stall the run.
             errors: list[str] = []
             drain = threading.Thread(target=lambda: errors.append(process.stderr.read()), daemon=True)
             drain.start()
@@ -573,7 +556,7 @@ class ClaudeCodeClient:
         if not current.child and read_child_proposals(rows):
             queue_review(key)
         totals = usage_totals(result)
-        answer = completion(result.get("result") or "", model, totals, context=last_prompt(events),
+        answer = completion(result.get("result") or "", model, totals, context=last_call_prompt(events),
                             hermes_projected_messages=rows, hermes_provider_tool_iterations=steps)
         return answer, {"claude_session": entry["session"], **totals}
 

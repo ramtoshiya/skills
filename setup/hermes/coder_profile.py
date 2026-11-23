@@ -22,9 +22,6 @@ PLUGINS = ("claude-code-commands", "bb-thread-env", "bb-title-input")
 DEFAULT_MODEL = "sonnet"
 STAMP = "hermes-coder.json"
 LAUNCHER = "coder_acp.py"
-# One bb provider serves both profiles, so a person never picks the child profile in bb's picker. The launcher
-# chooses the profile from the thread's parent. The second id is the separate child provider of earlier installs,
-# which an update removes from bb.
 BB_AGENT_ID = "hermes-coder"
 BB_PROVIDER = f"acp-{BB_AGENT_ID}"
 RETIRED_AGENT_IDS = ("hermes-coder-child",)
