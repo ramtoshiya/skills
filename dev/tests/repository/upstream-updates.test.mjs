@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { inspect, loadEntries, mirror, needsUpdate, verifyEntry } from '../../automation/upstream-updates/updates.mjs';
+import { closedIssue, inspect, loadEntries, mirror, needsUpdate, verifyEntry } from '../../automation/upstream-updates/updates.mjs';
 
 const root = new URL('../../../', import.meta.url);
 const json = path => JSON.parse(readFileSync(new URL(path, root), 'utf8'));
@@ -109,4 +109,14 @@ test('verify rejects a missing listed skill and a changed folder that keeps its 
   const bumped = commit(fork, { 'skills/.claude-plugin/plugin.json': '{"version":"1.0.1"}\n' }, 'Release 1.0.1');
   const released = { ...entry, sha: bumped };
   assert.deepEqual(verifyEntry(mirror(cache, released, [previous.sha]), released, previous), []);
+});
+
+test('a closed retirement issue starts an update until the entry points at upstream', t => {
+  const { entry, check } = fixture(t);
+  const forked = { ...entry, retireWhenClosed: 'owner/upstream#7' };
+  const states = { open: () => 'open', closed: () => 'closed' };
+  const finding = state => ({ ...check(forked), closedIssue: closedIssue(forked, states[state]) });
+  assert.equal(needsUpdate(finding('open')), false);
+  assert.equal(needsUpdate(finding('closed')), true);
+  assert.equal(closedIssue({ ...forked, repo: forked.upstream }, states.closed), null);
 });

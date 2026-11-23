@@ -145,8 +145,8 @@ example a log being read, also gets the hint.
 `plugins/ramtoshiya/hooks/hooks.json`, so Claude Code and Codex do not run it.
 It is off to see whether agents leave uncommitted work behind without it. To
 turn it on, add this entry under `"hooks"` in that file, then follow the update
-steps in [Agent plugins](agent-pack.md). Codex asks you to trust the new `Stop`
-hook in `/hooks`.
+steps in [Agent plugins](agent-pack.md). `mise run agents:sync` trusts the new
+`Stop` hook in Codex.
 
 ```json
 "Stop": [

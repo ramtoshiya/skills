@@ -47,7 +47,8 @@ claude plugin install ramtoshiya@ramtoshiya --scope user
 claude plugin install ramtoshiya-cc@ramtoshiya --scope user
 ```
 
-Codex (then trust the plugin's hooks in `/hooks`):
+Codex (then trust the plugin's hooks in `/hooks`, which
+`mise run agents:sync` does for you):
 
 ```sh
 codex plugin marketplace add ramtoshiya/skills

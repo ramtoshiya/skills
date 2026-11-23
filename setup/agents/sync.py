@@ -47,6 +47,53 @@ def run(*args):
     return result.stdout
 
 
+class CodexAppServer:
+    def __enter__(self):
+        self.process = subprocess.Popen(["codex", "app-server"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                        stderr=subprocess.DEVNULL, text=True)
+        self.requests = 0
+        self.call("initialize", {"clientInfo": {"name": "ramtoshiya-agents-sync", "version": "1"}})
+        self.send({"method": "initialized"})
+        return self
+
+    def __exit__(self, *_):
+        self.process.stdin.close()
+        try:
+            self.process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+            self.process.wait()
+        self.process.stdout.close()
+
+    def send(self, message):
+        self.process.stdin.write(json.dumps(message) + "\n")
+        self.process.stdin.flush()
+
+    def call(self, method, params):
+        self.requests += 1
+        self.send({"id": self.requests, "method": method, "params": params})
+        for line in self.process.stdout:
+            message = json.loads(line)
+            if message.get("id") != self.requests:
+                continue
+            if "error" in message:
+                raise Conflict(f"codex app-server {method} failed: {message['error'].get('message')}")
+            return message["result"]
+        raise Conflict(f"codex app-server exited during {method}")
+
+    def untrusted_hooks(self, plugin_id, cwd):
+        data = self.call("hooks/list", {"cwds": [str(cwd)]})["data"]
+        return [hook for entry in data for hook in entry["hooks"]
+                if hook.get("pluginId") == plugin_id and hook["trustStatus"] in {"untrusted", "modified"}]
+
+    def trust(self, hooks):
+        approvals = {hook["key"]: {"trusted_hash": hook["currentHash"]} for hook in hooks}
+        self.call("config/batchWrite", {
+            "edits": [{"keyPath": "hooks.state", "value": approvals, "mergeStrategy": "upsert"}],
+            "reloadUserConfig": True,
+        })
+
+
 def read_json(path, default=None):
     return json.loads(path.read_text()) if path.exists() else default
 
@@ -627,7 +674,12 @@ class Sync:
         if path and path.exists() and path.resolve() != package.root.resolve():
             self.adopt_native(host, entry, path, package, ref, apply)
         if not apply:
-            return ("ok", package.ref[:12]) if matches and enabled else ("drift", "missing, disabled, or outdated plugin")
+            if not (matches and enabled):
+                return "drift", "missing, disabled, or outdated plugin"
+            untrusted = self.codex_hooks_left_untrusted(host, selector, path, approve=False)
+            if untrusted:
+                return "drift", f"Codex has not trusted hooks {untrusted}, run agents:sync"
+            return "ok", package.ref[:12]
         changed = not matches or not enabled
         if not matches:
             if host == "claude":
@@ -648,10 +700,20 @@ class Sync:
         if not path or not path.is_dir() or self.native_files(entry, path, expected) != expected or not enabled:
             raise Conflict(f"Native installer did not reconcile {selector}. Close active sessions and retry, do not edit caches")
         self.remember(host, name, path, package)
-        detail = "restart the agent" if changed else package.ref[:12]
-        if host == "codex" and (path / "hooks").is_dir():
-            detail += ". Review hook trust in /hooks (never granted by sync)"
-        return "updated" if changed else "ok", detail
+        untrusted = self.codex_hooks_left_untrusted(host, selector, path, approve=True)
+        if untrusted:
+            raise Conflict(f"Codex still does not trust hooks {untrusted} of {selector} after approval")
+        return "updated" if changed else "ok", "restart the agent" if changed else package.ref[:12]
+
+    def codex_hooks_left_untrusted(self, host, selector, path, approve):
+        if host != "codex" or not (path / "hooks").is_dir():
+            return []
+        with CodexAppServer() as server:
+            untrusted = server.untrusted_hooks(selector, self.root)
+            if untrusted and approve:
+                server.trust(untrusted)
+                untrusted = server.untrusted_hooks(selector, self.root)
+            return [hook["key"] for hook in untrusted]
 
     def retire(self, host, names, apply, selected=None):
         retiring = {

@@ -32,16 +32,19 @@ export function loadEntries(marketplace, upstreams) {
   return thirdParty.map(plugin => {
     const mapping = upstreams[plugin.name];
     if (!mapping) throw new Error(`${plugin.name} has no record in upstreams.json`);
-    const { branch, upstream, upstreamBranch, watch, newSkillsIn = watch } = mapping;
+    const { branch, upstream, upstreamBranch, watch, newSkillsIn = watch, retireWhenClosed } = mapping;
     const relativePaths = paths => Array.isArray(paths) && paths.length
       && paths.every(path => typeof path === 'string' && path && !path.startsWith('/') && !path.split('/').includes('..'));
     if (![branch, upstream, upstreamBranch].every(value => typeof value === 'string' && value)
       || !relativePaths(watch) || !relativePaths(newSkillsIn)) {
       throw new Error(`${plugin.name} needs branch, upstream, upstreamBranch, and relative watch paths in upstreams.json`);
     }
+    if (retireWhenClosed !== undefined && !/^[\w.-]+\/[\w.-]+#\d+$/.test(retireWhenClosed)) {
+      throw new Error(`${plugin.name}: retireWhenClosed must look like owner/repo#123`);
+    }
     const { url: repo, path, sha } = plugin.source;
     if (!/^[0-9a-f]{40}$/.test(sha ?? '')) throw new Error(`${plugin.name} must pin a 40-character sha`);
-    return { name: plugin.name, repo, path, sha, skills: plugin.skills, branch, upstream, upstreamBranch, watch, newSkillsIn };
+    return { name: plugin.name, repo, path, sha, skills: plugin.skills, branch, upstream, upstreamBranch, watch, newSkillsIn, retireWhenClosed };
   });
 }
 
@@ -101,8 +104,21 @@ export function inspect(dir, entry) {
   };
 }
 
+export function closedIssue(entry, issueState) {
+  if (!entry.retireWhenClosed || entry.repo === entry.upstream) return null;
+  const [repo, number] = entry.retireWhenClosed.split('#');
+  return issueState(repo, number) === 'closed' ? entry.retireWhenClosed : null;
+}
+
+function githubIssueState(repo, number) {
+  const result = run('gh', ['api', `repos/${repo}/issues/${number}`, '--jq', '.state']);
+  if (result.status !== 0) throw new Error(`gh could not read ${repo}#${number}: ${result.stderr.trim()}`);
+  return result.stdout.trim();
+}
+
 export function needsUpdate(finding) {
-  return !finding.pinOnBranch || !finding.handledUpstream || finding.changedFiles.length > 0 || finding.newSkills.length > 0;
+  return !finding.pinOnBranch || !finding.handledUpstream || finding.changedFiles.length > 0
+    || finding.newSkills.length > 0 || Boolean(finding.closedIssue);
 }
 
 function readJson(path) {
@@ -159,7 +175,9 @@ function notify(title, body) {
 
 function check() {
   const cache = cacheDir();
-  const findings = workingTreeEntries().map(entry => inspect(mirror(cache, entry), entry)).filter(needsUpdate);
+  const findings = workingTreeEntries()
+    .map(entry => ({ ...inspect(mirror(cache, entry), entry), closedIssue: closedIssue(entry, githubIssueState) }))
+    .filter(needsUpdate);
   if (!findings.length) return;
   const worker = chooseWorker();
   const today = new Date().toLocaleDateString('en-CA', { timeZone: AUTOMATION.timezone });
@@ -169,6 +187,7 @@ function check() {
 The daily check found these entries out of date. \`handledUpstream\` is the
 newest upstream commit the pinned commit already contains. \`changedFiles\` and
 \`newSkills\` cover the watched paths between it and \`upstreamHead\`.
+\`closedIssue\` names a closed upstream issue that ends the entry's fork.
 
 \`\`\`json
 ${JSON.stringify(findings, null, 2)}

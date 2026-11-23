@@ -293,6 +293,54 @@ class AgentSyncTests(unittest.TestCase):
         self.assertEqual((self.cache("codex") / "skills/writing/SKILL.md").read_text(), "original skill\n")
         self.assertEqual(operation.state_path.read_bytes(), state_before)
 
+    def fake_app_server(self, current_hash):
+        script = self.home / "app-server.py"
+        script.write_text(
+            "import json, sys\n"
+            "from pathlib import Path\n"
+            "state, current = Path(sys.argv[1]), sys.argv[2]\n"
+            "key = 'example@example:hooks/hooks.json:pre_tool_use:0:0'\n"
+            "for line in sys.stdin:\n"
+            "    message = json.loads(line)\n"
+            "    if 'id' not in message:\n"
+            "        continue\n"
+            "    trusted = json.loads(state.read_text()) if state.exists() else {}\n"
+            "    result = {}\n"
+            "    if message['method'] == 'hooks/list':\n"
+            "        status = 'trusted' if trusted.get(key) == current else ('modified' if key in trusted else 'untrusted')\n"
+            "        result = {'data': [{'cwd': '/', 'errors': [], 'warnings': [], 'hooks': [\n"
+            "            {'key': key, 'pluginId': 'example@example', 'currentHash': current, 'trustStatus': status}]}]}\n"
+            "    elif message['method'] == 'config/batchWrite':\n"
+            "        for edit in message['params']['edits']:\n"
+            "            trusted.update({k: v['trusted_hash'] for k, v in edit['value'].items()})\n"
+            "        state.write_text(json.dumps(trusted))\n"
+            "    print(json.dumps({'id': message['id'], 'result': result}), flush=True)\n"
+        )
+        return " ".join(shlex.quote(part) for part in [sys.executable, str(script), str(self.home / "trust.json"), current_hash])
+
+    def test_codex_sync_trusts_the_hooks_it_installs_and_status_reports_untrusted_hooks(self):
+        (self.upstream / "plugins/example/hooks").mkdir()
+        (self.upstream / "plugins/example/hooks/hooks.json").write_text('{"hooks": {}}\n')
+        revision = commit(self.upstream, "Add hooks")
+        source = self.install_source(revision)
+        self.entry["source"]["sha"] = revision
+        self.set_entries([self.entry])
+        key = "example@example:hooks/hooks.json:pre_tool_use:0:0"
+        self.fake_cli("codex", {"plugin add example@example": self.deploy("codex", source),
+                                "app-server": self.fake_app_server("sha256:a/sha256:b")})
+        _, rows = self.execute(True, "codex")
+        self.assertEqual(rows[0]["status"], "updated")
+        self.assertEqual(sync.read_json(self.home / "trust.json"), {key: "sha256:a/sha256:b"})
+        _, rows = self.execute(False, "codex")
+        self.assertEqual(rows[0]["status"], "ok")
+
+        self.fake_cli("codex", {"app-server": self.fake_app_server("sha256:a/sha256:c")})
+        _, rows = self.execute(False, "codex")
+        self.assertEqual((rows[0]["status"], rows[0]["detail"]), ("drift", f"Codex has not trusted hooks ['{key}'], run agents:sync"))
+        _, rows = self.execute(True, "codex")
+        self.assertEqual(rows[0]["status"], "ok")
+        self.assertEqual(sync.read_json(self.home / "trust.json"), {key: "sha256:a/sha256:c"})
+
     def test_generated_codex_manifest_cannot_add_unapproved_capabilities(self):
         manifest = self.cache("codex") / ".codex-plugin/plugin.json"
         injected = json.dumps({"name": "example", "skills": None, "hooks": "./injected.json"})

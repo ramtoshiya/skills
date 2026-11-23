@@ -211,10 +211,12 @@ codex plugin marketplace add ramtoshiya/skills
 codex plugin add ramtoshiya@ramtoshiya
 ```
 
-Codex runs a plugin hook only after you trust it. Open `/hooks` in Codex and
-trust the `ramtoshiya` `PreToolUse` and `PostToolUse` hooks. Installing or enabling the
-plugin does not trust them. Codex can see `ramtoshiya-cc` in the marketplace, but
-it does not work there, so do not install it.
+Codex runs a plugin hook only after the hook is trusted. Installing or
+enabling the plugin does not trust it. `mise run agents:sync` trusts the hooks
+of the plugins it installs, as Synchronize a local checkout describes below.
+After a manual install, trust the `ramtoshiya` `PreToolUse` and `PostToolUse` hooks in Codex's
+`/hooks`. Codex can see `ramtoshiya-cc` in the marketplace, but it does not
+work there, so do not install it.
 
 To install Claude Code or Codex from a local clone instead, use its path in
 place of `ramtoshiya/skills`. Claude Code then loads the plugin from the
@@ -296,9 +298,18 @@ Removing a declared package retires only its recorded registrations. Claude and
 Codex use their uninstall commands, with Claude persistent data retained.
 Downloaded source checkouts are retained.
 
+After installing a Codex plugin that has hooks, sync trusts those hooks the
+way Codex's `/hooks` screen does. It reads each hook's current hash with the
+`hooks/list` request of `codex app-server` and records it under `hooks.state`
+in `~/.codex/config.toml` with `config/batchWrite`. Codex then keeps the
+approval until the hook or the plugin's files change, and the next sync after
+such a change trusts them again. Status reports a hook Codex does not trust as
+drift. Every installed hook therefore runs without a person approving it, so
+review a hook before its plugin's pin reaches `main`.
+
 Sync does not upgrade upstream pins, install agent executables or skill CLIs,
-apply other dotfiles, grant hook trust, or restart running sessions. Review
-Codex hooks in `/hooks` and restart Claude Code after changes.
+apply other dotfiles, or restart running sessions. Restart Claude Code and
+Codex after changes.
 Finish active Codex turns before installation and coordinate any shared-server
 restart as described below. The status table verifies installed files and
 configuration, not what an existing session has loaded.
@@ -331,7 +342,7 @@ marketplace repository as a new version.
 | Agent | Update command |
 | --- | --- |
 | Claude Code | `claude plugin marketplace update ramtoshiya`, then `claude plugin update ramtoshiya@ramtoshiya` (and `ramtoshiya-cc@ramtoshiya`) and a restart |
-| Codex | Follow the source refresh, installation, and restart steps below. Changed hooks need your trust again in `/hooks` |
+| Codex | `mise run agents:sync` from a local checkout, or the source refresh, installation, and restart steps below. After a manual install, trust changed hooks again in `/hooks` |
 
 Refreshing Codex's installed plugin does not reload active sessions. Use a fresh
 process to load the changed skills. If a session reports a missing plugin file
@@ -341,7 +352,7 @@ after an update, restart that session rather than repairing the cache.
    `codex plugin marketplace upgrade ramtoshiya`. For a marketplace added from a
    local checkout, update that checkout instead.
 2. Run `codex plugin add ramtoshiya@ramtoshiya` to install from that source.
-3. Start a fresh Codex process, review changed hooks in `/hooks`, and run the
+3. Start a fresh Codex process, trust changed hooks in `/hooks`, and run the
    checks above. Installing files alone does not verify that an existing
    session has loaded them.
 

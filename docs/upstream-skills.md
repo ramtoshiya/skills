@@ -26,7 +26,8 @@ approval. Questions must ask something explicitly. Only yes/no questions use
 the option. The patches follow [the upstream question-format fix](https://github.com/mattpocock/skills/issues/1249#issuecomment-6120835958)
 and [the list-and-veto preference](https://github.com/mattpocock/skills/issues/1112#issuecomment-6186224765).
 The update agent described below points the entry back at
-`mattpocock/skills` once upstream's `grilling` covers this behavior.
+`mattpocock/skills` when that issue closes or upstream's `grilling` covers
+this behavior.
 
 `test-audit` runs automatically when writing or changing tests and when the
 requested work assesses test quality, including read-only audits. The fork
@@ -144,6 +145,8 @@ entry is out of date in three cases:
   last handled commit.
 - Upstream added a skill under one of its `newSkillsIn` paths.
 - The pinned commit is not on the entry's `branch`.
+- The issue named in the entry's `retireWhenClosed` is closed and the entry
+  still points at its fork. The check reads the issue with `gh`.
 
 Upstream commits that touch only other paths do not count. When every entry is
 current, the run prints nothing and bb records it as a skipped run. Otherwise
@@ -163,7 +166,9 @@ The agent merges upstream into each fork and never rebases or force-pushes. It
 keeps the intent of each fork change unless upstream made the change
 unnecessary or conflicts with it, and records why in the fork's commit. It
 always refuses telemetry and judges other new behavior, such as network calls,
-broader triggering, or hooks, against the skill's purpose. It does not add new
+broader triggering, or hooks, against the skill's purpose. A hook it keeps
+runs in Codex without a person's approval, because `main:sync` trusts the
+hooks it installs. It does not add new
 upstream skills. It runs the fork's checks, pins the merge, runs this
 repository's checks, and pushes to `origin/main`, which installs the update
 through `main:sync`. Its final reply in the thread is an HTML summary of the
@@ -183,6 +188,7 @@ To add an entry, add a record under its name to `upstreams.json`:
 | `upstreamBranch` | The upstream branch to follow |
 | `watch` | Upstream paths whose changes reach the pinned folder |
 | `newSkillsIn` | Optional. Upstream folders where a new skill is reported. Defaults to `watch` |
+| `retireWhenClosed` | Optional. An upstream issue, as `owner/repository#number`, whose closing should end the fork |
 
 `npm test` fails when a `git-subdir` entry has no record. Create or update the
 automation with `mise run upstream-updates:automation`, as
@@ -209,16 +215,16 @@ yourself.
    commit is the release. Run
    `node dev/automation/upstream-updates/updates.mjs verify`.
 5. Push the change to `origin/main`. For managed installations, `main:sync`
-   then runs `mise run agents:sync`. Reload or restart each changed host and
-   review Codex hook trust. For manual installations,
+   then runs `mise run agents:sync`, which also trusts the entry's hooks in
+   Codex. Reload or restart each changed host. For manual installations,
    reinstall where needed:
    - Claude Code: `claude plugin marketplace update ramtoshiya`, then
      `claude plugin update <entry>@ramtoshiya` and reload or restart.
    - Codex: finish active turns and close sessions using the plugin. For a
      Git-backed marketplace, run `codex plugin marketplace upgrade ramtoshiya`.
      For a local marketplace, update its checkout instead. Then run
-     `codex plugin add <entry>@ramtoshiya`. Start a fresh process and review hook
-     trust in `/hooks`. [Agent plugins](agent-pack.md) covers the runtime
+     `codex plugin add <entry>@ramtoshiya`. Start a fresh process and trust the entry's
+     hooks in `/hooks`. [Agent plugins](agent-pack.md) covers the runtime
      lifecycle, including shared-server considerations.
 6. Check that the installed manifest version and `hooks/hooks.json` match the
    selected commit. A displayed version alone does not prove that the installed

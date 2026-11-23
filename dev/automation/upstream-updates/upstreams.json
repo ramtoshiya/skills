@@ -5,7 +5,8 @@
     "upstreamBranch": "main",
     "watch": [
       "skills/productivity"
-    ]
+    ],
+    "retireWhenClosed": "mattpocock/skills#1249"
   },
   "fcakyon-test-audit": {
     "branch": "haeram",
