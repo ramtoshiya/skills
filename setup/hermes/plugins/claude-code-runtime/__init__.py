@@ -4,8 +4,10 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import signal
 import subprocess
+import sys
 import threading
 import time
 import urllib.request
@@ -18,6 +20,7 @@ from agent import background_review
 from agent.acp_openai_bridge import (completion_to_stream_chunks, extract_tool_calls_from_text,
                                      render_tool_bridge_sections)
 from agent.runtime_cwd import resolve_agent_cwd
+from hermes_cli.config import load_config_readonly
 from hermes_cli.plugins_session_env import resolve_session_env
 from hermes_constants import get_hermes_home
 from providers import register_provider
@@ -34,9 +37,14 @@ FORK_NOTE = ("You are running as a forked copy of the coding session above, for 
              "The Hermes tools listed above are the only way to save memory or skills. They are not Claude Code "
              "tools, so ToolSearch and your own tool calls cannot reach them. To call one, write its "
              "<tool_call> block as plain text in your reply. Hermes runs it and sends you the result. Do not "
-             "use your own Claude Code tools in this review and do not change any repository file.")
+             "use your own Claude Code tools in this review and do not change any repository file. A child "
+             "coder's answer in this conversation ends with learning proposals. Save a proposal only after a tool "
+             "result in this conversation, or a file you read now with read_file or search_files, confirms it. "
+             "search_files cuts long lines short, so read the whole file with read_file before you reject a "
+             "proposal as contradicted. Leave out a proposal you cannot confirm, and name it with the reason in your "
+             "final summary.")
 # A hook, unlike a tool or permission rule, leaves the request prefix alone, so the fork still reads the
-# coding run's cache. dontAsk alone lets Skill and ToolSearch through, and GPT models kept calling them.
+# coding run's cache. dontAsk alone lets Skill and ToolSearch through.
 REVIEW_SETTINGS = json.dumps({"hooks": {"PreToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": (
     "echo 'Hermes background review: Claude Code tools are off. Call a Hermes tool by writing its "
     "<tool_call> block as plain text in your reply.' >&2; exit 2")}]}]}})
@@ -46,6 +54,35 @@ RESULTS_NOTE = ("Continue the review. Call more Hermes tools in the same format,
                 "summary and no tool call.")
 GATEWAY_ONLY = re.compile(r"^(HERMES_|BB_THREAD_ID$|BB_PROJECT_ID$|BB_ENVIRONMENT_ID$|BB_THREAD_STORAGE$|PYTHONPATH$)")
 EXTRA_BODY_KEY = "claude_code_runtime"
+CHILD_GUARD = Path(__file__).with_name("child_guard.py")
+SUBAGENTS_NOTE = """## Subagents
+
+Claude Code's Agent tool is off in this session. When the task needs a subagent, start a child coder as a bb thread, \
+and wait for it in the same turn:
+
+```sh
+bb thread show "$BB_THREAD_ID" --json   # thread.projectId and environment.id
+bb nest spawn --provider {provider} --model claude-code-runtime:<model> --reasoning-level <effort> \\
+  --project <project id> --environment <environment id> --title <role> --prompt-file <brief file>
+bb thread update <child id> --parent-notifications stuck
+bb thread wait <child id> --timeout 600 && bb thread output <child id>
+```
+
+- Choose the model and effort by the rows of the ramtoshiya:worker-routing skill, and pass both on every spawn: `sonnet` \
+`high` for implementation and reads that need interpretation, and `opus` `high` for top-tier work. On a GPT route, the \
+model is the output of `newest-model <family> claudex`, or the Claude row when that exits 1. Never pass an Astra model.
+- bb cannot see your wait command. Without the `stuck` setting, the child's completion notice starts a new turn \
+right after this one and cancels Hermes's review of this session. Run the wait again when it exits 2 (timeout).
+- A child coder reads this profile's skills and memory but saves neither. Its answer ends with learning proposals. \
+Hermes's review of this session decides which of them to keep, so leave them in the conversation."""
+CHILD_NOTE = """## You are a child coder
+
+A parent coder started this session as a subagent. Use this profile's skills and memory, but do not change them: \
+Hermes runs no review of this session, and a hook refuses writes to the profile's skills and memories directories.
+
+End your final answer with a `Learning proposals` section of at most five bullets. Each bullet is something your own \
+tool runs in this task showed that a later session could reuse, such as a command that works, a path, or a project \
+rule, followed by the command or file that shows it. Write `Learning proposals: none` when nothing qualifies."""
 
 _STATE_LOCK = threading.Lock()
 _LOG_LOCK = threading.Lock()
@@ -102,6 +139,22 @@ def runtime_dir() -> Path:
     return Path(get_hermes_home()) / NAME
 
 
+@dataclass(frozen=True)
+class Role:
+    learner_home: Path
+    subagent_provider: str | None
+
+    @property
+    def child(self) -> bool:
+        return self.learner_home != Path(get_hermes_home())
+
+
+def role() -> Role:
+    section = load_config_readonly().get(EXTRA_BODY_KEY) or {}
+    learner = section.get("learner_home")
+    return Role(Path(learner) if learner else Path(get_hermes_home()), section.get("subagent_provider"))
+
+
 def claude_dir() -> Path:
     return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
 
@@ -124,8 +177,15 @@ def log_usage(row: dict) -> None:
         log.write(json.dumps(row) + "\n")
 
 
-def memory_context() -> str:
-    memories = Path(get_hermes_home()) / "memories"
+def session_context(current: Role) -> str:
+    notes = [SUBAGENTS_NOTE.format(provider=current.subagent_provider)] if current.subagent_provider else []
+    notes += [CHILD_NOTE] if current.child else []
+    memory = memory_context(current.learner_home)
+    return "\n\n".join([f"# Hermes coder session\n\n" + "\n\n".join(notes)] * bool(notes) + [memory] * bool(memory))
+
+
+def memory_context(learner_home: Path) -> str:
+    memories = learner_home / "memories"
     parts = []
     for name, label in (("USER.md", "User profile"), ("MEMORY.md", "Environment memory")):
         path = memories / name
@@ -138,8 +198,8 @@ def memory_context() -> str:
             "the snapshot Hermes held when the session started.\n\n" + "\n\n".join(parts))
 
 
-def learned_skills() -> dict[str, Path]:
-    root = Path(get_hermes_home()) / "skills"
+def learned_skills(learner_home: Path) -> dict[str, Path]:
+    root = learner_home / "skills"
     manifest = root / ".bundled_manifest"
     bundled = ({line.split(":", 1)[0] for line in manifest.read_text(encoding="utf-8").split()}
                if manifest.is_file() else set())
@@ -151,7 +211,7 @@ def learned_skills() -> dict[str, Path]:
     return found
 
 
-def sync_skills_plugin() -> Path:
+def sync_skills_plugin(learner_home: Path) -> Path:
     root = runtime_dir() / "skills-plugin"
     skills = root / "skills"
     skills.mkdir(parents=True, exist_ok=True)
@@ -160,7 +220,7 @@ def sync_skills_plugin() -> Path:
         manifest.parent.mkdir(exist_ok=True)
         manifest.write_text(json.dumps({"name": "hermes-skills",
                                         "description": "Skills the Hermes profile learned"}) + "\n")
-    wanted = learned_skills()
+    wanted = learned_skills(learner_home)
     for link in skills.iterdir():
         if link.name not in wanted or not link.is_symlink() or Path(os.readlink(link)) != wanted[link.name]:
             link.unlink()
@@ -170,14 +230,14 @@ def sync_skills_plugin() -> Path:
     return root
 
 
-def conversation(key: str, cwd: str) -> dict:
+def conversation(key: str, cwd: str, current: Role) -> dict:
     path = runtime_dir() / "sessions.json"
     with _STATE_LOCK:
         state = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
         entry = state.get(key)
         if entry is None:
             session = str(uuid.uuid5(uuid.NAMESPACE_URL, f"hermes:{get_hermes_home()}:{key}"))
-            context = memory_context()
+            context = session_context(current)
             context_file = None
             if context:
                 context_file = runtime_dir() / "context" / f"{session}.md"
@@ -197,7 +257,13 @@ def cache_prefix_flags(entry: dict, model: str, effort: str | None, plugin_dir: 
         flags += ["--effort", effort]
     if entry["context"]:
         flags += ["--append-system-prompt-file", entry["context"]]
-    return flags + ["--plugin-dir", str(plugin_dir)]
+    return flags + ["--plugin-dir", str(plugin_dir), "--disallowedTools", "Agent"]
+
+
+def child_settings(current: Role) -> str:
+    command = shlex.join([sys.executable, str(CHILD_GUARD), str(current.learner_home), current.subagent_provider or ""])
+    return json.dumps({"hooks": {"PreToolUse": [{"matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+                                                 "hooks": [{"type": "command", "command": command}]}]}})
 
 
 def completion(text: str, model: str, totals: dict, tool_calls=None, **extra) -> SimpleNamespace:
@@ -302,9 +368,14 @@ class ClaudeCodeClient:
     def coding(self, model, messages, key, context):
         if not key:
             raise RuntimeError(f"{NAME}: the request carries no Hermes session id")
-        entry = conversation(key, str(resolve_agent_cwd()))
-        argv = cache_prefix_flags(entry, model, context.get("effort"), sync_skills_plugin())
+        current = role()
+        if current.child and model.endswith("-astra"):
+            raise RuntimeError(f"{NAME}: child coders do not run Astra models. Start the child with --model.")
+        entry = conversation(key, str(resolve_agent_cwd()), current)
+        argv = cache_prefix_flags(entry, model, context.get("effort"), sync_skills_plugin(current.learner_home))
         argv += ["--permission-mode", "bypassPermissions"]
+        if current.child:
+            argv += ["--settings", child_settings(current)]
         argv += ["--resume" if transcript_exists(entry["session"]) else "--session-id", entry["session"]]
         result, events = self.run(model, argv, text_of(messages[-1].get("content")), entry["cwd"], key)
         rows, steps = projection(events)
@@ -314,6 +385,8 @@ class ClaudeCodeClient:
         return answer, {"claude_session": entry["session"], **totals}
 
     def review(self, model, messages, tools, tool_choice, key, context):
+        if role().child:
+            raise RuntimeError(f"{NAME}: a child coder profile runs no review, because only its parent coder learns")
         path = runtime_dir() / "sessions.json"
         entry = json.loads(path.read_text(encoding="utf-8")).get(key) if path.is_file() else None
         if entry is None or not transcript_exists(entry["session"]):

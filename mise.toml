@@ -1,6 +1,3 @@
-# macOS machine setup, applied with `mise bootstrap`.
-# docs/setup.md explains every entry. Preview with `mise bootstrap --dry-run`.
-
 [tools]
 "aqua:rhysd/actionlint" = "1.7.12"
 "aqua:zizmorcore/zizmor" = "1.31.1"
@@ -20,27 +17,24 @@ description = "Run GitHub Actions syntax and security checks"
 depends = ["actions:syntax", "actions:security"]
 
 [bootstrap.packages]
-"brew:jq" = "latest"                  # used by the Claude Code status line
-"brew:uv" = "latest"                  # runs the agent hooks
-"brew:zsh-autosuggestions" = "latest" # loaded by interactive.zsh
+"brew:jq" = "latest"
+"brew:uv" = "latest"
+"brew:zsh-autosuggestions" = "latest"
 
 [bootstrap.mise_shell_activate]
 zsh = true
 
 [dotfiles]
-# Shell
 "~/.config/shell/environment.zsh" = { source = "setup/shell/environment.zsh", mode = "copy" }
 "~/.config/shell/interactive.zsh" = { source = "setup/shell/interactive.zsh", mode = "copy" }
 "~/.zshenv/shell" = { block = 'source "$HOME/.config/shell/environment.zsh"' }
 "~/.zshrc/shell" = { block = 'source "$HOME/.config/shell/interactive.zsh"' }
 
-# Package managers: skip releases newer than three days
 "~/.npmrc/release-age" = { line = "min-release-age=3" }
 "~/Library/Preferences/pnpm/config.yaml/release-age" = { source = "setup/packages/pnpm.yaml", merge = true }
 "~/.config/uv/uv.toml/release-age" = { source = "setup/packages/uv.toml", merge = true }
 "~/.config/mise/config.toml/release-age" = { source = "setup/packages/mise-settings.toml", merge = true }
 
-# Git
 "~/.config/git/shared.gitconfig" = { source = "setup/git/shared.gitconfig", mode = "copy" }
 "~/.gitconfig/shared" = { block = '''
 [include]
@@ -49,7 +43,6 @@ zsh = true
 "~/.gitignore/ds-store" = { line = ".DS_Store" }
 "~/.gitignore/claude-local-settings" = { line = "**/.claude/settings.local.json" }
 
-# Agents
 "~/.codex/AGENTS.md" = { source = "setup/agents/preferences.md", mode = "copy" }
 "~/.bb/AGENTS.md" = { source = "setup/agents/bb-agents.md", mode = "copy" }
 "~/.claude/status-line.sh" = { source = "setup/agents/claude-statusline.sh", mode = "copy" }
@@ -97,5 +90,5 @@ description = "Install or update the Hermes operator profile from this checkout"
 run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/hermes/operator_profile.py"
 
 [tasks."hermes:coder"]
-description = "Install or update the Hermes coder profile, which runs coding turns in Claude Code"
+description = "Install or update the Hermes coder profile and its subagent profile coder-child, which run coding turns in Claude Code"
 run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/hermes/coder_profile.py"

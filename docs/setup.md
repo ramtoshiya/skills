@@ -1008,6 +1008,8 @@ talk to Hermes in a bb thread with the **Hermes Coder** provider, and every
 turn runs in Claude Code with Claude Code's own tools. Claude models run
 through `claude`, and GPT models through [`claudex`](../tools/claudex/README.md).
 Hermes keeps the session, its memory, and the skills it learns.
+The task also sets up a second profile, `coder-child`, for the subagents a
+coder session starts. The "Subagents" section below describes it.
 `mise bootstrap` does not run this task.
 
 It needs:
@@ -1018,12 +1020,12 @@ It needs:
 - For GPT models, `claudex` on `PATH` and its CLIProxyAPI server running.
 - bb, for the provider entry. Without bb the task skips that step.
 
-The task creates the profile with
-`hermes profile create coder --no-skills --no-credentials --no-alias` if it is
-missing. It does not make `coder` the default profile. Then it changes these
-things:
+The task creates each profile with
+`hermes profile create <name> --no-skills --no-credentials --no-alias` if it is
+missing. It does not make either one the default profile. Then it changes these
+things in both profiles:
 
-- It copies four plugins into `~/.hermes/profiles/coder/plugins/`:
+- It copies four plugins into the profile's `plugins/` folder:
   `model-providers/claude-code-runtime`, which runs each request in Claude
   Code, `claude-code-commands`, which prints token use, and the operator's
   `bb-thread-env` and `bb-title-input`, described above.
@@ -1033,10 +1035,15 @@ things:
 - It sets `model_catalog.excluded_providers` to `["anthropic"]`. Hermes lists
   its direct Anthropic provider wherever a Claude Code login exists, and a
   model picked there would skip Claude Code.
+- It sets `claude_code_runtime.subagent_provider` to `acp-hermes-coder-child`,
+  the bb provider that subagents run on.
+- In `coder-child` only, it sets `auxiliary.background_review.enabled` to
+  `false` and `claude_code_runtime.learner_home` to `~/.hermes/profiles/coder`.
 - It asks the running Hermes gateway to reload the profile's plugins.
-- It adds a `hermes-coder` entry to the custom agents of bb's `provider-acp`
-  plugin. The entry runs `hermes -p coder acp`. Other custom agents stay as
-  they are.
+- It adds the entries `hermes-coder` and `hermes-coder-child` to the custom
+  agents of bb's `provider-acp` plugin. They run `hermes -p coder acp` and
+  `hermes -p coder-child acp`. Both list the skills of `coder`. Other custom
+  agents stay as they are.
 - It records the install in
   `~/.local/state/ramtoshiya-agents/hermes-coder.json`. From then on
   `main:status` checks the profile and `main:sync` reinstalls it.
@@ -1092,7 +1099,46 @@ The plugin sorts each request Hermes makes into one of three kinds:
 Each call also passes the profile's `USER.md` and `MEMORY.md` from the
 session's first turn with `--append-system-prompt-file`, and the skills Hermes
 learned in the profile as a Claude Code plugin with `--plugin-dir`. Hermes's
-bundled skills stay out.
+bundled skills stay out. Every call also passes `--disallowedTools Agent`, so
+coding turns and review forks offer the same tools and the fork still reads
+the coding run's cache.
+
+### Subagents
+
+Claude Code's Agent tool is off in coder sessions. When a coder session needs
+a subagent, it starts a child coder as a bb thread with `bb nest spawn` on the
+**Hermes Coder (child)** provider, `acp-hermes-coder-child`. The context file
+that every coder session loads gives the command. The parent passes
+`--model` and `--reasoning-level` from the rows of the `worker-routing` skill
+on every spawn. It then sets the child's parent notifications to `stuck` and
+waits with `bb thread wait` in the same turn. bb does not see a wait that runs
+inside Claude Code, so without `stuck` the child's completion notice starts a
+new parent turn, and that turn cancels Hermes's review of the parent session.
+
+The parent coder is the only profile that learns. A coder session is a child
+when its profile's `claude_code_runtime.learner_home` names another profile.
+Only `coder-child` sets it, so the role comes from the profile that bb starts,
+not from the prompt. A child coder works as follows:
+
+- It loads `coder`'s `MEMORY.md`, `USER.md`, and learned skills.
+- Hermes starts no background review for it, because
+  `auxiliary.background_review.enabled` is `false`. The plugin also refuses a
+  review request in a child profile.
+- Its coding runs carry a `PreToolUse` hook, `child_guard.py`. The hook refuses
+  `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` into `coder`'s `skills` or
+  `memories` folder, a Bash command that names either folder, and a spawn
+  with a `--provider` other than `acp-hermes-coder-child`.
+- The plugin refuses Astra models in a child.
+- It ends its final answer with a `Learning proposals` list of at most five
+  items, each with the command or file that shows it.
+
+The child's answer reaches the parent's conversation, and the parent's next
+background review reads it. The review saves a proposal only when a tool
+result in the conversation, or a file it reads itself, confirms it. It names
+each proposal it leaves out, with the reason. Facts about one checkout, such as
+a test command, are memory, so the memory review saves them. With Hermes's
+default cadence of one memory review every 10 user turns, a proposal can wait
+several turns.
 
 ### Read token use
 
@@ -1117,7 +1163,9 @@ counts the earlier runs.
 `hermes -p coder claude-code usage` prints one line per Hermes session, and
 `--json` prints the same summary as JSON. The cost of a request is
 `fresh_input + 0.1 × cache_read`, the ratio of cache-read to input prices.
-The `a` column is the review cost divided by the coding cost.
+The `a` column is the review cost divided by the coding cost. Child coders
+log to `~/.hermes/profiles/coder-child/claude-code-runtime/usage.jsonl`, and
+`hermes -p coder-child claude-code usage` reads it.
 
 ### Limits
 
@@ -1136,6 +1184,14 @@ The `a` column is the review cost divided by the coding cost.
   models do so in almost every review. Claude Code refuses the call, and each
   refused call is one more request that reads the whole conversation from
   cache.
+- A child that `bb nest spawn` places past bb's thread depth limit reports to
+  the parent through a relay message, which `stuck` does not hold back. That
+  message can start a parent turn and cancel a running review.
+- The child hook matches folder names in the Bash command text. It also
+  refuses commands that only read those folders, such as `ls`, and it does
+  not catch a path it cannot see in the text.
+- The `stuck` step is an instruction to the parent session. Nothing enforces
+  it.
 
 ## How mise applies each entry
 
