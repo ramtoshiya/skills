@@ -55,7 +55,8 @@ folder has its own MIT `LICENSE`.
 `pstack-mode` is a generated package, not a plain fork. Its repository keeps
 an unchanged pstack mirror under `upstream/` and a generator that writes
 `plugins/pstack-mode/`. Its README and docs describe the selection, activation,
-and build. The mode reads `ramtoshiya:worker-routing`, so a host that installs
+and build. The generator omits upstream Codex policies that disable automatic
+skill selection. The mode reads `ramtoshiya:worker-routing`, so a host that installs
 `pstack-mode` also needs the `ramtoshiya` plugin. To update the pin, push the
 rebuilt `main` of `ramtoshiya/pstack-mode` and set the entry's `sha` to that
 commit. A change that touches both repositories therefore lands in two
