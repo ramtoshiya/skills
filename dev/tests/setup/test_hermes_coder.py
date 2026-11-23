@@ -43,10 +43,12 @@ if reply.get("tool"):
             {{"type": "tool_use", "id": "t1", "name": "Bash", "input": {{"command": reply.get("command", "pwd")}}}}]}}}},
         {{"type": "user", "message": {{"content": [
             {{"type": "tool_result", "tool_use_id": "t1", "content": reply.get("output", "/work")}}]}}}}]
+events += [{{"type": "assistant", "message": {{"id": f"u{{index}}", "content": [{{"type": "text", "text": "..."}}],
+                                            "usage": usage}}}} for index, usage in enumerate(reply.get("call_usage", []))]
 events.append({{"type": "result", "subtype": "success", "is_error": False, "result": reply["text"],
                 "session_id": session,
-                "usage": {{"input_tokens": 10, "cache_creation_input_tokens": 5, "cache_read_input_tokens": 100,
-                          "output_tokens": 7}},
+                "usage": reply.get("usage", {{"input_tokens": 10, "cache_creation_input_tokens": 5,
+                                              "cache_read_input_tokens": 100, "output_tokens": 7}}),
                 "modelUsage": {{model: {{"inputTokens": 90000, "cacheCreationInputTokens": 90000,
                                         "cacheReadInputTokens": 900000, "outputTokens": 9000,
                                         "contextWindow": reply.get("window", 1000000)}}}}}})
@@ -78,8 +80,11 @@ def summary(answer):
             "steps": getattr(answer, "hermes_provider_tool_iterations", None)}
 
 user = {"role": "user", "content": "list the files"}
-out["turn1"] = summary(client.chat.completions.create(model="haiku", messages=[system, user], tools=tools,
-                                                      extra_body=extras("sess-1", "gwk_first")))
+first = client.chat.completions.create(model="haiku", messages=[system, user], tools=tools,
+                                      extra_body=extras("sess-1", "gwk_first"))
+out["turn1"] = summary(first)
+out["turn1_usage"] = {name: getattr(first.usage, name, None)
+                      for name in ("prompt_tokens", "initial_prompt_tokens", "initial_cached_tokens")}
 out["turn2"] = summary(client.chat.completions.create(model="haiku", messages=[system, user], tools=tools,
                                                       extra_body=extras("sess-1", "gwk_second")))
 review = {"role": "user", "content": runtime.REVIEW_PROMPTS[1]}
@@ -162,6 +167,14 @@ INVALID_CALL = ('<tool_call>{"id": "c1", "type": "function", "function": {"name"
                 '"arguments": "{}"}]}</tool_call>')
 
 
+# Usage from a 16-call opus coding turn: the run's sum and its last two API calls.
+REPLAY_RUN = {"input_tokens": 26, "cache_creation_input_tokens": 53775, "cache_read_input_tokens": 945051,
+              "output_tokens": 3000}
+REPLAY_CALLS = [{"input_tokens": 2, "cache_creation_input_tokens": 681, "cache_read_input_tokens": 56520, "output_tokens": 90},
+                {"input_tokens": 2, "cache_creation_input_tokens": 1593, "cache_read_input_tokens": 70147,
+                 "output_tokens": 120}]
+
+
 def option(args, name):
     return args[args.index(name) + 1] if name in args else None
 
@@ -222,7 +235,8 @@ class ClaudeCodeRuntimeInstalledHermesTests(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.out, cls.calls, runtime = probe(Path(cls.tmp.name), PROBE, [
-            {"text": "done", "tool": True}, {"text": "still done", "tool": True},
+            {"text": "done", "tool": True, "call_usage": REPLAY_CALLS, "usage": REPLAY_RUN},
+            {"text": "still done", "tool": True},
             {"text": INVALID_CALL}, {"text": VALID_CALL},
             {"text": "gpt done", "window": 872000}, {"text": VALID_CALL, "window": 872000}],
             f"claude_code_runtime:\n  subagent_provider: acp-child-coders\n  pstack_root: {PSTACK_ROOT}\n")
@@ -317,6 +331,12 @@ class ClaudeCodeRuntimeInstalledHermesTests(unittest.TestCase):
             check = turn_context(coding["args"])
             self.assertIn("[pstack-mode turn check]", check)
             self.assertIn(f"{PSTACK_ROOT}/mode.md", check)
+
+    def test_hermes_meters_the_last_api_calls_prompt_and_counts_the_whole_run(self):
+        # Hermes's session totals add usage.prompt_tokens, and its compressor and context meter read
+        # initial_prompt_tokens and initial_cached_tokens when a response carries them.
+        self.assertEqual(self.out["turn1_usage"], {"prompt_tokens": 998_852, "initial_prompt_tokens": 71_742,
+                                                   "initial_cached_tokens": 70_147})
 
     def test_hermes_knows_the_context_window_claude_code_runs_with(self):
         self.assertEqual(self.out["windows"], {"haiku": 1_000_000, "opus": 1_000_000, "gpt-6-luna": 872_000})
