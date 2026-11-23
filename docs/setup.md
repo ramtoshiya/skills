@@ -1035,15 +1035,16 @@ things in both profiles:
 - It sets `model_catalog.excluded_providers` to `["anthropic"]`. Hermes lists
   its direct Anthropic provider wherever a Claude Code login exists, and a
   model picked there would skip Claude Code.
-- It sets `claude_code_runtime.subagent_provider` to `acp-hermes-coder-child`,
+- It sets `claude_code_runtime.subagent_provider` to `acp-hermes-coder`,
   the bb provider that subagents run on.
 - In `coder-child` only, it sets `auxiliary.background_review.enabled` to
   `false` and `claude_code_runtime.learner_home` to `~/.hermes/profiles/coder`.
 - It asks the running Hermes gateway to reload the profile's plugins.
-- It adds the entries `hermes-coder` and `hermes-coder-child` to the custom
-  agents of bb's `provider-acp` plugin. They run `hermes -p coder acp` and
-  `hermes -p coder-child acp`. Both list the skills of `coder`. Other custom
-  agents stay as they are.
+- It copies `setup/hermes/coder_acp.py` to `~/.hermes/profiles/coder/` and
+  adds one entry, `hermes-coder`, to the custom agents of bb's `provider-acp`
+  plugin. The entry runs that launcher and lists the skills of `coder`. It
+  removes an older `hermes-coder-child` entry. Other custom agents stay as
+  they are.
 - It records the install in
   `~/.local/state/ramtoshiya-agents/hermes-coder.json`. From then on
   `main:status` checks the profile and `main:sync` reinstalls it.
@@ -1114,11 +1115,15 @@ gateway, such as a test, shows no progress.
 
 Claude Code's Agent tool is off in coder sessions. When a coder session needs
 a subagent, it starts a child coder as a bb thread with `bb nest spawn` on the
-**Hermes Coder (agents only)** provider, `acp-hermes-coder-child`. The context file
-that every coder session loads gives the command. bb also lists this provider
-in its model picker. bb cannot hide a provider from the picker without also
-refusing new turns on it, so the name tells a person not to pick it. bb gives
-every custom ACP agent the same toolbox icon. The
+same **Hermes Coder** provider, `acp-hermes-coder`. The context file that
+every coder session loads gives the command. bb starts the launcher for every
+Hermes Coder thread. The launcher reads the thread's caller from bb: the
+lifecycle owner when the nest plugin set one, and otherwise the parent thread.
+When the caller runs on Hermes Coder, the launcher starts
+`hermes -p coder-child acp`. Otherwise it starts `hermes -p coder acp`. A
+thread that bb cannot read does not start. bb's model picker therefore shows
+one Hermes Coder entry, and a person cannot pick the child profile there.
+bb gives every custom ACP agent the same toolbox icon. The
 [Agent Icons](https://github.com/ponomr/bb-plugin-agent-icons) bb plugin can
 give each Hermes provider its own icon. The parent passes
 `--model` and `--reasoning-level` from the rows of the `worker-routing` skill
@@ -1136,8 +1141,8 @@ the parent either.
 
 The parent coder is the only profile that learns. A coder session is a child
 when its profile's `claude_code_runtime.learner_home` names another profile.
-Only `coder-child` sets it, so the role comes from the profile that bb starts,
-not from the prompt. A child coder works as follows:
+Only `coder-child` sets it, so the role comes from the profile that the
+launcher starts, not from the prompt. A child coder works as follows:
 
 - It loads `coder`'s `MEMORY.md`, `USER.md`, and learned skills.
 - Hermes starts no background review for it, because
@@ -1146,7 +1151,7 @@ not from the prompt. A child coder works as follows:
 - In a child, `coder_guard.py` also refuses `Write`, `Edit`, `MultiEdit`, and
   `NotebookEdit` into `coder`'s `skills` or `memories` folder, a Bash command
   that names either folder, and a spawn with a `--provider` other than
-  `acp-hermes-coder-child`.
+  `acp-hermes-coder`.
 - The plugin refuses Astra models in a child.
 - It ends its final answer with a `Learning proposals` list of at most five
   items, each with the command or file that shows it.

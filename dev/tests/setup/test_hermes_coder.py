@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[3]
 PROVIDER = ROOT / "setup/hermes/plugins/claude-code-runtime/__init__.py"
 COMMANDS = ROOT / "setup/hermes/plugins/claude-code-commands/__init__.py"
 SETUP = ROOT / "setup/hermes/coder_profile.py"
+LAUNCHER = ROOT / "setup/hermes/coder_acp.py"
 
 FAKE_CLAUDE = f"""#!{sys.executable}
 import json, os, sys, uuid
@@ -455,7 +456,8 @@ class CoderInstallerTests(unittest.TestCase):
         for name, script in {"hermes": FAKE_HERMES, "bb": FAKE_BB}.items():
             (bin_dir / name).write_text(script)
             (bin_dir / name).chmod(0o755)
-        (self.home / "bb-provider-acp.json").write_text(json.dumps({"customAgents": json.dumps([OTHER_AGENT])}))
+        retired = {"id": "hermes-coder-child", "displayName": "Hermes Coder (child)", "command": "hermes", "args": []}
+        (self.home / "bb-provider-acp.json").write_text(json.dumps({"customAgents": json.dumps([OTHER_AGENT, retired])}))
         self.env = {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}", "HOME": str(self.home),
                     "XDG_STATE_HOME": str(self.home / "state"), "BB_CLI": str(bin_dir / "bb")}
 
@@ -477,10 +479,12 @@ class CoderInstallerTests(unittest.TestCase):
         self.assertTrue((self.home / ".hermes/profiles/coder/plugins/model-providers/claude-code-runtime/plugin.yaml")
                         .is_file())
         agents = json.loads(json.loads((self.home / "bb-provider-acp.json").read_text())["customAgents"])
-        self.assertEqual([agent["id"] for agent in agents], [OTHER_AGENT["id"], "hermes-coder", "hermes-coder-child"])
-        self.assertEqual(agents[1]["args"], ["-p", "coder", "acp"])
-        self.assertEqual(agents[2]["args"], ["-p", "coder-child", "acp"])
-        self.assertEqual(agents[2]["nativeSkillRoots"], agents[1]["nativeSkillRoots"])
+        self.assertEqual([agent["id"] for agent in agents], [OTHER_AGENT["id"], "hermes-coder"])
+        launcher = self.home / ".hermes/profiles/coder/coder_acp.py"
+        self.assertEqual(agents[1]["command"], str(launcher))
+        self.assertEqual(agents[1]["args"], ["acp-hermes-coder", "coder", "coder-child"])
+        self.assertEqual(launcher.read_bytes(), LAUNCHER.read_bytes())
+        self.assertTrue(os.access(launcher, os.X_OK))
 
         config = self.config() | {"model.default": "gpt-6-luna"}
         (self.home / "coder-config.json").write_text(json.dumps(config))
@@ -496,7 +500,7 @@ class CoderInstallerTests(unittest.TestCase):
         self.assertNotIn("claude_code_runtime.learner_home", coder)
         self.assertNotIn("auxiliary.background_review.enabled", coder)
         for config in (child, coder):
-            self.assertEqual(config["claude_code_runtime.subagent_provider"], "acp-hermes-coder-child")
+            self.assertEqual(config["claude_code_runtime.subagent_provider"], "acp-hermes-coder")
 
     def test_check_reports_an_installed_plugin_file_that_changed(self):
         self.assertEqual(self.install().returncode, 0)
@@ -511,3 +515,66 @@ class CoderInstallerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+FAKE_THREAD_BB = f"""#!{sys.executable}
+import json, os, sys
+threads = json.loads(os.environ["FAKE_THREADS"])
+if sys.argv[1:3] != ["thread", "show"] or sys.argv[3] not in threads:
+    sys.exit("no such thread")
+print(json.dumps({{"thread": threads[sys.argv[3]]}}))
+"""
+
+FAKE_ACP_HERMES = f"""#!{sys.executable}
+import json, sys
+print(json.dumps(sys.argv[1:]))
+"""
+
+
+class CoderLauncherTests(unittest.TestCase):
+    THREADS = {
+        "thr_top": {"parentThreadId": None, "providerId": "acp-hermes-coder"},
+        "thr_sub": {"parentThreadId": "thr_top", "providerId": "acp-hermes-coder"},
+        "thr_worker": {"parentThreadId": "thr_operator", "providerId": "acp-hermes-coder"},
+        "thr_operator": {"parentThreadId": None, "providerId": "acp-hermes-agent"},
+        "thr_relay": {"parentThreadId": "thr_operator", "lifecycleOwnerThreadId": "thr_sub",
+                      "providerId": "acp-hermes-coder"},
+    }
+
+    def launch(self, thread=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            bin_dir = Path(tmp)
+            for name, script in {"bb": FAKE_THREAD_BB, "hermes": FAKE_ACP_HERMES}.items():
+                (bin_dir / name).write_text(script)
+                (bin_dir / name).chmod(0o755)
+            env = {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}", "FAKE_THREADS": json.dumps(self.THREADS)}
+            if thread:
+                env["BB_THREAD_ID"] = thread
+            return subprocess.run([sys.executable, "-I", str(LAUNCHER), "acp-hermes-coder", "coder", "coder-child"],
+                                  env=env, capture_output=True, text=True)
+
+    def profile(self, thread=None):
+        result = self.launch(thread)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = json.loads(result.stdout)
+        self.assertEqual(args[0], "-p")
+        self.assertEqual(args[2:], ["acp"])
+        return args[1]
+
+    def test_a_thread_that_a_coder_thread_started_runs_the_child_profile(self):
+        self.assertEqual(self.profile("thr_sub"), "coder-child")
+
+    def test_a_relay_worker_that_a_coder_thread_started_runs_the_child_profile(self):
+        self.assertEqual(self.profile("thr_relay"), "coder-child")
+
+    def test_a_top_level_thread_or_another_agents_worker_runs_the_learner_profile(self):
+        self.assertEqual(self.profile("thr_top"), "coder")
+        self.assertEqual(self.profile("thr_worker"), "coder")
+
+    def test_a_session_without_a_thread_lists_models_on_the_learner_profile(self):
+        self.assertEqual(self.profile(), "coder")
+
+    def test_a_thread_bb_cannot_read_does_not_start(self):
+        result = self.launch("thr_missing")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("profile is unknown", result.stderr)
