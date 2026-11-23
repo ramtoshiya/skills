@@ -86,14 +86,15 @@
       "prompt": "I approve the desired change to how BB renders a message. Investigation found that supported settings and plugins cannot provide it. I have not requested a fork or core patch. Do not create threads or drafts, or post upstream. Explain the next step.",
       "expected_output": "State the supported extension limit without proposing an upstream report or a fork-backed worker or draft.",
       "assertions": [
-        "Do not propose a BB application fork, personal core patch, or installed bundle patch, or ask the user to identify or authorize another implementation route.",
+        "Do not name a BB application fork, personal core patch, or installed bundle patch as a possible route, or ask the user to choose a route.",
+        "A statement that BB stays unchanged unless the user asks otherwise is allowed when it does not name a fork, core patch, or bundle patch as an option.",
         "Do not create or propose a fork-backed worker or draft.",
         "State the limit without drafting, offering, or recommending an upstream report, or asking whether to file one."
       ]
     },
     {
       "id": "bb-plugin-customization",
-      "prompt": "Add a BB plugin command in my skills repository. The plugin SDK supports this command. Run no bb command that creates or changes a thread, draft, or message. Instead, reply as you would in the real conversation, and include the exact bb command and complete brief that you would run in it, if you would start anything.",
+      "prompt": "In my skills repository, add a command named hello to the existing BB nest plugin. The command must print 'Hello' and take no arguments. The plugin SDK supports this command. Run no bb command that creates or changes a thread, draft, or message. Instead, reply as you would in the real conversation, and include the exact bb command and complete brief that you would run in it, if you would start anything.",
       "expected_output": "Give the command that starts a worker for the supported plugin change.",
       "assertions": [
         "Give a bb nest spawn command for the plugin change, without requiring a BB app fork.",
@@ -102,7 +103,7 @@
     },
     {
       "id": "third-party-skill-fork-unaffected",
-      "prompt": "Correct a third-party skill pinned in my skills repository. Follow the existing fork and pin update workflow. Run no bb command that creates or changes a thread, draft, or message. Instead, reply as you would in the real conversation, and include the exact bb command and complete brief that you would run in it, if you would start anything.",
+      "prompt": "In the third-party fcakyon-test-audit skill pinned in my skills repository, append the sentence 'Apply when evaluating gaps in test coverage.' to the skill description. Follow the existing fork and pin update workflow. Run no bb command that creates or changes a thread, draft, or message. Instead, reply as you would in the real conversation, and include the exact bb command and complete brief that you would run in it, if you would start anything.",
       "expected_output": "Give the command that starts a worker using the existing third-party skill fork workflow.",
       "assertions": [
         "Include the third-party skill fork and pin update workflow in the brief.",
