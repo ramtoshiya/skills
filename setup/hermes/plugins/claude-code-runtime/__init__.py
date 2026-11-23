@@ -59,7 +59,16 @@ GATEWAY_ONLY = re.compile(r"^(HERMES_|BB_THREAD_ID$|BB_PROJECT_ID$|BB_ENVIRONMEN
 EXTRA_BODY_KEY = "claude_code_runtime"
 CODER_GUARD = Path(__file__).with_name("coder_guard.py")
 CHILD_OUTPUT = re.compile(r"\bthread\s+output\b")
-REFINE = "/refine Check the child coder's learning proposals in this session and save the ones a tool result confirms."
+REFINE = ("/refine [Automatic, sent by Hermes Coder after it read a child coder's answer] Check the child coder's "
+          "learning proposals in this session and save the ones a tool result confirms.")
+MODE_NOTE = """## Working mode
+
+Read `{root}/mode.md` and `{root}/HOSTS.md` before work, and again after compaction. Follow this mode for the whole \
+session. You are a Claude Code coding session that a Hermes coder profile runs, so the Claude Code rules in HOSTS.md \
+apply to you and its Hermes operator section does not."""
+TURN_CHECK = ("[pstack-mode turn check] Before you answer, check the principle index in {root}/mode.md against this "
+              "turn. For each principle whose trigger fits, read its leaf and apply it. In the reply, name each "
+              "principle that shaped a decision and the choice it changed.")
 SUBAGENTS_NOTE = """## Subagents
 
 Claude Code's Agent tool is off in this session. When the task needs a subagent, start a child coder as a bb thread, \
@@ -149,6 +158,7 @@ def runtime_dir() -> Path:
 class Role:
     learner_home: Path
     subagent_provider: str | None
+    pstack_root: str | None
 
     @property
     def child(self) -> bool:
@@ -158,7 +168,8 @@ class Role:
 def role() -> Role:
     section = load_config_readonly().get(EXTRA_BODY_KEY) or {}
     learner = section.get("learner_home")
-    return Role(Path(learner) if learner else Path(get_hermes_home()), section.get("subagent_provider"))
+    return Role(Path(learner) if learner else Path(get_hermes_home()), section.get("subagent_provider"),
+                section.get("pstack_root"))
 
 
 def claude_dir() -> Path:
@@ -184,7 +195,8 @@ def log_usage(row: dict) -> None:
 
 
 def session_context(current: Role) -> str:
-    notes = [SUBAGENTS_NOTE.format(provider=current.subagent_provider)] if current.subagent_provider else []
+    notes = [MODE_NOTE.format(root=current.pstack_root)] if current.pstack_root else []
+    notes += [SUBAGENTS_NOTE.format(provider=current.subagent_provider)] if current.subagent_provider else []
     notes += [CHILD_NOTE] if current.child else []
     memory = memory_context(current.learner_home)
     return "\n\n".join([f"# Hermes coder session\n\n" + "\n\n".join(notes)] * bool(notes) + [memory] * bool(memory))
@@ -269,8 +281,12 @@ def cache_prefix_flags(entry: dict, model: str, effort: str | None, plugin_dir: 
 def guard_settings(current: Role) -> str:
     learner = [str(current.learner_home)] if current.child else []
     command = shlex.join([sys.executable, str(CODER_GUARD), current.subagent_provider or "", *learner])
-    return json.dumps({"hooks": {"PreToolUse": [{"matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
-                                                 "hooks": [{"type": "command", "command": command}]}]}})
+    hooks = {"PreToolUse": [{"matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+                             "hooks": [{"type": "command", "command": command}]}]}
+    if current.pstack_root:
+        check = shlex.join(["printf", "%s\n", TURN_CHECK.format(root=current.pstack_root)])
+        hooks["UserPromptSubmit"] = [{"hooks": [{"type": "command", "command": check}]}]
+    return json.dumps({"hooks": hooks})
 
 
 def completion(text: str, model: str, totals: dict, tool_calls=None, **extra) -> SimpleNamespace:

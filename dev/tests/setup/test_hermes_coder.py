@@ -165,6 +165,17 @@ def guard(args: list[str], event: dict) -> subprocess.CompletedProcess:
     return subprocess.run(["sh", "-c", hook], input=json.dumps(event), capture_output=True, text=True)
 
 
+PSTACK_ROOT = "/opt/pstack-mode/plugins/pstack-mode"
+MODE_POINTER = f"Read `{PSTACK_ROOT}/mode.md` and `{PSTACK_ROOT}/HOSTS.md` before work"
+
+
+def turn_context(args: list[str]) -> str:
+    """What Claude Code adds to each prompt from the run's UserPromptSubmit hooks, which print plain context."""
+    hooks = json.loads(option(args, "--settings"))["hooks"].get("UserPromptSubmit", [])
+    return "".join(subprocess.run(["sh", "-c", hook["command"]], input="{}", capture_output=True, text=True,
+                                  check=True).stdout for entry in hooks for hook in entry["hooks"])
+
+
 def probe(tmp: Path, script: str, replies: list[dict], config: str) -> tuple[dict, list[dict], Path]:
     bin_dir = tmp / "bin"
     bin_dir.mkdir()
@@ -208,7 +219,7 @@ class ClaudeCodeRuntimeInstalledHermesTests(unittest.TestCase):
             {"text": "done", "tool": True}, {"text": "still done", "tool": True},
             {"text": INVALID_CALL}, {"text": VALID_CALL},
             {"text": "gpt done"}, {"text": VALID_CALL}],
-            "claude_code_runtime:\n  subagent_provider: acp-child-coders\n")
+            f"claude_code_runtime:\n  subagent_provider: acp-child-coders\n  pstack_root: {PSTACK_ROOT}\n")
         cls.usage = rows(runtime)
 
     @classmethod
@@ -292,6 +303,17 @@ class ClaudeCodeRuntimeInstalledHermesTests(unittest.TestCase):
     def test_review_keeps_only_child_proposals_it_can_confirm(self):
         self.assertIn("proposal you cannot confirm", self.calls[2]["prompt"])
 
+    def test_coding_sessions_follow_the_pstack_mode_and_check_it_every_turn(self):
+        for coding in (self.calls[0], self.calls[1], self.calls[4]):
+            context = Path(option(coding["args"], "--append-system-prompt-file")).read_text()
+            self.assertIn(MODE_POINTER, context)
+            check = turn_context(coding["args"])
+            self.assertIn("[pstack-mode turn check]", check)
+            self.assertIn(f"{PSTACK_ROOT}/mode.md", check)
+
+    def test_the_review_fork_runs_no_turn_check(self):
+        self.assertEqual(turn_context(self.calls[2]["args"]), "")
+
 
 CHILD_ANSWER = "Ran 18 tests, OK.\n\n## Learning proposals\n- Run one setup file with -p 'test_x.py'."
 
@@ -310,7 +332,7 @@ class ChildProposalReviewTests(unittest.TestCase):
         self.assertEqual(len(tells), 1)
         self.assertEqual(tells[0]["args"][:4], ["thread", "tell", "thr_parent", "--mode"])
         self.assertEqual(tells[0]["args"][4], "queue")
-        self.assertTrue(tells[0]["args"][5].startswith("/refine "))
+        self.assertTrue(tells[0]["args"][5].startswith("/refine [Automatic, sent by Hermes Coder"))
         self.assertIsNone(tells[0]["BB_THREAD_ID"])
 
 
@@ -362,6 +384,7 @@ class ChildCoderProfileTests(unittest.TestCase):
         config = ("claude_code_runtime:\n"
                   f"  learner_home: {cls.learner}\n"
                   "  subagent_provider: acp-child-coders\n"
+                  f"  pstack_root: {PSTACK_ROOT}\n"
                   "auxiliary:\n  background_review:\n    enabled: false\n")
         cls.out, cls.calls, cls.runtime = probe(tmp, CHILD_PROBE, [{"text": "found it", "tool": True}], config)
         cls.work = tmp
@@ -378,6 +401,11 @@ class ChildCoderProfileTests(unittest.TestCase):
         skills = Path(option(coding, "--plugin-dir")) / "skills"
         self.assertEqual(sorted(path.name for path in skills.iterdir()), ["repo-build"])
         self.assertEqual(option(coding, "--disallowedTools"), "Agent")
+
+    def test_child_session_follows_the_pstack_mode_and_checks_it_every_turn(self):
+        coding = self.calls[0]["args"]
+        self.assertIn(MODE_POINTER, Path(option(coding, "--append-system-prompt-file")).read_text())
+        self.assertIn("[pstack-mode turn check]", turn_context(coding))
 
     def test_child_session_runs_no_review(self):
         self.assertIn("runs no review", self.out["review"]["error"])
@@ -460,6 +488,10 @@ class CoderInstallerTests(unittest.TestCase):
         (self.home / "bb-provider-acp.json").write_text(json.dumps({"customAgents": json.dumps([OTHER_AGENT, retired])}))
         self.env = {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}", "HOME": str(self.home),
                     "XDG_STATE_HOME": str(self.home / "state"), "BB_CLI": str(bin_dir / "bb")}
+        self.pstack = self.home / "workspaces/pstack-mode"
+        (self.pstack / "plugins/pstack-mode").mkdir(parents=True)
+        (self.pstack / "plugins/pstack-mode/mode.md").write_text("# Pstack session mode\n")
+        subprocess.run(["git", "init", "-q", str(self.pstack)], check=True)
 
     def install(self, *args):
         return subprocess.run([sys.executable, "-I", str(SETUP), *args], env=self.env, capture_output=True, text=True)
@@ -501,6 +533,13 @@ class CoderInstallerTests(unittest.TestCase):
         self.assertNotIn("auxiliary.background_review.enabled", coder)
         for config in (child, coder):
             self.assertEqual(config["claude_code_runtime.subagent_provider"], "acp-hermes-coder")
+            self.assertEqual(config["claude_code_runtime.pstack_root"], str(self.pstack.resolve() / "plugins/pstack-mode"))
+
+    def test_install_stops_without_a_pstack_mode_checkout(self):
+        shutil.rmtree(self.pstack)
+        result = self.install()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.home / "hermes-calls.jsonl").exists())
 
     def test_check_reports_an_installed_plugin_file_that_changed(self):
         self.assertEqual(self.install().returncode, 0)

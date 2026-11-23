@@ -1037,6 +1037,11 @@ things in both profiles:
   model picked there would skip Claude Code.
 - It sets `claude_code_runtime.subagent_provider` to `acp-hermes-coder`,
   the bb provider that subagents run on.
+- It sets `claude_code_runtime.pstack_root` to the `plugins/pstack-mode`
+  folder of the main checkout of `~/workspaces/pstack-mode`, the same root
+  the operator follows. Pass `--pstack <checkout>` for another checkout. The
+  task stops when that folder has no `mode.md`. The "Working mode" section
+  below describes what the setting does.
 - In `coder-child` only, it sets `auxiliary.background_review.enabled` to
   `false` and `claude_code_runtime.learner_home` to `~/.hermes/profiles/coder`.
 - It asks the running Hermes gateway to reload the profile's plugins.
@@ -1111,6 +1116,29 @@ it starts and ends, and the text Claude Code writes between tool calls. The
 last text is the answer, which Hermes shows as usual. A run outside the
 gateway, such as a test, shows no progress.
 
+### Working mode
+
+Coder sessions follow the [pstack-mode](https://github.com/ramtoshiya/pstack-mode)
+session mode, as the operator does. The coder does not get the operator's own
+rules, such as handing implementation to workers. Hermes's system prompt never
+reaches Claude Code, so the plugin delivers the mode in the Claude Code run:
+
+- The context file of each new coder session starts with a "Working mode"
+  note. It tells Claude Code to read `mode.md` and `HOSTS.md` under
+  `claude_code_runtime.pstack_root` before work and after compaction, and that
+  the Claude Code rules in `HOSTS.md` apply to it. The note points at the
+  files instead of copying them, so edits to the checkout reach the next
+  session. A session keeps the context file from its first turn, so a session
+  that started before the setting existed has no note.
+- Every coding run carries a `UserPromptSubmit` hook that adds the
+  `[pstack-mode turn check]` line to the prompt. The line asks Claude Code to
+  check the principle index in `mode.md` against the turn, read the leaf of
+  each principle that fits, and name in the reply each principle that shaped
+  a decision. The review fork runs without it.
+
+Neither changes the fork's cached prefix: the fork passes the same context
+file, and a hook changes no part of the request prefix.
+
 ### Subagents
 
 Claude Code's Agent tool is off in coder sessions. When a coder session needs
@@ -1163,7 +1191,9 @@ shorter than that would lose the proposals, because facts about one checkout,
 such as a test command, are memory. When a parent coding turn ran
 `bb thread output` and its result holds `Learning proposals`, the plugin
 queues `/refine` on the parent's own bb thread with `bb thread tell --mode
-queue`. After the turn ends, Hermes runs a combined memory and skill review
+queue`. The message starts with `/refine [Automatic, sent by Hermes Coder
+after it read a child coder's answer]`, because bb shows it in the chat as a
+message from you. After the turn ends, Hermes runs a combined memory and skill review
 of the session. The plugin sends the message without `BB_THREAD_ID`, because
 bb puts a sender header before a message from another thread, and Hermes runs
 `/refine` only when the message starts with it.

@@ -48,12 +48,13 @@ CHILD = Profile("coder-child", learner=LEARNER)
 PROFILES = (LEARNER, CHILD)
 
 
-def config(profile: Profile) -> dict[str, str]:
+def config(profile: Profile, pstack_root: Path) -> dict[str, str]:
     # Hermes lists its direct Anthropic provider wherever a Claude Code login exists, and a model picked
     # there would bypass Claude Code.
     shared = {"model.provider": PROVIDER, "compression.enabled": "false",
               "model_catalog.excluded_providers": '["anthropic"]',
-              "claude_code_runtime.subagent_provider": BB_PROVIDER}
+              "claude_code_runtime.subagent_provider": BB_PROVIDER,
+              "claude_code_runtime.pstack_root": str(pstack_root)}
     if profile.learner is None:
         return shared
     return shared | {"auxiliary.background_review.enabled": "false",
@@ -122,7 +123,15 @@ def bb_catalog_agents() -> None:
     run(bb, "plugin", "config", "provider-acp", "set", "customAgents", json.dumps(custom))
 
 
-def install(profile: Profile, sources: dict[str, Path]) -> None:
+def pstack_root(checkout: Path) -> Path:
+    common = run("git", "-C", str(checkout), "rev-parse", "--path-format=absolute", "--git-common-dir")
+    root = Path(common.strip()).parent / "plugins/pstack-mode"
+    if not (root / "mode.md").is_file():
+        sys.exit(f"hermes-coder: {root / 'mode.md'} not found. Pass --pstack <checkout>.")
+    return root
+
+
+def install(profile: Profile, sources: dict[str, Path], configs: dict[str, dict[str, str]]) -> None:
     if subprocess.run(["hermes", "profile", "show", profile.name], capture_output=True).returncode != 0:
         run("hermes", "profile", "create", profile.name, "--no-skills", "--no-credentials", "--no-alias")
     if not profile.home.is_dir():
@@ -135,7 +144,7 @@ def install(profile: Profile, sources: dict[str, Path]) -> None:
     first_use_of_provider = current.returncode != 0 or json.loads(current.stdout or "null") != PROVIDER
     if first_use_of_provider:
         run("hermes", "-p", profile.name, "config", "set", "model.default", DEFAULT_MODEL)
-    for key, value in config(profile).items():
+    for key, value in configs[profile.name].items():
         run("hermes", "-p", profile.name, "config", "set", key, value)
     for name in PLUGINS:
         run("hermes", "-p", profile.name, "plugins", "enable", name, "--no-allow-tool-override")
@@ -150,6 +159,8 @@ def install(profile: Profile, sources: dict[str, Path]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--pstack", default="~/workspaces/pstack-mode",
+                        help="pstack-mode checkout whose mode.md every coding run follows")
     parser.add_argument("--check", action="store_true",
                         help="exit 1 unless the installed profiles match their sources, and change nothing")
     options = parser.parse_args()
@@ -158,7 +169,8 @@ def main() -> None:
         sys.exit("hermes-coder: the hermes command is not on PATH. Install Hermes Agent first.")
     checkout = HERE.parent.parent
     sources = {PROVIDER: HERE / "plugins" / PROVIDER, **{name: HERE / "plugins" / name for name in PLUGINS}}
-    configs = {profile.name: config(profile) for profile in PROFILES}
+    root = pstack_root(Path(options.pstack).expanduser())
+    configs = {profile.name: config(profile, root) for profile in PROFILES}
     wanted = fingerprint(sources, {"installer": Path(__file__).read_bytes(), "launcher": (HERE / LAUNCHER).read_bytes(),
                                    "config": json.dumps(configs)})
     stamp = level.state_dir() / STAMP
@@ -180,7 +192,7 @@ def main() -> None:
     if warning:
         print(f"hermes-coder: {warning}", file=sys.stderr)
     for profile in PROFILES:
-        install(profile, sources)
+        install(profile, sources, configs)
     install_launcher()
     bb_catalog_agents()
     stamp.parent.mkdir(parents=True, exist_ok=True)
