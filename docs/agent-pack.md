@@ -4,9 +4,9 @@ This repository has two plugins. `ramtoshiya` works in Claude Code and Codex.
 `ramtoshiya-cc` works only in Claude Code. Both agents install them from the
 marketplace file `.claude-plugin/marketplace.json`, which also lists the
 [third-party skills](upstream-skills.md).
-The Hermes operator profile gets copies of seven pstack-mode skills and of
-the skills from every other entry, as [Machine setup](setup.md) describes. It
-does not run the hooks.
+The Hermes operator profile runs in pstack mode and gets copies of seven
+pstack-mode skills and of the skills from every other entry, as
+[Machine setup](setup.md) describes. It does not run the hooks.
 
 ## What the plugins contain
 

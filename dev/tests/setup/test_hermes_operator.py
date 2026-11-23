@@ -709,7 +709,7 @@ class OperatorProfileSetupTests(unittest.TestCase):
                     "PATH": os.pathsep.join([str(bin_dir), str(Path(shutil.which("git")).parent), "/usr/bin", "/bin"])}
 
         self.pstack = self.tmp / "pstack"
-        commit_repo(self.pstack, {"plugins/pstack-mode/mode.md": "# Mode\n", **under(
+        commit_repo(self.pstack, {"plugins/pstack-mode/mode.md": "# Mode\n\nRoot is `{{PLUGIN_ROOT}}`.\n", **under(
             "plugins/pstack-mode/skills", {k: v for s in [*PSTACK_ALLOWED, "tdd"] for k, v in skill(s).items()})})
         grill_sha = self.pinned("fork/grill-skills", {**under("skills/productivity", {
             **skill("grilling"), **skill("caveman"), "grilling/references/rounds.md": "Rounds.\n"})})
@@ -771,7 +771,7 @@ class OperatorProfileSetupTests(unittest.TestCase):
             self.hermes("-p", profile, "sync")
 
     def expected(self):
-        return {"read-x", "self-compact", "claude-design-direct", "grilling", "operator-handoff", *PSTACK_ALLOWED, "korean-pack:korean"}
+        return {"read-x", "self-compact", "claude-design-direct", "grilling", "operator-handoff", "operator-mode", *PSTACK_ALLOWED, "korean-pack:korean"}
 
     def test_operator_knows_every_repository_skill_without_bundled_ones(self):
         self.setup_profile()
@@ -783,7 +783,7 @@ class OperatorProfileSetupTests(unittest.TestCase):
         self.assertTrue((skills["grilling"][0] / "references/rounds.md").is_file())
         self.assertTrue((self.operator / "plugins/korean-pack/scripts/check.py").is_file())
         settings = config(self.operator)
-        self.assertEqual(settings["skills.auto_load"], ["operator-handoff"])
+        self.assertEqual(settings["skills.auto_load"], ["operator-mode", "operator-handoff"])
         self.assertEqual(settings["agent.disabled_toolsets"], ["file", "code_execution", "delegation"])
         self.assertFalse(settings["memory.write_approval"])
         self.assertEqual(settings["compression.threshold_tokens"], 300000)
@@ -794,6 +794,16 @@ class OperatorProfileSetupTests(unittest.TestCase):
         self.assertIn(CC_DESCRIPTION, handoff)
         self.assertIn("`self-compact`", handoff)
         self.assertIn("`korean-pack:korean`", handoff)
+
+    def test_operator_session_runs_in_the_pstack_checkouts_mode(self):
+        self.setup_profile()
+        self.start_hermes()
+
+        root = self.pstack / "plugins/pstack-mode"
+        installed = (runtime_skills(self.operator)["operator-mode"][0] / "SKILL.md").read_text()
+        self.assertIn(f"# Mode\n\nRoot is `{root}`.\n", installed)
+        self.assertIn(f"`{root}/HOSTS.md`", installed)
+        self.assertNotIn("{{", installed)
 
     def test_installed_handoff_archives_finished_children(self):
         self.setup_profile()

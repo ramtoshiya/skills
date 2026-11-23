@@ -27,7 +27,7 @@ PSTACK_PLUGIN = "pstack-mode"
 PSTACK_SKILLS = ("in-your-own-words", "why", "how", "interrogate", "statechart",
                  "technical-writing", "unslop")
 PSTACK_SKILL_DIR = "plugins/pstack-mode/skills"
-LOCAL_SKILLS = ("operator-handoff",)
+LOCAL_SKILLS = ("operator-handoff", "operator-mode")
 PLUGINS = ("skill-drafts", "bb-thread-env", "bb-title-input", "self-compact")
 RESEARCH_PROJECT = "proj_personal"
 # Hermes seeds these into every home, opted out or not, until the home's .bundled_manifest tracks
@@ -45,7 +45,7 @@ SOUL_BEGIN = "<!-- BEGIN ramtoshiya:operator -->"
 SOUL_END = "<!-- END ramtoshiya:operator -->"
 CONFIG = {
     "agent.disabled_toolsets": '["file", "code_execution", "delegation"]',
-    "skills.auto_load": '["operator-handoff"]',
+    "skills.auto_load": '["operator-mode", "operator-handoff"]',
     "skills.project_discovery": "true",
     "curator.enabled": "false",
     "memory.write_approval": "false",
@@ -343,7 +343,9 @@ def main() -> None:
     default_home = Path.home() / ".hermes"
     home = default_home / "profiles" / profile
     sources_json = home / "plugins" / "skill-drafts" / "sources.json"
-    values = {"MODE_MD": str(mode_md), "SOURCES_JSON": str(sources_json), "SKILLS_REPO": str(shared),
+    mode = mode_md.read_text(encoding="utf-8").replace("{{PLUGIN_ROOT}}", str(mode_md.parent))
+    values = {"MODE_MD": str(mode_md), "MODE": mode, "PSTACK_ROOT": str(mode_md.parent),
+              "SOURCES_JSON": str(sources_json), "SKILLS_REPO": str(shared),
               "RESEARCH_PROJECT": RESEARCH_PROJECT,
               "SKILL_PLUGINS": plugin_list(descriptions, {**skills, **pstack_skills, **registered})}
 

@@ -605,8 +605,9 @@ It needs:
 - Hermes Agent with its `hermes` command on `PATH`.
 - A Git checkout that contains `plugins/pstack-mode/mode.md` and
   `plugins/pstack-mode/skills/`, at `~/workspaces/pstack-mode` by default. Pass
-  another path with `mise run hermes:operator -- --pstack <path>`. Workers read
-  its `mode.md`, and the profile gets seven of its skills.
+  another path with `mise run hermes:operator -- --pstack <path>`. The
+  operator and its workers follow its `mode.md`, and the profile gets seven of
+  its skills.
 - The third-party sources at their pinned commits, which
   `mise run agents:sync` fetches. The task stops and says so when one is
   missing.
@@ -636,7 +637,7 @@ Then it changes these files under `~/.hermes/profiles/operator/`:
 | Target | Change |
 | --- | --- |
 | `SOUL.md` | A block from `setup/hermes/soul-operator.md` between `<!-- BEGIN ramtoshiya:operator -->` and `<!-- END ramtoshiya:operator -->`, after the Hermes default text. The shared preferences block next to it comes from `mise run agents:settings:sync`, described below |
-| `skills/<skill>/` | A copy of the files Git tracks in each skill, and of `setup/hermes/skills/operator-handoff` with this machine's paths and the list of plugins filled in. The task replaces these folders on every run |
+| `skills/<skill>/` | A copy of the files Git tracks in each skill, and of the two skills in `setup/hermes/skills/` with this machine's paths filled in. `operator-handoff` also gets the list of plugins, and `operator-mode` gets the full text of the pstack checkout's `mode.md`. The task replaces these folders on every run |
 | `skills/` | Hermes's bundled skills deleted. Other skills stay |
 | `plugins/<entry>/` | The files Git tracks in each marketplace entry that is a native Hermes plugin |
 | `plugins/skill-drafts/` | A copy of `setup/hermes/plugins/skill-drafts` and a `sources.json` that maps each skill to the checkout and, for a third-party skill, the fork and commit it came from. The plugin keeps its evidence packets and proposal record in the profile's `skill-drafts/` folder, which a reinstall leaves alone |
@@ -648,7 +649,7 @@ Then it changes these files under `~/.hermes/profiles/operator/`:
 | Setting | Value | Effect |
 | --- | --- | --- |
 | `agent.disabled_toolsets` | `["file", "code_execution", "delegation"]` | No file reading or writing tools, no code execution, and no `delegate_task` subagents, which bb cannot show. The operator starts every worker as a bb thread instead. The terminal stays on for `bb` |
-| `skills.auto_load` | `["operator-handoff"]` | The handoff procedure is in every session. Rarer cases, such as held drafts and replay experiments, are in the skill's `references/` files, which the operator opens with `skill_view` when the skill points to them |
+| `skills.auto_load` | `["operator-mode", "operator-handoff"]` | Every session runs in pstack mode, as a Claude Code session does after `/pstack-mode:mode`, limited to the operator role that pstack-mode's `HOSTS.md` describes. The handoff procedure is in every session too. Rarer cases, such as held drafts and replay experiments, are in the skill's `references/` files, which the operator opens with `skill_view` when the skill points to them |
 | `skills.project_discovery` | `true` | Project skills load only from trusted repositories |
 | `skills.external_dirs` | The `.hermes/skills` and `.agents/skills` folders of each repository in `skills.trusted_project_dirs` | Every operator session loads the trusted repositories' current skills, also in a bb worktree. Hermes alone loads them only when the session's nearest `.git` is the trusted checkout itself, and a worktree's branch can hold an older copy. After `hermes -p operator skills trust <path>` or `untrust`, run the task again |
 | `curator.enabled` | `false` | Hermes does not archive or merge skills on its own |
