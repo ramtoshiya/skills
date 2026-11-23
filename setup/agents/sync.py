@@ -81,10 +81,9 @@ class CodexAppServer:
             return message["result"]
         raise Conflict(f"codex app-server exited during {method}")
 
-    def untrusted_hooks(self, plugin_id, cwd):
+    def plugin_hooks(self, plugin_id, cwd):
         data = self.call("hooks/list", {"cwds": [str(cwd)]})["data"]
-        return [hook for entry in data for hook in entry["hooks"]
-                if hook.get("pluginId") == plugin_id and hook["trustStatus"] in {"untrusted", "modified"}]
+        return [hook for entry in data for hook in entry["hooks"] if hook.get("pluginId") == plugin_id]
 
     def trust(self, hooks):
         approvals = {hook["key"]: {"trusted_hash": hook["currentHash"]} for hook in hooks}
@@ -706,13 +705,18 @@ class Sync:
         return "updated" if changed else "ok", "restart the agent" if changed else package.ref[:12]
 
     def codex_hooks_left_untrusted(self, host, selector, path, approve):
-        if host != "codex" or not (path / "hooks").is_dir():
+        declared = read_json(path / "hooks/hooks.json", {}).get("hooks") if host == "codex" else None
+        if not declared:
             return []
         with CodexAppServer() as server:
-            untrusted = server.untrusted_hooks(selector, self.root)
+            hooks = server.plugin_hooks(selector, self.root)
+            if not hooks:
+                raise Conflict(f"Codex lists none of the hooks in {path / 'hooks/hooks.json'}")
+            untrusted = [hook for hook in hooks if hook["trustStatus"] in {"untrusted", "modified"}]
             if untrusted and approve:
                 server.trust(untrusted)
-                untrusted = server.untrusted_hooks(selector, self.root)
+                untrusted = [hook for hook in server.plugin_hooks(selector, self.root)
+                             if hook["trustStatus"] in {"untrusted", "modified"}]
             return [hook["key"] for hook in untrusted]
 
     def retire(self, host, names, apply, selected=None):

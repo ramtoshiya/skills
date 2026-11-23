@@ -308,8 +308,8 @@ class AgentSyncTests(unittest.TestCase):
             "    result = {}\n"
             "    if message['method'] == 'hooks/list':\n"
             "        status = 'trusted' if trusted.get(key) == current else ('modified' if key in trusted else 'untrusted')\n"
-            "        result = {'data': [{'cwd': '/', 'errors': [], 'warnings': [], 'hooks': [\n"
-            "            {'key': key, 'pluginId': 'example@example', 'currentHash': current, 'trustStatus': status}]}]}\n"
+            "        hooks = [{'key': key, 'pluginId': 'example@example', 'currentHash': current, 'trustStatus': status}]\n"
+            "        result = {'data': [{'cwd': '/', 'errors': [], 'warnings': [], 'hooks': hooks if current else []}]}\n"
             "    elif message['method'] == 'config/batchWrite':\n"
             "        for edit in message['params']['edits']:\n"
             "            trusted.update({k: v['trusted_hash'] for k, v in edit['value'].items()})\n"
@@ -320,7 +320,8 @@ class AgentSyncTests(unittest.TestCase):
 
     def test_codex_sync_trusts_the_hooks_it_installs_and_status_reports_untrusted_hooks(self):
         (self.upstream / "plugins/example/hooks").mkdir()
-        (self.upstream / "plugins/example/hooks/hooks.json").write_text('{"hooks": {}}\n')
+        (self.upstream / "plugins/example/hooks/hooks.json").write_text(
+            '{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "true"}]}]}}\n')
         revision = commit(self.upstream, "Add hooks")
         source = self.install_source(revision)
         self.entry["source"]["sha"] = revision
@@ -340,6 +341,11 @@ class AgentSyncTests(unittest.TestCase):
         _, rows = self.execute(True, "codex")
         self.assertEqual(rows[0]["status"], "ok")
         self.assertEqual(sync.read_json(self.home / "trust.json"), {key: "sha256:a/sha256:c"})
+
+        self.fake_cli("codex", {"app-server": self.fake_app_server("")})
+        _, rows = self.execute(False, "codex")
+        self.assertEqual(rows[0]["status"], "conflict")
+        self.assertIn("Codex lists none of the hooks in", rows[0]["detail"])
 
     def test_generated_codex_manifest_cannot_add_unapproved_capabilities(self):
         manifest = self.cache("codex") / ".codex-plugin/plugin.json"
