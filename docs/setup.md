@@ -285,12 +285,27 @@ Git:
 | Target | Change |
 | --- | --- |
 | `~/.config/git/shared.gitconfig` | Copy of `setup/git/shared.gitconfig`: aliases, diff, merge, fetch, push, pull, and rebase preferences, `rerere`, and `core.excludesfile = ~/.gitignore` |
+| `~/.config/git/undo-notice.py` | Copy of `setup/git/undo-notice.py`, the undo notice below |
 | `~/.gitconfig` | A block that includes `shared.gitconfig` |
 | `~/.gitignore` | The lines `.DS_Store` and `**/.claude/settings.local.json` |
 
 `shared.gitconfig` turns on `core.fsmonitor` and `core.untrackedCache`. Check
 that your file system supports them with `git update-index --test-untracked-cache`
 before you keep them.
+
+`shared.gitconfig` also adds a post-commit hook named `undo-notice` through
+Git's `hook.<name>` configuration, which Git 2.56 runs and older Git ignores. Git runs it
+in every repository, before the repository's own post-commit hook, including
+repositories that set `core.hooksPath`. After each commit it compares the
+commit with the last seven days of commits to the same files. When the new
+commit removes lines an earlier commit added and brings back lines that commit
+removed, it prints the earlier commit and tells the committer to read it before
+switching it back. Commits less than two hours older than the new one are
+skipped, because those are usually the same session correcting its own work.
+The notice never fails the commit. Agents in separate sessions see it in their
+`git commit` output, so a decision one session made is not silently reversed
+by the next. Turn it off in one repository with
+`git config hook.undo-notice.enabled false`.
 
 Agents:
 

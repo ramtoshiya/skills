@@ -49,3 +49,6 @@
     untrackedCache = true
 [advice]
     skippedCherryPicks = false
+[hook "undo-notice"]
+    command = uv run --quiet --no-project --managed-python --python '>=3.11' python \"$HOME/.config/git/undo-notice.py\"
+    event = post-commit

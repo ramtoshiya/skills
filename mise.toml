@@ -37,6 +37,7 @@ zsh = true
 "~/.config/mise/config.toml/release-age" = { source = "setup/packages/mise-settings.toml", merge = true }
 
 "~/.config/git/shared.gitconfig" = { source = "setup/git/shared.gitconfig", mode = "copy" }
+"~/.config/git/undo-notice.py" = { source = "setup/git/undo-notice.py", mode = "copy" }
 "~/.gitconfig/shared" = { block = '''
 [include]
     path = ~/.config/git/shared.gitconfig
