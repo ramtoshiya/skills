@@ -61,7 +61,7 @@ behavior.
 The worker sees only the brief. Write it in English with these parts in order:
 
 1. This opening line, verbatim:
-   `Read {{MODE_MD}} and follow it for this task.`
+   `Read {{PSTACK_ROOT}}/mode.md and {{PSTACK_ROOT}}/HOSTS.md before work. Follow this mode for your assigned role.`
 2. Goal: the outcome the user wants, in one or two sentences.
 3. Context: what the user said, quoted where wording matters, what you know,
    and the files, threads, or links involved.

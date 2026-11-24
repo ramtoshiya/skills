@@ -395,12 +395,14 @@ PROPOSALS = Proposals(STATE, SOURCES)
 
 def analyst_brief(sources: dict[str, Any], turn: Turn, packet: Path, parent: str | None) -> str:
     handoff = Path(sources["skillsDir"]) / "operator-handoff" / "SKILL.md"
+    mode_path = Path(sources["modePath"])
     parenting = (f"Right after creating the draft, make it a child of the operator thread: "
                  f"`bb thread update <draftId> --parent-thread {parent}`. Never make it a child of your own "
                  f"thread, because archiving you would archive it." if parent else
                  "No operator thread was found, so leave the draft top-level and say so in your final message.")
     return "\n".join([
-        f"Read {sources['modePath']} and follow it for this task.",
+        f"Read {mode_path} and {mode_path.with_name('HOSTS.md')} before work. "
+        "Follow this mode for your assigned role.",
         "",
         "## Goal",
         "",

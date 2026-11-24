@@ -194,7 +194,8 @@ class SkillDraftsHookTests(unittest.TestCase):
         self.assertEqual(option(args, "--reasoning-level"), "high")
         self.assertIn("Skill proposal: fresh, unslop", option(args, "--title"))
         brief = spawn["stdin"]
-        self.assertTrue(brief.startswith("Read /pstack/mode.md and follow it"))
+        self.assertTrue(brief.startswith(
+            "Read /pstack/mode.md and /pstack/HOSTS.md before work. Follow this mode for your assigned role."))
         self.assertIn("--parent-thread thr_op", brief)
         self.assertIn("`bb plugin config held-drafts --json`", brief)
         evidence = self.evidence()
@@ -800,6 +801,15 @@ class OperatorProfileSetupTests(unittest.TestCase):
         self.assertIn(f"# Mode\n\nRoot is `{root}`.\n", installed)
         self.assertIn(f"`{root}/HOSTS.md`", installed)
         self.assertNotIn("{{", installed)
+
+    def test_installed_handoff_brief_opening_names_mode_and_hosts(self):
+        self.setup_profile()
+
+        root = self.pstack / "plugins/pstack-mode"
+        installed = (runtime_skills(self.operator)["operator-handoff"][0] / "SKILL.md").read_text()
+        self.assertIn(
+            f"`Read {root}/mode.md and {root}/HOSTS.md before work. "
+            "Follow this mode for your assigned role.`", installed)
 
     def test_installed_pstack_hook_reminds_each_turn(self):
         self.setup_profile()

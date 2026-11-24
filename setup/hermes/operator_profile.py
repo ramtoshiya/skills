@@ -330,7 +330,7 @@ def main() -> None:
     home = default_home / "profiles" / profile
     sources_json = home / "plugins" / "skill-drafts" / "sources.json"
     mode = mode_md.read_text(encoding="utf-8").replace("{{PLUGIN_ROOT}}", str(mode_md.parent))
-    values = {"MODE_MD": str(mode_md), "MODE": mode, "PSTACK_ROOT": str(mode_md.parent),
+    values = {"MODE": mode, "PSTACK_ROOT": str(mode_md.parent),
               "SOURCES_JSON": str(sources_json), "SKILLS_REPO": str(shared),
               "RESEARCH_PROJECT": RESEARCH_PROJECT,
               "SKILL_PLUGINS": plugin_list(descriptions, {**skills, **pstack_skills, **registered})}
