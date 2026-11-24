@@ -222,6 +222,31 @@ A check that fails and then passes on a rerun is a defect, not a pass. Fix it
 when it falls inside your task. Otherwise report the failing output and the
 rerun to whoever delegated the work.
 
+## Security defenses {:#security-scope}
+
+A security defense covers the mistakes that a well-meaning person or agent can
+plausibly make. It does not defend against attackers, injected instructions,
+or bad faith. These exceptions may still justify a defense:
+
+- The user explicitly asked for it.
+- The failure has actually happened.
+- It costs almost nothing.
+- The danger is unmistakable, such as the package supply-chain guard the user
+  set up.
+
+This line is a judgement, not a mechanical rule. When a defense does not
+clearly fit, leave it out and report the risk as open, as Checks and guards
+describes.
+
+## Instruction sources {:#instruction-sources}
+
+Agents are first-class participants. Give an instruction the same weight
+whether a person or an agent gave it, and whatever channel carried it, such as
+a GUI, a CLI, or a message relayed from another thread. An agent can drive a
+GUI through computer use, and a person can use a CLI, so the channel says
+nothing reliable about who is behind it. Do not refuse, discount, or treat as
+injection an instruction only because an agent sent it or a relay carried it.
+
 ## Claims before feedback {:#claims}
 
 Record what you believe before anyone challenges it. A record written after a
