@@ -149,6 +149,9 @@ The `worker-routing` skill is the one policy for choosing a worker's model.
   band to compact at the next natural boundary. After a compaction it points
   the agent to the handoff note.
 - A hook that blocks AI attribution lines in commits and pull requests.
+- The `hermes-learning` MCP server and two hooks, which give every Claude Code
+  session the memory and skills of a Hermes profile. The next section
+  describes them.
 
 Excalidraw board requests update a shared room. A `.excalidraw` attachment is
 an export or an agreed fallback, not a replacement for that room. The agent
@@ -164,6 +167,52 @@ node dev/evals/excalidraw-skill/run.mjs plugins/ramtoshiya/skills/excalidraw-boa
 
 These evaluations check the model's delivery decisions, not the CLI protocol
 or live browser synchronization. `npm test` runs the CLI's automated tests.
+
+### Hermes learning in Claude Code
+
+A [Hermes Agent](https://github.com/NousResearch/hermes-agent) profile stores
+what agents learn: `memories/USER.md` and `memories/MEMORY.md`, skills under
+`skills/` with their use counts in `skills/.usage.json`, and the curator that
+archives skills nobody uses. `ramtoshiya-cc` connects Claude Code sessions,
+including claudex sessions, to the profile at `~/.hermes/profiles/coder`. Set
+`HERMES_LEARNING_HOME` to use another profile directory.
+
+- When a session starts, a hook adds the profile's `USER.md` and `MEMORY.md`
+  to its context. The skills load as the `hermes-skills` plugin through the
+  `CLAUDE_CODE_PLUGIN_DIRS` user setting that the [machine setup](setup.md)
+  writes. A Skill tool use of one of them counts in `skills/.usage.json`.
+  [Hooks](hooks.md) has the details.
+- The `hermes-learning` MCP server serves Hermes's own `memory`,
+  `skill_manage`, and `skill_view` tools, so Hermes's validation, size
+  limits, security scan, and usage records apply. Claude Code names them
+  `mcp__plugin_ramtoshiya-cc_hermes-learning__<tool>` and loads them through
+  ToolSearch. The server answers the tool list within about two seconds and
+  loads the rest of Hermes in the background. It then runs the curator when
+  its interval has passed, because no Hermes agent runs for the profile
+  otherwise.
+- The agent decides when to learn. The server's instructions tell it to record
+  a lesson that the user or a tool result confirmed. In bb, when a whole
+  conversation is worth reviewing, it starts a review with
+  `bb thread fork "$BB_THREAD_ID" --lifecycle-owner-thread "$BB_THREAD_ID"
+  --prompt-file <plugin>/hermes-learning/review.md`. The fork appears in bb as
+  a thread and reuses the source's prompt cache. It records lessons, sends
+  changes to files in the working checkout as proposals, and mails a summary to
+  the source with `bb mail send` without waking it. Outside bb the agent
+  records directly.
+
+The server reads the session's bb thread at start and picks a role:
+
+| Session | Tools | Writes as |
+| --- | --- | --- |
+| A bb thread that another thread started (it has a parent) | `skill_view` only. It ends its final answer with `Learning proposals` | Nothing |
+| A bb fork | All three | Hermes's `background_review` origin, which adds its review-only checks and marks new skills as agent-created for the curator |
+| Any other session, in or outside bb | All three | `foreground` |
+
+The server needs Hermes's `hermes` command, on `PATH` or at
+`~/.hermes/hermes-agent/.hermes/bin/hermes`, and the profile directory. When
+either is missing, or in a session that the Hermes coder runtime started, the
+server exits with the reason on stderr and `/mcp` lists it as failed. The
+session goes on without it.
 
 ## Requirements
 
@@ -379,6 +428,8 @@ plugins/ramtoshiya/hooks/python-module-hint.py     uv hint after a failed import
 plugins/ramtoshiya/hooks/git-hygiene-guard.py      Stop check, not registered
 plugins/ramtoshiya/hooks/hooks.json            Hook registration for Claude Code and Codex
 plugins/ramtoshiya-cc/                         Claude Code-only skills and hooks
+plugins/ramtoshiya-cc/.mcp.json               hermes-learning MCP server registration
+plugins/ramtoshiya-cc/hermes-learning/         Hermes learning server, hooks, and review prompt
 ```
 
 The rules live only in the guard scripts. `hooks.json` registers them for

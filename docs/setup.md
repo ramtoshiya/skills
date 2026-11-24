@@ -409,6 +409,12 @@ covered.
 - `CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL=1` stops Claude Code
   from registering the official marketplace on its own. It does not remove a
   marketplace that is already registered.
+- `CLAUDE_CODE_PLUGIN_DIRS` names `~/.hermes/profiles/coder/claude-skills-plugin`,
+  so every session loads the skills of the Hermes coder profile as the
+  `hermes-skills` plugin. The `ramtoshiya-cc` hook keeps that folder in step
+  with the profile, as [Agent plugins](agent-pack.md) describes. Claude Code
+  skips the folder when it does not exist. It reads this variable from user
+  settings and the environment, not from a project's settings.
 - `permissions.deny` includes `AskUserQuestion`, `EnterPlanMode`, and
   `SendFeedback` in every registered Claude profile. Necessary questions stay
   in ordinary chat, where the user's reply can serve as a fork or rewind

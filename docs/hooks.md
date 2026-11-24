@@ -1,7 +1,7 @@
 # Hooks
 
-The plugins add four hooks. Two come with `ramtoshiya` and run in Claude
-Code and Codex. Two come with `ramtoshiya-cc` and run only in
+The plugins add six hooks. Two come with `ramtoshiya` and run in Claude
+Code and Codex. Four come with `ramtoshiya-cc` and run only in
 Claude Code. The `ramtoshiya` plugin also ships a Git hygiene check that is not
 registered, so no agent runs it.
 
@@ -11,6 +11,8 @@ registered, so no agent runs it.
 | Python module hint | After each shell command | `ramtoshiya` |
 | Commit attribution guard | Before each shell command | `ramtoshiya-cc` |
 | Context budget | After each tool call, on each prompt, and after a compaction | `ramtoshiya-cc` |
+| Hermes memory snapshot | When a session starts, is cleared, or compacts | `ramtoshiya-cc` |
+| Hermes skill usage | After each Skill tool call | `ramtoshiya-cc` |
 
 Each hook is a Python script that uses only the standard library. Claude Code
 and Codex run it through `hooks/hooks.json`. Every hook runs as:
@@ -261,9 +263,34 @@ Limits:
   `~/.local/state/ramtoshiya/context-budget.json`, for the newest 100 sessions.
 - On any error the hook adds nothing.
 
+## Hermes learning hooks
+
+`plugins/ramtoshiya-cc/hermes-learning/hook.py` serves the Hermes learning
+store that [Agent plugins](agent-pack.md) describes. The store is
+`~/.hermes/profiles/coder`, or the directory in `HERMES_LEARNING_HOME`.
+
+- When a session starts, is cleared, or compacts, the hook links each learned
+  skill of the store into `claude-skills-plugin/skills/` inside the store and
+  removes stale links. Hermes's bundled skills and hidden folders such as
+  `.archive` are left out. It then adds the store's `USER.md` and `MEMORY.md`
+  to the session context. A resumed or forked session already has them in its
+  conversation, so it gets nothing.
+- After a Skill tool call whose skill is `hermes-skills:<folder>`, the hook
+  runs Hermes's `bump_view` and `bump_use` from `tools/skill_usage.py` under
+  the Hermes interpreter, the same pair Hermes's `skill_view` records. The
+  record key is the skill's frontmatter `name`, which can differ from its
+  folder name. This takes about two seconds.
+
+Both hooks do nothing in a session that the Hermes coder runtime starts, which
+injects memory and records learning itself. They recognize it by the
+`_HERMES_GATEWAY=1` variable that every process under a Hermes gateway
+inherits. The session start hook is also silent when the store does not exist.
+The usage hook finds the Hermes interpreter with `hermes
+--print-runtime-command` and reports a missing Hermes as a system message.
+
 ## Tests
 
 `dev/tests/plugins/test_global_package_guard.py`, `dev/tests/plugins/test_python_module_hint.py`,
 `dev/tests/plugins/test_git_hygiene_guard.py`,
-`dev/tests/plugins/test_commit_trailer_guard.py`, and `dev/tests/plugins/test_context_budget.py`
-cover the rules. Run them with `npm test`.
+`dev/tests/plugins/test_commit_trailer_guard.py`, `dev/tests/plugins/test_context_budget.py`, and
+`dev/tests/plugins/test_hermes_learning.py` cover the rules. Run them with `npm test`.
