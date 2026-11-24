@@ -1,12 +1,12 @@
-# Tweaks — declaring the props an artboard exposes as controls
+# Tweaks: declaring the props an artboard exposes as controls
 
 Read this when a task asks you to add, change or remove a Tweaks control. `SKILL.md` covers what the
-panel is and where its schema lives; this file covers the vocabulary and the traps.
+panel is and where its schema lives. This file covers the vocabulary and the traps.
 
 ## The schema
 
 One JSON object in the `data-props` attribute on the `<script data-dc-script>` tag. Each key is a
-prop the artboard reads; each value describes the editor to render for it.
+prop the artboard reads, and each value describes the editor to render for it.
 
 ```json
 "timeFormat": {"editor":"enum","options":["relative","absolute"],
@@ -25,8 +25,8 @@ Declare a prop, read it in `renderVals()`, and the control appears.
 
 - The attribute is HTML-escaped in the file (`&quot;`). Match that when you patch it.
 - For `color`, a 3–4 item list of hex strings, or 2–5-hex palette arrays, renders curated swatches.
-- `$preview: {"width","height"}` sets the preview size for sized fragments such as cards and modals;
-  omit it for full pages. Keys beginning with `$` are meta and are stripped from `props` — see
+- `$preview: {"width","height"}` sets the preview size for sized fragments such as cards and modals.
+  Omit it for full pages. Keys beginning with `$` are meta and are stripped from `props`. See
   `parseDataProps` in the project's `support.js`.
 - **`default` seeds the editor, not the runtime.** Read every prop as `this.props.x ?? fallback`, or
   a standalone render gets `undefined`. The panel's **Save as defaults** button is what writes a
@@ -52,7 +52,7 @@ literals into a derived palette, which is design-token work that ports to a real
 The table above is a snapshot of an undocumented surface. When a value is rejected as a syntax
 error, refresh it from the bundle rather than guessing.
 
-**This is the one procedure in this skill that cannot run headless** — it needs an open canvas to
+**This is the one procedure in this skill that cannot run headless**, because it needs an open canvas to
 read the entry-bundle URL. Run the step 1 expression in the canvas page through any browser
 devtools console or browser-eval tool you have.
 
@@ -72,7 +72,7 @@ mkdir -p chunks && (cd chunks && xargs -P 12 -n 1 curl -sL -O < ../urls.txt)
 grep -l "tsType" chunks/*.js
 ```
 
-Chunk filenames do not describe their contents — the props documentation lived in one named
+Chunk filenames do not describe their contents. The props documentation lived in one named
 `desktop-auth-wait-*.js`. Search by string, never by filename. Good anchors: `tsType` and
 `Save as defaults`.
 

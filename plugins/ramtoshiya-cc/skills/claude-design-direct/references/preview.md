@@ -6,7 +6,7 @@ owns `hideRawTemplate()`, and a browser treats unknown `sc-for` / `sc-if` elemen
 inline wrappers whose children always render. Diagnose the absence before doubting the artboard, or
 you will "fix" a file that was already correct.
 
-`support.js` is that runtime. It is in no repo — pull it with `get_file` from the project that
+`support.js` is that runtime. It is in no repo, so pull it with `get_file` from the project that
 owns the artboard. That read follows the same two modes as any other, so if it comes back inline,
 write it to disk before you copy it anywhere. Then put both files in one directory and serve that
 directory over HTTP:
@@ -33,4 +33,4 @@ holding a token would not help.
 
 When the artboard has to be looked at, hand over the local render rather than the canvas. It is a
 normal top-level page, so devtools, `getComputedStyle` and element pickers all reach it, and none
-of those cross into the canvas iframe. Serving it is your job; opening it is not.
+of those cross into the canvas iframe. Serving it is your job and opening it is not.

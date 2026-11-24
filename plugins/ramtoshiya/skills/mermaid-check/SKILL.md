@@ -33,7 +33,7 @@ directions: don't ship what it rejects, and don't "fix" what it accepts.
    ```
 
    A `.md` / `.markdown` / `.mdx` path is checked block by block (```mermaid, ~~~mermaid, :::mermaid
-   fences); any other path is one diagram. Render output goes to a temp dir that is removed afterwards, so
+   fences). Any other path is one diagram. Render output goes to a temp dir that is removed afterwards, so
    nothing appears next to the source.
 3. Read the exit code. `0` with an `ok:` line: every diagram parsed. `1`: at least one failed and its parse
    error is printed. `2`: usage error, or a Markdown file with no mermaid block (check the fence spelling).
@@ -47,13 +47,13 @@ directions: don't ship what it rejects, and don't "fix" what it accepts.
 
 - **Command shape.** The script runs `npx --min-release-age=3 @mermaid-js/mermaid-cli@12.0.0 <mmdc args>`.
   Use it directly only when the script is unavailable, keeping the flag *before* the package name: after
-  it, `npx` forwards the flag to `mmdc`, which exits 1 with `unknown option`. `-i -` reads stdin;
+  it, `npx` forwards the flag to `mmdc`, which exits 1 with `unknown option`. `-i -` reads stdin.
   `-o - -e svg` writes to stdout and needs the explicit format. Exit `0` = parsed, `1` = parse error.
   Bare `npx @mermaid-js/mermaid-cli` and `npx -p ... mmdc` are denied by the package guard hook, which requires an exact version for one-shot packages.
 - **Why block by block.** `mmdc -i doc.md -o out.md` renders every block in one browser launch but stops
-  at the first block that fails and does not say which one; it also extracts only ``` and ::: fences, so a
+  at the first block that fails and does not say which one. It also extracts only ``` and ::: fences, so a
   ~~~mermaid block would pass unchecked. The script runs that fast pass first when the file has no ~~~
-  fence; when the pass fails, or the file has one, it checks each extracted block alone, so every broken
+  fence. When the pass fails, or the file has one, it checks each extracted block alone, so every broken
   block is reported with its file line.
 - **Cost and first run.** Each `mmdc` call launches headless Chromium, about 6 s once cached: one call for a
   clean Markdown file, one per block when something fails or a ~~~ fence is used. The very first call on a
@@ -61,6 +61,6 @@ directions: don't ship what it rejects, and don't "fix" what it accepts.
   the check dies with neither a parse error nor an `ok:` line, re-run with a longer timeout rather than
   concluding the diagram is broken.
 - **Looks wrong, is valid.** A flowchart edge label continued on the next line (`A -- oops` then
-  `B --> C`) is a multi-line label; `B-->` at line end followed by `C-->D` is the chain `B --> C --> D`.
-  Syntax is all the parser judges; layout and whether the diagram matches the surrounding text are still
+  `B --> C`) is a multi-line label, while `B-->` at line end followed by `C-->D` is the chain `B --> C --> D`.
+  Syntax is all the parser judges. Layout and whether the diagram matches the surrounding text are still
   yours to check.
