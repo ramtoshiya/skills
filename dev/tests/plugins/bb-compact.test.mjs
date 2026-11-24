@@ -1,6 +1,6 @@
-import test from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -107,7 +107,10 @@ async function setup(t, changes = {}) {
   await writeFile(join(dir, 'state.json'), JSON.stringify({ phase: 'prepare' }));
   const env = { ...process.env, PATH: `${dir}:${process.env.PATH}`, BB_THREAD_ID: thread, BB_FAKE_DIR: dir };
   delete env.BB_CLI;
-  const invoke = (...args) => spawnSync(process.execPath, [script, ...args], { cwd: dir, env, encoding: 'utf8' });
+  const invoke = (...args) => new Promise(done => {
+    const child = execFile(process.execPath, [script, ...args], { cwd: dir, env, encoding: 'utf8' },
+      (error, stdout, stderr) => done({ status: child.exitCode, stdout, stderr }));
+  });
   const calls = async () => {
     try { return (await readFile(join(dir, 'calls.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse); }
     catch (error) { if (error.code === 'ENOENT') return []; throw error; }
@@ -115,7 +118,7 @@ async function setup(t, changes = {}) {
   const prepare = () => invoke('prepare', note);
   async function run(options = [], captured) {
     if (!captured) {
-      const result = prepare();
+      const result = await prepare();
       assert.equal(result.status, 0, result.stderr);
       captured = JSON.parse(result.stdout);
     }
@@ -125,9 +128,13 @@ async function setup(t, changes = {}) {
   return { dir, note, env, invoke, prepare, run, calls };
 }
 
+// Each case waits on the helper's poll interval, so the cases run concurrently in one suite below.
+const cases = [];
+const test = (name, fn) => cases.push([name, fn]);
+
 test('captures the active caller and waits for its completion before proof and resume', async t => {
   const fixture = await setup(t, { holdCaller: true });
-  const prepared = fixture.prepare();
+  const prepared = await fixture.prepare();
   assert.equal(prepared.status, 0, prepared.stderr);
   assert.deepEqual(JSON.parse(prepared.stdout), { launchSeq: 15, turnId: 'caller' });
   assert.equal((await fixture.calls()).filter(call => ['compact', 'tell'].includes(call.args[1])).length, 0);
@@ -153,7 +160,7 @@ const prepareCommand = event(16, 'item/started', 'caller', { item: {
 
 test('proves and resumes when every bb call is slow, as on a loaded machine', async t => {
   const fixture = await setup(t, { holdCaller: true, callDelayMs: 700 });
-  const prepared = fixture.prepare();
+  const prepared = await fixture.prepare();
   assert.equal(prepared.status, 0, prepared.stderr);
   const result = await fixture.run([], JSON.parse(prepared.stdout));
   assert.equal(result.status, 0, result.stderr);
@@ -193,7 +200,7 @@ for (const [name, requestSeq, acceptance] of [
     if (acceptance) events.before.push(acceptance);
     events.before.sort((left, right) => left.seq - right.seq);
     const fixture = await setup(t, events);
-    const result = fixture.prepare();
+    const result = await fixture.prepare();
     assert.equal(result.status, 1, result.stderr);
     assert.match(result.stderr, /New work or a different turn/);
     assert.equal(await readFile(fixture.note, 'utf8'), 'Continue the task.');
@@ -270,7 +277,7 @@ for (const [name, changes] of [
 ]) {
   test(`refuses preparation with ${name}`, async t => {
     const fixture = await setup(t, changes);
-    const result = fixture.prepare();
+    const result = await fixture.prepare();
     assert.notEqual(result.status, 0);
     assert.equal((await fixture.calls()).filter(call => ['compact', 'tell'].includes(call.args[1])).length, 0);
     assert.equal(await readFile(fixture.note, 'utf8'), 'Continue the task.');
@@ -298,7 +305,7 @@ for (const [name, changes] of [
 ]) {
   test(`refuses preparation with mail holding one message and ${name}`, async t => {
     const fixture = await setup(t, changes);
-    const result = fixture.prepare();
+    const result = await fixture.prepare();
     assert.notEqual(result.status, 0);
     assert.equal((await fixture.calls()).filter(call => ['compact', 'tell'].includes(call.args[1])).length, 0);
   });
@@ -323,23 +330,23 @@ for (const [name, changes] of [
 test('uses BB_CLI as an absolute executable and rejects an invalid selected path', async t => {
   const fixture = await setup(t);
   fixture.env.BB_CLI = join(fixture.dir, 'bb');
-  const prepared = fixture.prepare();
+  const prepared = await fixture.prepare();
   assert.equal(prepared.status, 0, prepared.stderr);
   fixture.env.BB_CLI = join(fixture.dir, 'missing');
-  const result = fixture.prepare();
+  const result = await fixture.prepare();
   assert.notEqual(result.status, 0);
 });
 
 test('rejects malformed command arguments before invoking BB', async t => {
   const fixture = await setup(t);
-  const result = fixture.invoke('prepare', 'relative.md');
+  const result = await fixture.invoke('prepare', 'relative.md');
   assert.notEqual(result.status, 0);
   assert.deepEqual(await fixture.calls(), []);
 });
 
 test('does not compact when the captured caller does not match the completed turn', async t => {
   const fixture = await setup(t);
-  const prepared = fixture.prepare();
+  const prepared = await fixture.prepare();
   assert.equal(prepared.status, 0, prepared.stderr);
   const result = await fixture.run([], { ...JSON.parse(prepared.stdout), turnId: 'other' });
   assert.notEqual(result.status, 0);
@@ -501,4 +508,8 @@ test('reports a Hermes failure before compaction without claiming a compaction',
   assert.equal(output.compacted, false);
   assert.equal(output.phase, 'waiting-caller');
   assert.equal(await fixture.compacts(), 0);
+});
+
+describe('bb-compact', { concurrency: true }, () => {
+  for (const [name, fn] of cases) it(name, fn);
 });
