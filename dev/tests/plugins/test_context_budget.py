@@ -84,7 +84,7 @@ class ContextBudgetTests(unittest.TestCase):
     def test_names_the_host_and_its_compaction_path(self):
         self.append(assistant(76000))
         for host, variables, expected in (
-            ("t3", {"T3CODE_THREAD_ID": "thread-9"}, "T3 Code, thread id thread-9"),
+            ("t3", {"T3CODE_THREAD_ID": "thread-9"}, "automatic compaction is the fallback"),
             ("bb", {"BB_THREAD_ID": "thr_test", "T3CODE_THREAD_ID": "stale"},
              "BB, thread id thr_test. Use the BB section"),
             ("paseo", {"PASEO_AGENT_ID": "agent-9", "T3CODE_THREAD_ID": "stale"},
@@ -93,7 +93,9 @@ class ContextBudgetTests(unittest.TestCase):
             with self.subTest(host=host):
                 text = self.run_hook(env={**self.env, **variables}, session_id=host)
                 self.assertIn(expected, text)
-                self.assertNotIn("automatic compaction is the fallback", text)
+                self.assertNotIn("T3 Code", text)
+                if host != "t3":
+                    self.assertNotIn("automatic compaction is the fallback", text)
 
     def test_project_settings_override_user_settings(self):
         self.write_settings(self.project / ".claude/settings.json", {"autoCompactWindow": 200000})

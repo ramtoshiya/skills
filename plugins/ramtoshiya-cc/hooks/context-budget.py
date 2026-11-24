@@ -137,9 +137,6 @@ def suggestion(payload):
     agent = os.environ.get("PASEO_AGENT_ID")
     if agent:
         return text + f" This session runs in Paseo, agent id {agent}. Use the Paseo section of the skill."
-    thread = os.environ.get("T3CODE_THREAD_ID")
-    if thread:
-        return text + f" This session runs in T3 Code, thread id {thread}."
     return text + " Without a supported host control, automatic compaction is the fallback."
 
 

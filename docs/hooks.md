@@ -1,7 +1,7 @@
 # Hooks
 
-The plugins add five hooks. Two come with `ramtoshiya` and run in Claude
-Code and Codex. Three come with `ramtoshiya-cc` and run only in
+The plugins add four hooks. Two come with `ramtoshiya` and run in Claude
+Code and Codex. Two come with `ramtoshiya-cc` and run only in
 Claude Code. The `ramtoshiya` plugin also ships a Git hygiene check that is not
 registered, so no agent runs it.
 
@@ -222,8 +222,7 @@ It compares that with the numeric `autoCompactWindow` setting, taken from the
 project's `.claude/settings.local.json`, then `.claude/settings.json`, then the
 user's `settings.json`. From 75% it adds a note to the agent's context that
 asks it to compact at the next natural boundary with the `self-compact` skill.
-The note names a handoff note path and, in T3 Code, the thread id from
-`T3CODE_THREAD_ID`. The path is `handoff.md` in the session's scratchpad
+The note names a handoff note path. The path is `handoff.md` in the session's scratchpad
 directory when Claude Code provides one. Otherwise it is
 `$XDG_STATE_HOME/ramtoshiya/handoff/<session id>.md`, or the same path under
 `~/.local/state`. It repeats once at each
@@ -231,7 +230,7 @@ further five points, at 80%, 85%, and so on, and starts over after a
 compaction. When Claude Code starts again after a compaction and the handoff
 note exists, the hook tells the agent to read it.
 
-The hook cannot start a compaction. It identifies BB, T3 Code, or Paseo from
+The hook cannot start a compaction. It identifies BB or Paseo from
 the host's thread or agent id and directs the agent to the matching skill
 instructions. In BB with Claude Code, a background helper waits for the turn
 to end, requests native compaction, and verifies the actual compaction boundary
