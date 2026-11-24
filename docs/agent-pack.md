@@ -138,6 +138,8 @@ The `worker-routing` skill is the one policy for choosing a worker's model.
 `ramtoshiya` hooks, described in [Hooks](hooks.md):
 
 - A package and Python guard that checks each shell command before it runs.
+- A commit attribution guard that blocks AI attribution lines in commits and
+  pull requests.
 - A Python module hint that points a failed import at `uv run --with` after a
   shell command.
 - A Git hygiene check for the moment the agent is about to stop. It ships
@@ -151,7 +153,6 @@ The `worker-routing` skill is the one policy for choosing a worker's model.
   numeric `autoCompactWindow` setting, it asks the agent once per five-point
   band to compact at the next natural boundary. After a compaction it points
   the agent to the handoff note.
-- A hook that blocks AI attribution lines in commits and pull requests.
 - The `hermes-learning` command and two hooks, which give every Claude Code
   session the memory and skills of a Hermes profile. The next section
   describes them.
@@ -239,7 +240,10 @@ the mode of the thread that started them.
 
 ## Requirements
 
-The hooks run with [uv](https://docs.astral.sh/uv/getting-started/installation/)
+The package guard and the commit attribution guard are a Go program that you
+build in a clone of this repository with [mise](https://mise.jdx.dev/getting-started.html),
+as Install describes. The other hooks run with
+[uv](https://docs.astral.sh/uv/getting-started/installation/)
 in offline mode, so a uv-managed Python 3.11 or newer must already be installed
 (`uv python install` installs one). Check it with the command the hooks use:
 
@@ -261,8 +265,9 @@ least three days. Set it for each package manager you use:
 A project's own config file can set them too. The
 [machine setup](setup.md) writes the npm, pnpm, and uv settings.
 
-The plugins have no third-party runtime dependencies. Tested with Claude Code
-2.1.301 and Codex CLI 0.162.1.
+The Go program compiles in two modules pinned to exact versions,
+`mvdan.cc/sh/v3` and `github.com/BurntSushi/toml`. The plugins have no other
+third-party dependencies. Tested with Claude Code 2.1.301 and Codex CLI 0.162.1.
 
 ## Install
 
@@ -270,20 +275,34 @@ Install the agents themselves from their own instructions:
 [Claude Code](https://code.claude.com/docs/en/setup) and
 [Codex CLI](https://github.com/openai/codex).
 
-Claude Code:
+Git does not track the hook binary, so install from a local clone where it is
+built. A marketplace added straight from GitHub has no binary, and its guard
+hooks fail on every shell command. Clone the repository and build the binary:
 
 ```sh
-claude plugin marketplace add ramtoshiya/skills
+git clone https://github.com/ramtoshiya/skills.git
+cd skills
+mise install --locked
+mise run hooks:build
+```
+
+Then, from the clone, for Claude Code:
+
+```sh
+claude plugin marketplace add "$PWD"
 claude plugin install ramtoshiya@ramtoshiya --scope user
 claude plugin install ramtoshiya-cc@ramtoshiya --scope user
 ```
 
-Codex:
+For Codex:
 
 ```sh
-codex plugin marketplace add ramtoshiya/skills
+codex plugin marketplace add "$PWD"
 codex plugin add ramtoshiya@ramtoshiya
 ```
+
+Claude Code loads the plugins from the clone, so edits apply after a reload.
+Codex installs a copy, binary included.
 
 Codex runs a plugin hook only after the hook is trusted. Installing or
 enabling the plugin does not trust it. `mise run agents:sync` trusts the hooks
@@ -291,10 +310,6 @@ of the plugins it installs, as Synchronize a local checkout describes below.
 After a manual install, trust the `ramtoshiya` `PreToolUse` and `PostToolUse` hooks in Codex's
 `/hooks`. Codex can see `ramtoshiya-cc` in the marketplace, but it does not
 work there, so do not install it.
-
-To install Claude Code or Codex from a local clone instead, use its path in
-place of `ramtoshiya/skills`. Claude Code then loads the plugin from the
-checkout, so edits apply after a reload.
 
 Restart the agent after installing, or run `/reload-plugins` in Claude Code.
 
@@ -415,16 +430,14 @@ marketplace repository as a new version.
 
 | Agent | Update command |
 | --- | --- |
-| Claude Code | `claude plugin marketplace update ramtoshiya`, then `claude plugin update ramtoshiya@ramtoshiya` (and `ramtoshiya-cc@ramtoshiya`) and a restart |
+| Claude Code | Update the clone, run `mise run hooks:build`, and restart |
 | Codex | `mise run agents:sync` from a local checkout, or the source refresh, installation, and restart steps below. After a manual install, trust changed hooks again in `/hooks` |
 
 Refreshing Codex's installed plugin does not reload active sessions. Use a fresh
 process to load the changed skills. If a session reports a missing plugin file
 after an update, restart that session rather than repairing the cache.
 
-1. Refresh the marketplace source. For a Git-backed marketplace, run
-   `codex plugin marketplace upgrade ramtoshiya`. For a marketplace added from a
-   local checkout, update that checkout instead.
+1. Update the clone and run `mise run hooks:build` in it.
 2. Run `codex plugin add ramtoshiya@ramtoshiya` to install from that source.
 3. Start a fresh Codex process, trust changed hooks in `/hooks`, and run the
    checks above. Installing files alone does not verify that an existing
@@ -446,7 +459,8 @@ plugins, also follow [Third-party skills](upstream-skills.md).
 .claude-plugin/marketplace.json            Marketplace read by Claude Code and Codex
 plugins/ramtoshiya/.claude-plugin/plugin.json  Plugin manifest, read by Claude Code and Codex
 plugins/ramtoshiya/skills/                     Skills
-plugins/ramtoshiya/hooks/global-package-guard.py   Package and Python rules
+plugins/ramtoshiya/hooks/*.go, guard/, shell/  Go source of the package and commit attribution guards
+plugins/ramtoshiya/hooks/ramtoshiya-hooks      The guards' binary, built from that source and ignored by Git
 plugins/ramtoshiya/hooks/python-module-hint.py     uv hint after a failed import
 plugins/ramtoshiya/hooks/git-hygiene-guard.py      Stop check, not registered
 plugins/ramtoshiya/hooks/hooks.json            Hook registration for Claude Code and Codex
@@ -454,5 +468,5 @@ plugins/ramtoshiya-cc/                         Claude Code-only skills and hooks
 plugins/ramtoshiya-cc/hermes-learning/         Hermes learning command, hooks, and review prompt
 ```
 
-The rules live only in the guard scripts. `hooks.json` registers them for
-Claude Code and Codex.
+The rules live only in the Go program and the hook scripts. `hooks.json`
+registers them for Claude Code and Codex.

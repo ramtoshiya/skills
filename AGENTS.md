@@ -100,12 +100,17 @@ Agent-facing docs are this file and the `SKILL.md` files.
 ## Layout and boundaries {:#layout}
 
 - `plugins/ramtoshiya/` is shared across supported hosts, documented in
-  `docs/agent-pack.md`. Hook rules live only in the shared guard scripts.
-  Host adapters, such as `hooks/hooks.json`, only translate events and guard
-  responses and must not add or change rules.
-- Hook scripts use only the Python standard library and run through the uv
-  command shown in `docs/hooks.md`. The plugins take no third-party runtime
-  dependencies and have no `version` field.
+  `docs/agent-pack.md`. Hook rules live only in the shared hook program and
+  scripts. Host adapters, such as `hooks/hooks.json`, only translate events
+  and guard responses and must not add or change rules.
+- The package guard and the commit attribution guard are one Go program in
+  `plugins/ramtoshiya/hooks`, built into a binary that Git ignores. It takes
+  exactly two modules, `mvdan.cc/sh/v3` and `github.com/BurntSushi/toml`, at
+  exact versions. A new module or version follows the exact-pin and three-day
+  release-age rules in Standalone CLIs.
+- The other hook scripts use only the Python standard library and run through
+  the uv command shown in `docs/hooks.md`. The plugins take no other
+  third-party dependencies and have no `version` field.
 - `plugins/ramtoshiya-cc/` is for Claude Code only.
 - Third-party skills are never copied into this repository. Add a marketplace
   entry pinned by commit, as `docs/upstream-skills.md` describes.

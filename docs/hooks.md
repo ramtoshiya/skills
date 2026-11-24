@@ -1,21 +1,26 @@
 # Hooks
 
-The plugins add six hooks. Two come with `ramtoshiya` and run in Claude
-Code and Codex. Four come with `ramtoshiya-cc` and run only in
+The plugins add six hooks. Three come with `ramtoshiya` and run in Claude
+Code and Codex. Three come with `ramtoshiya-cc` and run only in
 Claude Code. The `ramtoshiya` plugin also ships a Git hygiene check that is not
 registered, so no agent runs it.
 
 | Hook | Runs | Plugin |
 | --- | --- | --- |
 | Package and Python guard | Before each shell command | `ramtoshiya` |
+| Commit attribution guard | Before each shell command | `ramtoshiya` |
 | Python module hint | After each shell command | `ramtoshiya` |
-| Commit attribution guard | Before each shell command | `ramtoshiya-cc` |
 | Context budget | After each tool call, on each prompt, and after a compaction | `ramtoshiya-cc` |
 | Hermes memory snapshot | When a session starts, is cleared, or compacts | `ramtoshiya-cc` |
 | Hermes skill usage | After each Skill tool call | `ramtoshiya-cc` |
 
-Each hook is a Python script that uses only the standard library. Claude Code
-and Codex run it through `hooks/hooks.json`. Every hook runs as:
+Claude Code and Codex run the hooks through `hooks/hooks.json`. The package and
+Python guard and the commit attribution guard are the `guard` and
+`commit-trailer` subcommands of one Go program,
+`plugins/ramtoshiya/hooks/ramtoshiya-hooks`, which the hosts run directly. It is
+built from the Go source in that directory, and Git does not track it.
+[Machine setup](setup.md) describes the build. The other hooks are Python
+scripts that use only the standard library, and each runs as:
 
 ```sh
 uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python <hook>
@@ -34,8 +39,7 @@ not checked.
 
 ## Package and Python guard
 
-`plugins/ramtoshiya/hooks/global-package-guard.py` checks shell commands for these
-rules:
+The `guard` subcommand checks shell commands for these rules:
 
 - No global package changes: `npm`/`pnpm` global installs, removals, and
   links, Yarn `global` changes, and `uv tool` installs, upgrades, and
@@ -129,9 +133,19 @@ because every session runs as the same user. Stopping the PID that the agent
 started is safer. The guard does not judge how broad a single pattern is, and
 it does not check `killall`.
 
-`uv python install` is always allowed. The guard
-splits command sequences, follows `sh -c` and similar wrappers, and skips
-heredoc bodies. A denial reaches the agent as the hook's reason.
+`uv python install` is always allowed.
+
+The guard parses each command with the Bash parser from
+[mvdan.cc/sh](https://github.com/mvdan/sh), and with its zsh parser when Bash
+rejects the command, because agents on a Mac often run commands in zsh. It
+checks every command inside it: sequences, pipelines, subshells, command
+substitutions, function bodies, conditions, loops, and `sh -c` and similar
+wrappers. A `cd` or a variable assignment counts only inside its own subshell,
+substitution, or function body. Quoted text is data. Heredoc bodies are data
+too, so a script fed to `bash` on standard input is not checked, but a command
+substitution in an unquoted heredoc is. A command both parsers reject, or
+wrappers nested more than four deep, is denied as one the guard could not
+verify. A denial reaches the agent as the hook's reason.
 
 When the guard cannot run, Claude Code and Codex apply their own rules for a
 failing hook process.
@@ -210,8 +224,8 @@ Limits:
 
 ## Commit attribution guard
 
-`plugins/ramtoshiya-cc/hooks/commit-trailer-guard.py` blocks Claude Code shell
-commands that write commit, tag, or pull request text containing an AI
+The `commit-trailer` subcommand blocks shell commands in Claude Code and Codex
+that write commit, tag, or pull request text containing an AI
 attribution line: a `Co-Authored-By` trailer that names Claude, Anthropic,
 Codex, OpenAI, Copilot, or Cursor, a "Generated with Claude Code" footer, or a
 `claude.ai/code/` session link. It checks `git commit`, `merge`, `tag`, `notes`,
@@ -305,4 +319,5 @@ The usage hook finds the Hermes interpreter with `hermes
 `dev/tests/plugins/test_global_package_guard.py`, `dev/tests/plugins/test_python_module_hint.py`,
 `dev/tests/plugins/test_git_hygiene_guard.py`,
 `dev/tests/plugins/test_commit_trailer_guard.py`, `dev/tests/plugins/test_context_budget.py`, and
-`dev/tests/plugins/test_hermes_learning.py` cover the rules. Run them with `npm test`.
+`dev/tests/plugins/test_hermes_learning.py` cover the rules. Run them with
+`npm test`, which builds the Go program first.
