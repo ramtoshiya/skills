@@ -18,7 +18,8 @@ require('node:fs').writeFileSync(process.env.CAPTURE, JSON.stringify({
   token: process.env.ANTHROPIC_AUTH_TOKEN,
   headers: process.env.ANTHROPIC_CUSTOM_HEADERS,
   imagegenBaseUrl: process.env.IMAGEGEN_BASE_URL,
-  imagegenKey: process.env.IMAGEGEN_API_KEY
+  imagegenKey: process.env.IMAGEGEN_API_KEY,
+  customModel: process.env.ANTHROPIC_CUSTOM_MODEL_OPTION
 }));
 process.exitCode = 7;
 `, { mode: 0o755 });
@@ -49,6 +50,7 @@ process.exitCode = 7;
         CLAUDEX_CONFIG: config, TEST_PROXY_KEY: 'test-client-key',
         CLIPROXY_API_KEY: '', CLIPROXY_BASE_URL: '',
         IMAGEGEN_BASE_URL: undefined, IMAGEGEN_API_KEY: undefined, ANTHROPIC_CUSTOM_HEADERS: undefined,
+        ANTHROPIC_CUSTOM_MODEL_OPTION: undefined,
         CLAUDE_CONFIG_DIR: join(dir, 'claude-config'),
         ANTHROPIC_API_KEY: 'other-provider-key', ANTHROPIC_AUTH_TOKEN: 'other-token',
         ...extra,
@@ -89,6 +91,23 @@ test('discovers role models and forwards CLI arguments, credentials, and exit st
   assert.ok(!JSON.stringify(child.args).includes('test-client-key'));
   assert.deepEqual(f.requests, ['/v1/models', '/v1/models?client_version=0.155.0']
     .map(url => ({ url, authorization: 'Bearer test-client-key' })));
+});
+
+test('offers the newest visible Terra separately when a newer Sol takes both roles', async t => {
+  const f = await fixture(t, [
+    { id: 'gpt-9-terra', owned_by: 'openai', visibility: 'hide' },
+    ...['gpt-6.2-sol', 'gpt-6.1-terra', 'gpt-6-terra'].map(id => ({ id, owned_by: 'openai' })),
+  ]);
+  assert.equal((await f.run()).code, 7);
+  const { args, customModel } = await f.capture();
+  const { model, env } = JSON.parse(args[1]);
+  assert.equal(customModel, 'gpt-6.1-terra');
+  assert.equal(model, 'gpt-6.2-sol');
+  assert.equal(env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'gpt-6.2-sol');
+  assert.equal(env.CLAUDE_CODE_SUBAGENT_MODEL, 'gpt-6.2-sol');
+
+  assert.equal((await f.run([], { ANTHROPIC_CUSTOM_MODEL_OPTION: 'my-model' })).code, 7);
+  assert.equal((await f.capture()).customModel, 'my-model');
 });
 
 test('passes imagegen connection defaults and independent overrides through the child environment', async t => {
