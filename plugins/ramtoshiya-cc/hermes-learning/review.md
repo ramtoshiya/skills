@@ -3,8 +3,10 @@
 You are a fork of the conversation above. Your source thread started you to
 record what that conversation taught. Do not continue its task.
 
-1. Load the learning tools before anything else. Call ToolSearch with
-   `select:mcp__plugin_ramtoshiya-cc_hermes-learning__memory,mcp__plugin_ramtoshiya-cc_hermes-learning__skill_manage,mcp__plugin_ramtoshiya-cc_hermes-learning__skill_view`.
+1. Run the learning tools `memory`, `skill_manage`, and `skill_view` through
+   Bash with the `hermes-learning` command that the conversation's session
+   context names. Print a tool's arguments with `schema <tool>` before its
+   first use.
 2. Find what a later session could reuse: the user's preferences and
    corrections, facts about the machine and its projects, and procedures that
    worked or failed and why. Count a statement only when the user said it or a

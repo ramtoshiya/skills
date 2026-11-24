@@ -149,7 +149,7 @@ The `worker-routing` skill is the one policy for choosing a worker's model.
   band to compact at the next natural boundary. After a compaction it points
   the agent to the handoff note.
 - A hook that blocks AI attribution lines in commits and pull requests.
-- The `hermes-learning` MCP server and two hooks, which give every Claude Code
+- The `hermes-learning` command and two hooks, which give every Claude Code
   session the memory and skills of a Hermes profile. The next section
   describes them.
 
@@ -182,41 +182,48 @@ including claudex sessions, to the profile at `~/.hermes/profiles/coder`. Set
   `CLAUDE_CODE_PLUGIN_DIRS` user setting that the [machine setup](setup.md)
   writes. A Skill tool use of one of them counts in `skills/.usage.json`.
   [Hooks](hooks.md) has the details.
-- The `hermes-learning` MCP server serves Hermes's own `memory`,
-  `skill_manage`, and `skill_view` tools, so Hermes's validation, size
-  limits, security scan, and usage records apply. Claude Code names them
-  `mcp__plugin_ramtoshiya-cc_hermes-learning__<tool>` and loads them through
-  ToolSearch. The server answers the tool list within about two seconds and
-  loads the rest of Hermes in the background. It then runs the curator when
-  its interval has passed, because no Hermes agent runs for the profile
-  otherwise.
-- The agent decides when to learn. The server's instructions tell it to record
-  a lesson that a person or an agent in the conversation stated, or a tool
-  result showed. In bb, when a whole
-  conversation is worth reviewing, it starts a review with
-  `bb thread fork "$BB_THREAD_ID" --lifecycle-owner-thread "$BB_THREAD_ID"
-  --title "Hermes review" --prompt-file <plugin>/hermes-learning/review.md`. The fork appears in bb as
-  a thread and reuses the source's prompt cache. It records lessons, sends
-  changes to files in the working checkout as proposals, and mails a summary to
-  the source with `bb mail send` without waking it. Outside bb the agent
-  records directly.
+- The `hermes-learning` command runs Hermes's own `memory`, `skill_manage`,
+  and `skill_view` tools, so Hermes's validation, size limits, security scan,
+  and usage records apply. Agents run it through Bash. `hermes-learning schema
+  <tool>` prints a tool's arguments, and `hermes-learning <tool>` takes the
+  arguments as JSON on stdin. A call takes about one second for `memory` and
+  two for the skill tools.
+- It is a command and not an MCP server because of claudex. Loading an MCP
+  tool through ToolSearch changes the request's tool list, and the claudex
+  proxy route then misses the prompt cache for the whole conversation. A Bash
+  call leaves the tool list unchanged.
+- The session start hook adds the learning instructions with the command's
+  full path, and starts Hermes's curator in the background, because no Hermes
+  agent runs for the profile otherwise. The curator acts once its interval has
+  passed and makes no model calls by default. It moves skills nobody uses to
+  stale and then to the archive.
+- The agent decides when to learn. The instructions tell it to record a lesson
+  that a person or an agent in the conversation stated, or a tool result
+  showed. In bb, when a whole conversation is worth reviewing, it starts a
+  review with `bb thread fork "$BB_THREAD_ID" --lifecycle-owner-thread
+  "$BB_THREAD_ID" --title "Hermes review" --prompt-file
+  <plugin>/hermes-learning/review.md`. The fork appears in bb as a thread and
+  reuses the source's prompt cache. It records lessons, sends changes to files
+  in the working checkout as proposals, and mails a summary to the source with
+  `bb mail send` without waking it. Outside bb the agent records directly.
 
-The server reads the session's bb thread at start and picks a role:
+The command and the session start hook read the session's bb thread and pick a
+role:
 
-| Session | Tools | Writes as |
-| --- | --- | --- |
-| A bb thread that another thread started (it has a parent) | `skill_view` only. It ends its final answer with `Learning proposals` | Nothing |
-| A bb fork titled `Hermes review` | All three | Hermes's `background_review` origin, which adds its review-only checks and marks new skills as agent-created for the curator |
-| A session that the Hermes coder runtime started, which learns through Hermes itself | None | Nothing |
-| Any other session, in or outside bb, including a fork made for other work | All three | `foreground` |
+| Session | Instructions | Tools | Writes as |
+| --- | --- | --- | --- |
+| A bb thread that another thread started (it has a parent) | End the final answer with `Learning proposals` | `skill_view` only | Nothing |
+| A bb fork titled `Hermes review` | The fork's prompt | All three | Hermes's `background_review` origin, which adds its review-only checks and marks new skills as agent-created for the curator |
+| A session that the Hermes coder runtime started, which learns through Hermes itself | None | None | Nothing |
+| Any other session, in or outside bb, including a fork made for other work | Record lessons. In bb, also start review forks | All three | `foreground` |
 
-The server needs Hermes's `hermes` command, on `PATH` or at
-`~/.hermes/hermes-agent/.hermes/bin/hermes`, and the profile directory. When
-either is missing, the server exits with the reason on stderr and `/mcp` lists
-it as failed. The session goes on without it. Claude Code remembers that
-failure for 15 minutes and skips the server in every session started in that
-time, so the coder runtime case starts the server with no tools instead of
-exiting.
+The command needs Hermes's `hermes` command, on `PATH` or at
+`~/.hermes/hermes-agent/.hermes/bin/hermes`, and the profile directory, and it
+names whichever is missing. In bb's Accept Edits and Approve for me modes, bb
+runs Bash in Claude Code's sandbox. The `sandbox.filesystem.allowWrite` user
+setting that the [machine setup](setup.md) writes lets the command write the
+profile there. A profile chosen with `HERMES_LEARNING_HOME` needs its own
+entry.
 
 ## Requirements
 
@@ -432,8 +439,7 @@ plugins/ramtoshiya/hooks/python-module-hint.py     uv hint after a failed import
 plugins/ramtoshiya/hooks/git-hygiene-guard.py      Stop check, not registered
 plugins/ramtoshiya/hooks/hooks.json            Hook registration for Claude Code and Codex
 plugins/ramtoshiya-cc/                         Claude Code-only skills and hooks
-plugins/ramtoshiya-cc/.mcp.json               hermes-learning MCP server registration
-plugins/ramtoshiya-cc/hermes-learning/         Hermes learning server, hooks, and review prompt
+plugins/ramtoshiya-cc/hermes-learning/         Hermes learning command, hooks, and review prompt
 ```
 
 The rules live only in the guard scripts. `hooks.json` registers them for

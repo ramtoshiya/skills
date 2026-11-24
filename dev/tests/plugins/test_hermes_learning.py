@@ -8,7 +8,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[3] / "plugins/ramtoshiya-cc/hermes-learning"
 HOOK = ROOT / "hook.py"
-LAUNCH = ROOT / "launch.py"
+CLI = ROOT / "cli.py"
 ENTRY = "runpy.run_module('hermes_learning_entry', run_name='__main__', alter_sys=True)"
 # Stands in for Hermes's tools.skill_usage and appends each call to $CALLS.
 FAKE_USAGE = """import json, os
@@ -43,7 +43,8 @@ class HermesLearningTests(unittest.TestCase):
         self.calls = self.tmp / "calls.jsonl"
         self.env = {**os.environ, "HERMES_LEARNING_HOME": str(self.store), "CALLS": str(self.calls),
                     "PATH": f"{self.tmp / 'bin'}{os.pathsep}{os.environ['PATH']}"}
-        self.env.pop("_HERMES_GATEWAY", None)
+        for name in ("_HERMES_GATEWAY", "BB_THREAD_ID", "BB_CLI"):
+            self.env.pop(name, None)
         self.fake_hermes()
 
     def fake_hermes(self):
@@ -52,6 +53,12 @@ class HermesLearningTests(unittest.TestCase):
         (fake_root / "tools").mkdir(parents=True)
         (fake_root / "tools/__init__.py").write_text("")
         (fake_root / "tools/skill_usage.py").write_text(FAKE_USAGE)
+        (fake_root / "tools/registry.py").write_text("registry = None\n")
+        (fake_root / "tools/skill_provenance.py").write_text(
+            "import os\ndef set_current_write_origin(origin):\n    os.environ['ORIGIN'] = origin\n")
+        (fake_root / "model_tools.py").write_text(
+            "import json, os\ndef handle_function_call(name, args, **_):\n"
+            "    return json.dumps({'tool': name, 'args': args, 'origin': os.environ['ORIGIN']})\n")
         code = f"import runpy, sys; sys.path.insert(0, {str(fake_root)!r}); {ENTRY}"
         printed = json.dumps([sys.executable, "-I", "-c", code])
         bin_dir = self.tmp / "bin"
@@ -65,16 +72,21 @@ class HermesLearningTests(unittest.TestCase):
                                 capture_output=True, text=True, env=env or self.env, check=True)
         return json.loads(result.stdout)
 
-    def role_of(self, thread):
-        """The server's role for a bb thread, read through a fake `bb thread show`."""
+    def in_thread(self, thread):
+        """The environment of a bb thread, which a fake `bb thread show` describes."""
         bb = self.tmp / "bb"
         bb.write_text(f"#!/bin/sh\ncat <<'EOF'\n{json.dumps({'thread': thread})}\nEOF\n")
         bb.chmod(0o755)
-        code = ("import runpy, sys; sys.argv = ['server']; "
-                f"server = runpy.run_path({str(ROOT / 'server.py')!r}); print(server['role']())")
-        env = {**self.env, "BB_CLI": str(bb), "BB_THREAD_ID": "thr_test"}
+        return {**self.env, "BB_CLI": str(bb), "BB_THREAD_ID": "thr_test"}
+
+    def role_of(self, thread):
+        code = f"import runpy; print(runpy.run_path({str(ROOT / 'store.py')!r})['role']())"
         return subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True,
-                              env=env, check=True).stdout.strip()
+                              env=self.in_thread(thread), check=True).stdout.strip()
+
+    def cli(self, *args, stdin="", env=None):
+        return subprocess.run([sys.executable, str(CLI), *args], input=stdin, capture_output=True, text=True,
+                              env=env or self.env)
 
     def test_only_a_titled_review_fork_writes_as_a_review(self):
         self.assertEqual(self.role_of({"originKind": "fork", "title": "Hermes review"}), "review")
@@ -98,7 +110,7 @@ class HermesLearningTests(unittest.TestCase):
         plugin = self.store / "claude-skills-plugin"
         (plugin / "skills").mkdir(parents=True)
         (plugin / "skills/removed").symlink_to(self.tmp, target_is_directory=True)
-        self.assertEqual(self.hook("session-start", {"session_id": "s1"}), {})
+        self.hook("session-start", {"session_id": "s1"})
         self.assertEqual(json.loads((plugin / ".claude-plugin/plugin.json").read_text())["name"], "hermes-skills")
         links = {path.name: path.resolve() for path in (plugin / "skills").iterdir()}
         self.assertEqual(links, {"flaky-checks": (skills / "dev/flaky-checks").resolve()})
@@ -124,43 +136,41 @@ class HermesLearningTests(unittest.TestCase):
             self.hook("skill-used", {"session_id": "s", "tool_name": "Skill", "tool_input": {"skill": name}})
         self.assertFalse(self.calls.exists())
 
-    def test_launcher_names_what_is_missing(self):
-        def launch(env):
-            return subprocess.run([sys.executable, str(LAUNCH)], capture_output=True, text=True, env=env,
-                                  stdin=subprocess.DEVNULL)
-
-        result = launch({**self.env, "HERMES_LEARNING_HOME": str(self.tmp / "absent")})
+    def test_cli_names_what_is_missing(self):
+        result = self.cli("skill_view", env={**self.env, "HERMES_LEARNING_HOME": str(self.tmp / "absent")})
         self.assertEqual(result.returncode, 1)
         self.assertIn(f"the Hermes learning store {self.tmp / 'absent'} does not exist", result.stderr)
         no_hermes = {**self.env, "PATH": "/usr/bin:/bin", "HOME": str(self.tmp)}
-        self.assertIn("Hermes is not installed", launch(no_hermes).stderr)
+        self.assertIn("Hermes is not installed", self.cli("skill_view", env=no_hermes).stderr)
 
-    def test_server_lists_no_tools_in_the_coder_runtime(self):
-        """Claude Code caches a failed plugin server for every session for 15 minutes, so the server must
-        start and stay empty here instead of exiting."""
-        requests = [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
-                    {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}]
-        result = subprocess.run([sys.executable, str(LAUNCH)], capture_output=True, text=True,
-                                env={**self.env, "_HERMES_GATEWAY": "1"},
-                                input="".join(json.dumps(r) + "\n" for r in requests))
-        self.assertEqual(result.returncode, 0, result.stderr)
-        replies = {reply["id"]: reply["result"] for reply in map(json.loads, result.stdout.splitlines())}
-        self.assertEqual(replies[1]["serverInfo"]["name"], "hermes-learning")
-        self.assertEqual(replies[2], {"tools": []})
-
-    def test_skill_names_reach_hermes_without_the_plugin_prefix(self):
+    def test_cli_runs_the_tool_with_the_role_origin_and_unprefixed_skill_name(self):
         """Claude Code lists the skills as hermes-skills:<name>, and agents pass that name to the tools."""
-        fake = self.tmp / "fake"
-        (fake / "tools/registry.py").write_text("registry = None\n")
-        (fake / "model_tools.py").write_text(
-            "import json\ndef handle_function_call(name, args, **_):\n    return json.dumps(args)\n")
-        code = (f"import json, runpy, sys; sys.path.insert(0, {str(fake)!r}); "
-                f"server = runpy.run_path({str(ROOT / 'server.py')!r}); "
-                "print(server['call']('skill_view', {'name': 'hermes-skills:flaky-checks'}, 's', "
-                "('skill_view',))[0])")
-        sent = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True,
-                              env=self.env, check=True).stdout
-        self.assertEqual(json.loads(sent), {"name": "flaky-checks"})
+        arguments = json.dumps({"name": "hermes-skills:flaky-checks"})
+        for thread, origin in (({}, "foreground"), ({"originKind": "fork", "title": "Hermes review"},
+                                                    "background_review")):
+            result = self.cli("skill_view", stdin=arguments, env=self.in_thread(thread))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout.splitlines()[-1]),
+                             {"tool": "skill_view", "args": {"name": "flaky-checks"}, "origin": origin})
+
+    def test_cli_refuses_writes_to_child_threads_and_the_coder_runtime(self):
+        entry = json.dumps({"action": "add", "target": "memory", "content": "x"})
+        child = self.cli("memory", stdin=entry, env=self.in_thread({"parentThreadId": "thr_parent"}))
+        self.assertEqual(child.returncode, 1)
+        self.assertIn("Learning proposals", child.stderr)
+        coder = self.cli("memory", stdin=entry, env={**self.env, "_HERMES_GATEWAY": "1"})
+        self.assertIn("Hermes coder runtime", coder.stderr)
+        self.assertFalse(self.calls.exists())
+
+    def test_session_start_tells_each_role_how_to_learn(self):
+        def context(thread):
+            output = self.hook("session-start", {"session_id": "s1"}, self.in_thread(thread))
+            return output["hookSpecificOutput"]["additionalContext"]
+
+        top = context({})
+        self.assertIn(f"{ROOT / 'hermes-learning'} schema <tool>", top)
+        self.assertIn("--title \"Hermes review\"", top)
+        self.assertIn("Learning proposals", context({"parentThreadId": "thr_parent"}))
 
 
 if __name__ == "__main__":

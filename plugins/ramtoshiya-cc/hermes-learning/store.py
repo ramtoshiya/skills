@@ -1,6 +1,7 @@
-"""Find the Hermes learning store and a command that runs a script under the Hermes interpreter.
+"""Find the Hermes learning store, the session's learning role, and a command that runs a script under the
+Hermes interpreter.
 
-Standard library only: the hook and the MCP server launcher import it before Hermes is on the path.
+Standard library only: the hook and the hermes-learning command import it before Hermes is on the path.
 """
 
 import json
@@ -14,6 +15,17 @@ SKILLS_PLUGIN = "claude-skills-plugin"
 DEFAULT_HERMES = "~/.hermes/hermes-agent/.hermes/bin/hermes"
 SENTINEL = "hermes_learning_entry"
 ENTRY = f"runpy.run_module({SENTINEL!r}, run_name='__main__', alter_sys=True)"
+TOOLS = ("memory", "skill_manage", "skill_view")
+REVIEW_TITLE = "Hermes review"
+# Each role's tools and the Hermes write origin its writes carry. background_review adds Hermes's review-only
+# checks and marks created skills as agent-created for the curator.
+ROLES = {
+    "top": {"tools": TOOLS, "origin": "foreground"},
+    "solo": {"tools": TOOLS, "origin": "foreground"},
+    "review": {"tools": TOOLS, "origin": "background_review"},
+    "child": {"tools": ("skill_view",), "origin": "foreground"},
+    "off": {"tools": (), "origin": "foreground"},
+}
 
 
 class Unavailable(Exception):
@@ -24,6 +36,23 @@ def in_coder_runtime() -> bool:
     """The Hermes coder runtime starts Claude Code inside a Hermes gateway, whose marker every child inherits.
     That runtime injects memory and runs learning itself."""
     return os.environ.get("_HERMES_GATEWAY") == "1"
+
+
+def role() -> str:
+    """off in the Hermes coder runtime, solo outside bb, child for a thread another thread started, review for a
+    fork titled Hermes review, and top for any other bb thread."""
+    if in_coder_runtime():
+        return "off"
+    thread_id = os.environ.get("BB_THREAD_ID")
+    if not thread_id:
+        return "solo"
+    shown = subprocess.run([os.environ.get("BB_CLI", "bb"), "thread", "show", thread_id, "--json"],
+                           capture_output=True, text=True, timeout=8)
+    thread = json.loads(shown.stdout or "{}").get("thread") or {}
+    if thread.get("parentThreadId"):
+        return "child"
+    is_review = thread.get("originKind") == "fork" and (thread.get("title") or "").startswith(REVIEW_TITLE)
+    return "review" if is_review else "top"
 
 
 def store() -> Path:

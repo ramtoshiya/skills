@@ -273,7 +273,8 @@ store that [Agent plugins](agent-pack.md) describes. The store is
   skill of the store into `claude-skills-plugin/skills/` inside the store and
   removes stale links. Hermes's bundled skills and hidden folders such as
   `.archive` are left out. It then adds the store's `USER.md` and `MEMORY.md`
-  to the session context. A resumed or forked session already has them in its
+  and the learning instructions for the session's role to the session context,
+  and starts Hermes's curator as a detached process. A resumed or forked session already has them in its
   conversation, so it gets nothing.
 - After a Skill tool call whose skill is `hermes-skills:<folder>`, the hook
   runs Hermes's `bump_view` and `bump_use` from `tools/skill_usage.py` under
