@@ -364,6 +364,11 @@ class GlobalPackageGuardTests(unittest.TestCase):
         ])
         self.assert_allowed([f"cd '{self.home}' && npm install", f"(cd '{self.home}' && npm install)"])
 
+    def test_zsh_syntax_is_checked_not_refused(self):
+        commands = ["for f in a b; do set -- ${(z)f}; echo ${=f}; done", "files=(${(f)\"$(ls)\"}); echo ${#files[@]}"]
+        self.assert_allowed(commands)
+        self.assert_denied(GLOBAL, [f"{command}; npm install -g example" for command in commands])
+
     def test_command_text_is_never_executed(self):
         with tempfile.TemporaryDirectory() as directory:
             marker = Path(directory) / "marker"

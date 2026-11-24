@@ -277,6 +277,8 @@ func parseISO(text string) (time.Time, bool) {
 	}
 	if zoned {
 		t = t.Add(-offset)
+	} else if y := t.UTC().Year(); y < 1 || y > 9999 {
+		return time.Time{}, false
 	}
 	return t, true
 }

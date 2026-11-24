@@ -55,12 +55,23 @@ func walkScript(script string, st *State, visit func(Call) error, depth int) err
 	if depth > 4 {
 		return nestingDenial
 	}
-	file, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(script), "")
+	file, err := parse(script)
 	if err != nil {
 		return err
 	}
 	w := &walker{src: script, visit: visit, depth: depth}
 	return w.stmts(file.Stmts, st)
+}
+
+func parse(script string) (*syntax.File, error) {
+	file, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(script), "")
+	if err == nil {
+		return file, nil
+	}
+	if file, zshErr := syntax.NewParser(syntax.Variant(syntax.LangZsh)).Parse(strings.NewReader(script), ""); zshErr == nil {
+		return file, nil
+	}
+	return nil, err
 }
 
 type walker struct {
