@@ -359,14 +359,14 @@ class Installers:
                 rows.append(row("mise", "dotfiles", "conflict", (result.stderr or str(error)).strip()))
         else:
             rows.append(row("mise", "dotfiles", "absent", "mise not on PATH"))
-        if shutil.which("mise"):
+        if shutil.which("mise") or (self.home / ".local/bin/takeaturn").exists():
             result = self.run([*self.python, str(self.shared / "setup/agents/takeaturn.py"), "status"])
             try:
                 rows += json.loads(result.stdout)
             except ValueError:
                 rows.append(row("takeaturn", "cli", "conflict", (result.stderr or result.stdout).strip()))
         else:
-            rows.append(row("takeaturn", "cli", "absent", "mise not on PATH"))
+            rows.append(row("takeaturn", "cli", "absent", "not installed and mise not on PATH"))
         if self.hermes_installed():
             result = self.run([*self.python, str(self.shared / "setup/hermes/operator_profile.py"), "--check"])
             detail = (result.stdout or result.stderr).strip().splitlines()
