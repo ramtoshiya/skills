@@ -17,6 +17,7 @@ for (const key of Object.keys(env)) {
 // A copy of tools/excalidraw-board/size-limit.mjs, because this command installs as one file.
 // dev/tests/integration/size-limit.test.mjs keeps it equal.
 const hardLimit = 1024 ** 3;
+class UsageError extends Error {}
 function checkSize(name, bytes, softLimit, warn = message => process.stderr.write(`${message}\n`)) {
   if (bytes > hardLimit) throw new Error(`${name} is ${bytes} bytes, over the hard limit of ${hardLimit} bytes`);
   if (bytes > softLimit) warn(`warning: ${name} is ${bytes} bytes, over the soft limit of ${softLimit} bytes`);
@@ -24,7 +25,7 @@ function checkSize(name, bytes, softLimit, warn = message => process.stderr.writ
 }
 function git(cwd, args, input, allowed = [0]) {
   const result = spawnSync('git', ['-C', cwd, ...args], { env, input, encoding: 'utf8', maxBuffer: hardLimit });
-  if (result.error || !allowed.includes(result.status)) throw new Error('Git operation failed');
+  if (result.error || !allowed.includes(result.status)) throw new UsageError('Git operation failed');
   checkSize(`worktreeinclude git ${args[0]} output`, Buffer.byteLength(result.stdout), 64 * 1024 * 1024);
   return result.stdout;
 }
@@ -36,7 +37,7 @@ function stat(file) {
 }
 function safeRelative(relative) {
   if (!relative || path.isAbsolute(relative) || /^[a-z]:/i.test(relative) || relative.includes('\\') || relative.includes('\0') || relative.split('/').some(p => p === '..' || p.toLowerCase() === '.git')) {
-    throw new Error('Unsafe manifest or file path');
+    throw new UsageError('Unsafe manifest or file path');
   }
 }
 function checked(root, relative) {
@@ -45,11 +46,11 @@ function checked(root, relative) {
   for (const part of relative.split('/').filter(p => p && p !== '.')) {
     current = path.join(current, part);
     const info = stat(current);
-    if (info?.isSymbolicLink()) throw new Error(`Symlink rejected: ${JSON.stringify(relative)}`);
-    if (info && current !== path.join(root, relative) && !info.isDirectory()) throw new Error(`Non-directory parent: ${JSON.stringify(relative)}`);
+    if (info?.isSymbolicLink()) throw new UsageError(`Symlink rejected: ${JSON.stringify(relative)}`);
+    if (info && current !== path.join(root, relative) && !info.isDirectory()) throw new UsageError(`Non-directory parent: ${JSON.stringify(relative)}`);
   }
   const resolved = path.resolve(root, relative);
-  if (!resolved.startsWith(root + path.sep)) throw new Error('Path outside worktree');
+  if (!resolved.startsWith(root + path.sep)) throw new UsageError('Path outside worktree');
   return resolved;
 }
 function context() {
@@ -69,7 +70,7 @@ function initialCheckout(cwd) {
 function manifest(source) {
   const file = checked(source, '.worktreeinclude');
   if (!stat(file)) return null;
-  if (!stat(file).isFile() || !split(git(source, ['ls-files', '-z', '--', '.worktreeinclude'])).includes('.worktreeinclude')) throw new Error('Manifest must be a tracked regular file');
+  if (!stat(file).isFile() || !split(git(source, ['ls-files', '-z', '--', '.worktreeinclude'])).includes('.worktreeinclude')) throw new UsageError('Manifest must be a tracked regular file');
   const contents = fs.readFileSync(file, 'utf8');
   for (const line of contents.split(/\r?\n/)) {
     if (!line || line.startsWith('#')) continue;
@@ -82,7 +83,7 @@ function manifest(source) {
     }
     if (prefix.length) {
       const info = stat(checked(source, prefix.join('/')));
-      if (info && !info.isFile() && !info.isDirectory()) throw new Error('Non-regular manifest path rejected');
+      if (info && !info.isFile() && !info.isDirectory()) throw new UsageError('Non-regular manifest path rejected');
     }
   }
   return contents;
@@ -103,15 +104,15 @@ function apply(args) {
   if (!initialCheckout(cwd)) return say('noop not-new-worktree');
   const records = split(git(cwd, ['worktree', 'list', '--porcelain', '-z']));
   const first = records.find(record => record.startsWith('worktree '));
-  if (!first || records[1] === 'bare') throw new Error('A non-bare main worktree is required');
+  if (!first || records[1] === 'bare') throw new UsageError('A non-bare main worktree is required');
   const source = fs.realpathSync(first.slice(9));
-  if (fs.realpathSync(gitLine(git(source, ['rev-parse', '--absolute-git-dir']))) !== common) throw new Error('Cannot resolve main worktree');
+  if (fs.realpathSync(gitLine(git(source, ['rev-parse', '--absolute-git-dir']))) !== common) throw new UsageError('Cannot resolve main worktree');
   const rules = manifest(source);
   if (!rules) return say('noop no-manifest');
   const tracked = split(git(source, ['ls-files', '-z']));
   const targetTracked = split(git(cwd, ['ls-files', '-z']));
   const selectedTracked = select(tracked, rules);
-  if (selectedTracked.size) throw new Error(`Tracked path rejected: ${JSON.stringify([...selectedTracked][0])}`);
+  if (selectedTracked.size) throw new UsageError(`Tracked path rejected: ${JSON.stringify([...selectedTracked][0])}`);
   const candidates = new Set();
   function visit(relative) {
     safeRelative(relative);
@@ -133,13 +134,13 @@ function apply(args) {
   for (const selected of [...select([...candidates], rules)].sort()) {
     const relative = selected.replace(/\/$/, '');
     const from = checked(source, relative);
-    const to = checked(cwd, relative);
+    checked(cwd, relative);
     const info = stat(from);
-    if (!info.isDirectory() && !info.isFile()) throw new Error(`Non-regular path rejected: ${JSON.stringify(relative)}`);
-    if (targetTracked.some(p => p === relative || p.startsWith(relative + '/') || relative.startsWith(p + '/'))) throw new Error(`Target tracked path rejected: ${JSON.stringify(relative)}`);
+    if (!info.isDirectory() && !info.isFile()) throw new UsageError(`Non-regular path rejected: ${JSON.stringify(relative)}`);
+    if (targetTracked.some(p => p === relative || p.startsWith(relative + '/') || relative.startsWith(p + '/'))) throw new UsageError(`Target tracked path rejected: ${JSON.stringify(relative)}`);
     // Check each candidate against Git's actual ignore rules, not just the manifest.
     const ignored = git(source, ['check-ignore', '--no-index', '-z', '--stdin'], relative + (info.isDirectory() ? '/' : '') + '\0', [0, 1]);
-    if (ignored) plan.push({ relative, from, to, directory: info.isDirectory() });
+    if (ignored) plan.push({ relative, directory: info.isDirectory() });
   }
   let copied = 0, skipped = 0, conflicts = 0;
   for (const item of plan) {
@@ -156,7 +157,7 @@ function apply(args) {
       let data, mode;
       try {
         const info = fs.fstatSync(fd);
-        if (!info.isFile()) throw new Error('Source changed type');
+        if (!info.isFile()) throw new UsageError('Source changed type');
         data = fs.readFileSync(fd);
         mode = info.mode & 0o777;
       } finally { fs.closeSync(fd); }
@@ -202,12 +203,12 @@ function config(cwd, scope = []) {
 }
 function loadState(root) {
   if (!stat(root)) return null;
-  if (stat(root).isSymbolicLink() || !stat(root).isDirectory()) throw new Error('Unsafe integration directory');
+  if (stat(root).isSymbolicLink() || !stat(root).isDirectory()) throw new UsageError('Unsafe integration directory');
   const stateFile = checked(root, 'state.json');
-  if (!stat(stateFile)?.isFile()) throw new Error('Unrecognized integration directory');
+  if (!stat(stateFile)?.isFile()) throw new UsageError('Unrecognized integration directory');
   let state;
-  try { state = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch { throw new Error('Invalid integration state'); }
-  if (state.owner !== owner || !Array.isArray(state.files) || !Array.isArray(state.local)) throw new Error('Unrecognized integration state');
+  try { state = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch { throw new UsageError('Invalid integration state'); }
+  if (state.owner !== owner || !Array.isArray(state.files) || !Array.isArray(state.local)) throw new UsageError('Unrecognized integration state');
   return state;
 }
 function verifyFiles(root, state) {
@@ -217,7 +218,7 @@ function verifyFiles(root, state) {
       const relative = prefix + entry;
       const file = checked(root, relative);
       if (stat(file).isDirectory()) {
-        if (relative !== 'hooks') throw new Error('Integration files changed. Unknown directory');
+        if (relative !== 'hooks') throw new UsageError('Integration files changed. Unknown directory');
         walk(file, relative + '/');
       } else actual.push(relative);
     }
@@ -226,13 +227,13 @@ function verifyFiles(root, state) {
   if (actual.some(file => file !== 'state.json' && !state.files.some(record => record.path === file)) || state.files.some(record => {
     const file = checked(root, record.path);
     return !stat(file)?.isFile() || (stat(file).mode & 0o777) !== 0o700 || fs.readFileSync(file, 'utf8') !== record.content;
-  })) throw new Error('Integration files changed. Refusing to remove or replace them');
+  })) throw new UsageError('Integration files changed. Refusing to remove or replace them');
 }
 function hookCommand(action) {
   const { cwd, common } = context();
   const root = path.join(common, name);
   const managed = path.join(root, 'hooks');
-  if (git(cwd, ['config', '--bool', 'extensions.worktreeConfig'], undefined, [0, 1]).trim() === 'true') throw new Error('Per-worktree configuration is unsupported. No hooks changed');
+  if (git(cwd, ['config', '--bool', 'extensions.worktreeConfig'], undefined, [0, 1]).trim() === 'true') throw new UsageError('Per-worktree configuration is unsupported. No hooks changed');
   const lock = path.join(common, name + '.lock');
   fs.mkdirSync(lock);
   try {
@@ -241,12 +242,12 @@ function hookCommand(action) {
     if (action === 'status') {
       if (!state) return say('hook not-installed');
       verifyFiles(root, state);
-      if (current.length !== 1 || current[0] !== managed) throw new Error('Hook configuration changed. Integration is inactive');
+      if (current.length !== 1 || current[0] !== managed) throw new UsageError('Hook configuration changed. Integration is inactive');
       return say('hook installed');
     }
     if (state) {
       verifyFiles(root, state);
-      if (current.length !== 1 || current[0] !== managed) throw new Error('Hook configuration changed. No hooks changed');
+      if (current.length !== 1 || current[0] !== managed) throw new UsageError('Hook configuration changed. No hooks changed');
       if (action === 'install') return say('hook already-installed');
       if (state.local.length) git(cwd, ['config', '--local', 'core.hooksPath', state.local[0]]);
       else git(cwd, ['config', '--local', '--unset-all', 'core.hooksPath']);
@@ -255,12 +256,12 @@ function hookCommand(action) {
     }
     if (action === 'uninstall') return say('hook not-installed');
     const local = config(cwd, ['--local']);
-    if (current.length > 1 || local.length > 1) throw new Error('Multiple hook paths are unsupported. No hooks changed');
+    if (current.length > 1 || local.length > 1) throw new UsageError('Multiple hook paths are unsupported. No hooks changed');
     const original = current.length ? split(git(cwd, ['config', '--null', '--path', '--get', 'core.hooksPath']))[0] : path.join(common, 'hooks');
-    if (!original || original.includes('\n')) throw new Error('Unsupported hook path');
+    if (!original || original.includes('\n')) throw new UsageError('Unsupported hook path');
     const names = new Set(hooks);
     const originalDir = path.resolve(cwd, original);
-    if (originalDir === root || originalDir.startsWith(root + path.sep)) throw new Error('Unsupported hook path inside integration directory');
+    if (originalDir === root || originalDir.startsWith(root + path.sep)) throw new UsageError('Unsupported hook path inside integration directory');
     if (stat(originalDir)?.isDirectory()) for (const entry of fs.readdirSync(originalDir)) if (/^[a-z0-9-]+$/.test(entry)) names.add(entry);
     const files = [{ path: 'runtime.mjs', content: fs.readFileSync(here, 'utf8') }];
     for (const hook of names) files.push({ path: 'hooks/' + hook, content: dispatcher(hook, original, path.join(root, 'runtime.mjs')) });
@@ -280,10 +281,9 @@ try {
   else if (args[0] === 'hook' && args.length === 2 && ['install', 'uninstall', 'status'].includes(args[1])) hookCommand(args[1]);
   else if (args.length === 1 && args[0] === '--version') console.log('worktreeinclude 1');
   else if (!args.length || args[0] === '--help') console.log('Usage: worktreeinclude apply | hook install | hook uninstall | hook status');
-  else throw new Error('Unknown command. Use --help');
+  else throw new UsageError('Unknown command. Use --help');
 } catch (error) {
   // Never print subprocess output, file data, stacks, or arbitrary system error messages.
-  const known = /^(Git operation failed|Unsafe |Symlink rejected:|Non-directory parent:|Non-regular manifest path rejected|Path outside|Manifest must|Unsupported manifest|Tracked path rejected:|Target tracked path rejected:|A non-bare|Cannot resolve|Per-worktree|Unrecognized integration|Invalid integration|Integration files changed|Hook configuration changed|Multiple hook paths|Unsupported hook path|Unknown command|worktreeinclude git \S+ output is \d+ bytes)/;
-  console.error(`${name}: ${known.test(error.message) ? error.message : 'Operation failed. Check repository permissions and integration state'}`);
+  console.error(`${name}: ${error instanceof UsageError ? error.message : 'Operation failed. Check repository permissions and integration state'}`);
   process.exitCode = 1;
 }

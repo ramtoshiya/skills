@@ -276,16 +276,18 @@ test('symlinked manifests and non-regular ignored sources are rejected', async t
   for (const [scenario, message] of [
     ['manifest', /Symlink rejected/],
     ['fifo', /Non-regular manifest path rejected/],
+    ['directory fifo', /Non-regular path rejected/],
     ['ancestor', /Symlink rejected/],
   ]) {
     await t.test(scenario, t => {
-      const f = fixture(t, scenario === 'fifo' ? 'pipe.private\n' : scenario === 'ancestor' ? 'escape/.env\n' : '.env\n');
+      const f = fixture(t, scenario === 'fifo' ? 'pipe.private\n' : scenario === 'directory fifo' ? 'local files/\n' : scenario === 'ancestor' ? 'escape/.env\n' : '.env\n');
       if (scenario === 'manifest') {
         f.write('manifest-copy', '.env\n', f.root);
         fs.unlinkSync(path.join(f.main, '.worktreeinclude'));
         fs.symlinkSync(path.join(f.root, 'manifest-copy'), path.join(f.main, '.worktreeinclude'));
       }
       if (scenario === 'fifo') ok(f.run('mkfifo', [path.join(f.main, 'pipe.private')]));
+      if (scenario === 'directory fifo') ok(f.run('mkfifo', [path.join(f.main, 'local files/pipe')]));
       if (scenario === 'ancestor') fs.symlinkSync(f.main, path.join(f.main, 'escape'));
       f.add();
       const result = f.invoke(['apply'], f.target);
