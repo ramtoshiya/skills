@@ -246,8 +246,6 @@ snapshot to render selected objects through a deployed Excalidraw app.
 
 ## Limits
 
-This is a small usable proof of concept, not the full handoff specification.
-
 - Size limits the command sets itself are soft. Standard input above
   5,000,000 bytes, batch image data above 128 MiB, and snapshot image data
   above 48 MiB still run, with a stderr warning that names the limit, the actual
