@@ -38,6 +38,9 @@ events = [{{"type": "system", "subtype": "init", "session_id": session, "model":
 if reply.get("tool"):
     events += [
         {{"type": "assistant", "message": {{"id": "m1", "content": [
+            *([{{"type": "thinking", "signature": "sig", "thinking": reply["thinking"]
+                if dict(zip(args, args[1:])).get("--thinking-display") == "summarized" else ""}}]
+              if reply.get("thinking") else []),
             *([{{"type": "text", "text": reply["narration"]}}] if reply.get("narration") else []),
             {{"type": "tool_use", "id": "t1", "name": "Bash", "input": {{"command": reply.get("command", "pwd")}}}}]}}}},
         {{"type": "user", "message": {{"content": [
@@ -382,15 +385,17 @@ class LiveProgressTests(unittest.TestCase):
     def test_the_running_sessions_viewers_see_claude_codes_steps_before_the_answer(self):
         with tempfile.TemporaryDirectory() as tmp:
             out, _, _ = probe(Path(tmp), LIVE_PROBE, [
-                {"text": "done", "tool": True, "narration": "Checking the files.", "output": "a.txt"},
+                {"text": "done", "tool": True, "thinking": "The listing answers this.",
+                 "narration": "Checking the files.", "output": "a.txt"},
                 {"text": "other done", "tool": True}], "")
         self.assertEqual(out["turn"], {"text": "done", "calls": [], "steps": 1})
         self.assertEqual([event[0] for event in out["seen"]], [
-            "_emit_interim_assistant_message", "tool_progress_callback", "tool_start_callback",
+            "reasoning_callback", "_emit_interim_assistant_message", "tool_progress_callback", "tool_start_callback",
             "tool_progress_callback", "tool_complete_callback"])
-        self.assertEqual(out["seen"][0][1], {"role": "assistant", "content": "Checking the files."})
-        self.assertEqual(out["seen"][2][1:], ["t1", "Bash", {"command": "pwd"}])
-        self.assertEqual(out["seen"][4][1:], ["t1", "Bash", {"command": "pwd"}, "a.txt"])
+        self.assertEqual(out["seen"][0][1], "The listing answers this.")
+        self.assertEqual(out["seen"][1][1], {"role": "assistant", "content": "Checking the files."})
+        self.assertEqual(out["seen"][3][1:], ["t1", "Bash", {"command": "pwd"}])
+        self.assertEqual(out["seen"][5][1:], ["t1", "Bash", {"command": "pwd"}, "a.txt"])
 
 
 class ChildCoderProfileTests(unittest.TestCase):
