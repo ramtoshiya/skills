@@ -380,7 +380,6 @@ GUARD_EVENTS = {
 
 
 @unittest.skipUnless(shutil.which("hermes"), "Hermes is not installed")
-@unittest.skipUnless(shutil.which("hermes"), "Hermes is not installed")
 class LiveProgressTests(unittest.TestCase):
     def test_the_running_sessions_viewers_see_claude_codes_steps_before_the_answer(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -398,6 +397,7 @@ class LiveProgressTests(unittest.TestCase):
         self.assertEqual(out["seen"][5][1:], ["t1", "Bash", {"command": "pwd"}, "a.txt"])
 
 
+@unittest.skipUnless(shutil.which("hermes"), "Hermes is not installed")
 class ChildCoderProfileTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
