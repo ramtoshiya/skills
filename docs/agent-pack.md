@@ -219,11 +219,10 @@ role:
 
 The command needs Hermes's `hermes` command, on `PATH` or at
 `~/.hermes/hermes-agent/.hermes/bin/hermes`, and the profile directory, and it
-names whichever is missing. In bb's Accept Edits and Approve for me modes, bb
-runs Bash in Claude Code's sandbox. The `sandbox.filesystem.allowWrite` user
-setting that the [machine setup](setup.md) writes lets the command write the
-profile there. A profile chosen with `HERMES_LEARNING_HOME` needs its own
-entry.
+names whichever is missing. It writes outside the workspace, so in bb it needs
+the Full Access permission mode. bb's other modes run Bash in Claude Code's
+sandbox, which refuses those writes. A review fork and a child thread inherit
+the mode of the thread that started them.
 
 ## Requirements
 

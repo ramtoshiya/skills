@@ -415,11 +415,6 @@ covered.
   with the profile, as [Agent plugins](agent-pack.md) describes. Claude Code
   skips the folder when it does not exist. It reads this variable from user
   settings and the environment, not from a project's settings.
-- `sandbox.filesystem.allowWrite` lets sandboxed Bash commands write the
-  Hermes coder profile, Hermes's `installs` and `runtime` state, and uv's
-  cache. The `hermes-learning` command of `ramtoshiya-cc` writes there when it
-  records memory and skills. bb sandboxes Bash in its Accept Edits and Approve
-  for me modes and adds its own entries to this list.
 - `permissions.deny` includes `AskUserQuestion`, `EnterPlanMode`, and
   `SendFeedback` in every registered Claude profile. Necessary questions stay
   in ordinary chat, where the user's reply can serve as a fork or rewind

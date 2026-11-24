@@ -22,16 +22,6 @@
       "SendFeedback"
     ]
   },
-  "sandbox": {
-    "filesystem": {
-      "allowWrite": [
-        "~/.hermes/profiles/coder",
-        "~/.hermes/installs",
-        "~/.hermes/runtime",
-        "~/.cache/uv"
-      ]
-    }
-  },
   "env": {
     "CLAUDE_CODE_ENABLE_AWAY_SUMMARY": "0",
     "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
