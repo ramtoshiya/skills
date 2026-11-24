@@ -1,4 +1,3 @@
-# Local agent state and settings; reviewed reusable sources live under setup/.
 /.claude/
 /.codex/
 .credentials.json
@@ -8,7 +7,6 @@ auth.json
 !.env.example
 !.env.template
 
-# Authentication stores and private key material must remain external.
 .ssh/
 .gnupg/
 *.pem
@@ -16,11 +14,9 @@ auth.json
 *.p12
 *.pfx
 
-# Generated files.
 __pycache__/
 *.pyc
 .DS_Store
 
-# The hook binary and its temporary build file, built by setup/agents/hook_binary.py.
 /plugins/*/hooks/ramtoshiya-hooks
 /plugins/*/hooks/.ramtoshiya-hooks.*

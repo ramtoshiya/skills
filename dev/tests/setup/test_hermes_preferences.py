@@ -1,5 +1,3 @@
-"""Command-level contracts for the shared preferences in every Hermes profile's SOUL.md."""
-
 import importlib.util
 import json
 import os

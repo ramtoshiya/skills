@@ -1,5 +1,3 @@
-// Runs the Python unittest suites as node tests, each unit in its own process, so they run in parallel with
-// each other and with the Node test files.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
@@ -9,7 +7,6 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const units = join(root, 'dev/tests/unittest_units.py');
-// The hooks need Python 3.11 or newer, and the system python3 can be older.
 const uv = ['run', '--no-project', '--managed-python', '--python', '>=3.11', 'python'];
 const python = [...uv, units];
 

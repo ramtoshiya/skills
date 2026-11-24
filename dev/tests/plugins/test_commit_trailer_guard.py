@@ -19,7 +19,6 @@ class CommitTrailerGuardTests(unittest.TestCase):
 
     def test_blocks_attribution_in_commit_and_pr_text(self):
         for command in [
-            # A commit message passed through a heredoc, as Claude Code writes it.
             f"git add -A && git commit -q -F - <<'EOF'\nRemove a component\n\nWhy it went.\n\n{TRAILER}\nEOF",
             f'git commit -m "Fix a bug" -m "{TRAILER}"',
             f"git -C repo commit --amend -m 'Subject\n\n{TRAILER}'",

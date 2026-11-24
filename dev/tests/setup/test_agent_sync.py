@@ -1,5 +1,3 @@
-"""Ownership and source-integrity contracts for the agent setup reconciler."""
-
 import importlib.util
 import json
 import os
@@ -42,7 +40,6 @@ class AgentSyncTests(unittest.TestCase):
         self.marketplace = self.root / ".claude-plugin/marketplace.json"
         commands = self.home / "bin"
         commands.mkdir()
-        # These stubs keep a test that forgets fake_cli from reaching a real host command.
         for host in ("claude", "codex"):
             (commands / host).write_text("#!/bin/sh\nexit 99\n")
             (commands / host).chmod(0o755)
@@ -72,7 +69,6 @@ class AgentSyncTests(unittest.TestCase):
         sync.write_json(self.marketplace, {"name": "example", "plugins": entries})
 
     def install_source(self, revision):
-        """Check out a revision where sync looks for pinned sources and return the plugin directory."""
         target = self.home / "state/ramtoshiya-agents/sources/example/skills" / revision
         target.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "clone", "-q", str(self.upstream), str(target)], check=True)
@@ -83,16 +79,10 @@ class AgentSyncTests(unittest.TestCase):
         return self.home / f".{host}/plugins/cache/example/example/local"
 
     def deploy(self, host, source):
-        """Return a shell snippet that leaves a copy of source in the host's plugin cache."""
         cache = shlex.quote(str(self.cache(host)))
         return f"rm -rf {cache} && mkdir -p {shlex.quote(str(self.cache(host).parent))} && cp -R {shlex.quote(str(source))} {cache}"
 
     def fake_cli(self, host, commands=None):
-        """Replace the host command with a script that logs every call.
-
-        The script reports this checkout as the marketplace and lists the example
-        plugin once its cache directory exists. It runs the shell snippet that
-        commands maps to an exact call and exits with an error for any other call."""
         if host == "claude":
             marketplaces = [{"name": "example", "path": str(self.root)}]
             listing = "plugin list --json"
@@ -118,7 +108,6 @@ class AgentSyncTests(unittest.TestCase):
         (self.home / "bin" / host).write_text(script)
 
     def changes(self, host):
-        """Return the calls sync made to the host command, without its read-only queries."""
         log = self.home / f"{host}.log"
         calls = log.read_text().splitlines() if log.exists() else []
         return [call for call in calls if not call.startswith(("plugin marketplace list", "plugin list", "plugins list"))]
@@ -128,9 +117,6 @@ class AgentSyncTests(unittest.TestCase):
         return operation, operation.process([host], apply=apply)
 
     def use_hook_plugin(self, source):
-        """Declare a local package that holds the hook binary's source and commit the given source.
-
-        The go stub builds by copying main.go to the output, and fails when the source says broken."""
         hooks = self.root / "plugins/ramtoshiya/hooks"
         hooks.mkdir(parents=True, exist_ok=True)
         (hooks / "main.go").write_text(source)

@@ -45,7 +45,6 @@ def temporary(output):
 
 
 def build(root):
-    """Build every output and return whether any output's bytes changed."""
     root = Path(root)
     changed = False
     for relative in OUTPUTS:

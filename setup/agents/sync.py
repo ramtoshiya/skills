@@ -26,7 +26,6 @@ ROOT = Path(__file__).resolve().parents[2]
 IGNORED = {".git", "__pycache__", ".DS_Store", ".in_use"}
 PREFERENCES_BEGIN = b"<!-- BEGIN ramtoshiya:preferences -->"
 PREFERENCES_END = b"<!-- END ramtoshiya:preferences -->"
-# The Hermes operator profile's SOUL.md also holds the ramtoshiya:operator block, which setup/hermes owns.
 PREFERENCES_HINT = re.compile(rb"ramtoshiya:preferences|<!--\s*(?:BEGIN|END)\s+ramtoshiya\b(?!:operator\b)", re.IGNORECASE)
 # Mirrors Hermes's hermes_constants: a directory under profiles/ is a profile only with a valid id and
 # one of these markers, and a profile deleted with `hermes profile delete` leaves a tombstone in .deleted/.
@@ -119,7 +118,6 @@ def write_bytes(path, data):
 
 
 def reconcile_instructions(actual, source, path):
-    """Replace the managed block without changing any bytes outside it."""
     begins = actual.count(PREFERENCES_BEGIN)
     ends = actual.count(PREFERENCES_END)
     hints = len(PREFERENCES_HINT.findall(actual))
@@ -149,7 +147,6 @@ def preferences_source(root):
 
 
 def reconcile_instructions_file(path, source, apply):
-    """Check or write the managed block in path and return the result status."""
     try:
         actual = path.read_bytes() if path.exists() or path.is_symlink() else b""
     except OSError as error:
@@ -195,7 +192,6 @@ def same_value(left, right):
 
 
 def overlay_settings(base, layer, prefix=""):
-    """Combine defaults and overrides, retaining required entries in arrays."""
     result = deepcopy(base)
     for key, value in layer.items():
         name = f"{prefix}.{key}" if prefix else key
@@ -214,7 +210,6 @@ def overlay_settings(base, layer, prefix=""):
 
 
 def reconcile_settings(actual, expected, path, prefix=""):
-    """Return merged settings and changed key paths without exposing values."""
     result = deepcopy(actual)
     changed = []
     for key, required in expected.items():
@@ -337,9 +332,6 @@ class ClaudeSettings:
 
 
 class HermesInstructions:
-    """The managed preferences block in the SOUL.md of every Hermes profile, which Hermes loads into
-    every session of that profile."""
-
     def __init__(self, root, record):
         self.root = root
         self.record = record
@@ -410,7 +402,6 @@ def different(actual, expected):
 
 
 def git_files(repository, ref, prefix):
-    """Read committed bytes without extracting or executing upstream files."""
     prefix = str(relative_path(prefix)).rstrip("/")
     result = subprocess.run(
         ["git", "-C", str(repository), "archive", ref, prefix],
@@ -433,7 +424,6 @@ def git_files(repository, ref, prefix):
 
 
 def build_outputs(prefix):
-    """Return the hook binaries that the build writes inside a package prefix, relative to the prefix."""
     return [Path(output).relative_to(prefix) for output in hook_binary.OUTPUTS if Path(output).is_relative_to(prefix)]
 
 

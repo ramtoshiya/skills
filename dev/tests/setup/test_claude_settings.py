@@ -1,5 +1,3 @@
-"""Command-level contracts for Claude settings reconciliation."""
-
 import json
 import os
 from pathlib import Path
