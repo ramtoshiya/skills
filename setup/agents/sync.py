@@ -26,7 +26,9 @@ ROOT = Path(__file__).resolve().parents[2]
 IGNORED = {".git", "__pycache__", ".DS_Store", ".in_use"}
 PREFERENCES_BEGIN = b"<!-- BEGIN ramtoshiya:preferences -->"
 PREFERENCES_END = b"<!-- END ramtoshiya:preferences -->"
-PREFERENCES_HINT = re.compile(rb"ramtoshiya:preferences|<!--\s*(?:BEGIN|END)\s+ramtoshiya\b(?!:operator\b)", re.IGNORECASE)
+HERMES_OPERATOR_BLOCK = rb"ramtoshiya:operator"
+PREFERENCES_HINT = re.compile(
+    rb"ramtoshiya:preferences|<!--\s*(?:BEGIN|END)\s+(?!" + HERMES_OPERATOR_BLOCK + rb"\b)ramtoshiya\b", re.IGNORECASE)
 # Mirrors Hermes's hermes_constants: a directory under profiles/ is a profile only with a valid id and
 # one of these markers, and a profile deleted with `hermes profile delete` leaves a tombstone in .deleted/.
 HERMES_PROFILE_ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")

@@ -40,9 +40,7 @@ class AgentSyncTests(unittest.TestCase):
         self.marketplace = self.root / ".claude-plugin/marketplace.json"
         commands = self.home / "bin"
         commands.mkdir()
-        for host in ("claude", "codex"):
-            (commands / host).write_text("#!/bin/sh\nexit 99\n")
-            (commands / host).chmod(0o755)
+        self.refuse_host_commands_without_fake_cli(commands)
         self.environment = patch.dict(os.environ, {
             "PATH": str(commands) + os.pathsep + os.environ["PATH"],
             "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
@@ -64,6 +62,11 @@ class AgentSyncTests(unittest.TestCase):
         self.set_entries([self.entry])
         git(self.root, "init", "-q")
         commit(self.root, "Approve source")
+
+    def refuse_host_commands_without_fake_cli(self, commands):
+        for host in ("claude", "codex"):
+            (commands / host).write_text("#!/bin/sh\nexit 99\n")
+            (commands / host).chmod(0o755)
 
     def set_entries(self, entries):
         sync.write_json(self.marketplace, {"name": "example", "plugins": entries})
