@@ -98,20 +98,7 @@ def read_json(path, default=None):
 
 
 def write_json(path, data):
-    if path.is_symlink():
-        raise Conflict(f"Refusing to replace a symlinked configuration file: {path}")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as stream:
-        temporary = Path(stream.name)
-        try:
-            json.dump(data, stream, indent=2, ensure_ascii=False)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-            temporary.chmod(stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o600)
-            os.replace(temporary, path)
-        finally:
-            temporary.unlink(missing_ok=True)
+    write_bytes(path, (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode())
 
 
 def write_bytes(path, data):
@@ -523,16 +510,14 @@ class Sources:
             raise Conflict("Sources must use a GitHub owner/repository and a full commit SHA")
         prefix = str(relative_path(source["path"]))
         suffix = Path(repo) / revision
-        candidates = [self.directory / suffix]
-        for candidate in candidates:
-            if (candidate / ".git").exists():
-                actual = run("git", "-C", str(candidate), "rev-parse", "HEAD").strip()
-                if actual != revision:
-                    raise Conflict(f"Checkout at {candidate} is not pinned to {revision}")
-                return Package(entry, candidate / prefix, candidate, revision, prefix)
+        target = self.directory / suffix
+        if (target / ".git").exists():
+            actual = run("git", "-C", str(target), "rev-parse", "HEAD").strip()
+            if actual != revision:
+                raise Conflict(f"Checkout at {target} is not pinned to {revision}")
+            return Package(entry, target / prefix, target, revision, prefix)
         if not fetch:
             raise Conflict(f"Source {repo}@{revision[:12]} not cached, run agents:sync")
-        target = candidates[0]
         target.parent.mkdir(parents=True, exist_ok=True)
         if target.exists():
             raise Conflict(f"Unrecognized source directory: {target}")
@@ -834,7 +819,7 @@ def main():
         else:
             for row in results:
                 print(f"{row['host']:7} {row['component']:25} {row['status']:10} {row['detail']}")
-        return int(any(row["status"] in {"drift", "conflict", "approval"} for row in results))
+        return int(any(row["status"] in {"drift", "conflict"} for row in results))
     except ERRORS as error:
         print(str(error), file=sys.stderr)
         return 1
