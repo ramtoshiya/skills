@@ -28,7 +28,7 @@ class ClaudeSettingsTests(unittest.TestCase):
         self.root = self.base / "repo"
         (self.root / "setup/agents").mkdir(parents=True)
         (self.root / ".claude-plugin").mkdir()
-        for name in ("sync.py", "level.py", "claude-settings.json"):
+        for name in ("sync.py", "hook_binary.py", "level.py", "claude-settings.json"):
             shutil.copyfile(ROOT / "setup/agents" / name, self.root / "setup/agents" / name)
         terminal = ROOT / "setup/agents/claude-terminal-settings.json"
         if terminal.exists():

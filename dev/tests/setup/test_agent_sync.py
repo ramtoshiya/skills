@@ -127,6 +127,26 @@ class AgentSyncTests(unittest.TestCase):
         operation = sync.Sync(self.root)
         return operation, operation.process([host], apply=apply)
 
+    def use_hook_plugin(self, source):
+        """Declare a local package that holds the hook binary's source and commit the given source.
+
+        The go stub builds by copying main.go to the output, and fails when the source says broken."""
+        hooks = self.root / "plugins/ramtoshiya/hooks"
+        hooks.mkdir(parents=True, exist_ok=True)
+        (hooks / "main.go").write_text(source)
+        (self.root / ".gitignore").write_text("/plugins/*/hooks/ramtoshiya-hooks\n/plugins/*/hooks/.ramtoshiya-hooks.*\n")
+        self.set_entries([{"name": "example", "source": "./plugins/ramtoshiya"}])
+        commit(self.root, "Change the hook source")
+        for name, script in (
+            ("mise", "exit 1\n"),
+            ("go", 'while [ $# -gt 1 ]; do [ "$1" = -o ] && out=$2; shift; done\n'
+                   'if grep -q broken main.go; then echo "main.go: syntax error" >&2; exit 1; fi\n'
+                   'cp main.go "$out"\n'),
+        ):
+            (self.home / "bin" / name).write_text("#!/bin/sh\n" + script)
+            (self.home / "bin" / name).chmod(0o755)
+        return hooks
+
     def test_sync_installs_repeats_without_writes_and_updates_after_a_pin_change(self):
         self.fake_cli("claude", {"plugin install example@example --scope user": self.deploy("claude", self.source)})
         operation, rows = self.execute(True)
@@ -381,6 +401,40 @@ class AgentSyncTests(unittest.TestCase):
             with self.assertRaisesRegex(sync.Conflict, "Another agent sync"):
                 with second.lock():
                     self.fail("concurrent sync acquired the lock")
+
+    def test_sync_builds_the_hook_binary_before_installing_and_status_compares_it_with_its_source(self):
+        hooks = self.use_hook_plugin("package main // v1\n")
+        installed = self.cache("codex")
+        shutil.copytree(self.root / "plugins/ramtoshiya", installed)
+        self.fake_cli("codex", {"plugin add example@example": self.deploy("codex", self.root / "plugins/ramtoshiya")})
+        steps = [
+            (False, [("build", "drift"), ("codex", "ok")]),
+            (True, [("build", "updated"), ("codex", "updated")]),
+            (True, [("build", "ok"), ("codex", "ok")]),
+        ]
+        for apply, expected in steps:
+            _, rows = self.execute(apply, "codex")
+            self.assertEqual([(row["host"], row["status"]) for row in rows], expected)
+        self.assertEqual((installed / "hooks/ramtoshiya-hooks").read_text(), "package main // v1\n")
+
+        (hooks / "main.go").write_text("package main // v2\n")
+        commit(self.root, "Change the hook")
+        _, rows = self.execute(False, "codex")
+        self.assertEqual([(row["host"], row["status"]) for row in rows], [("build", "drift"), ("codex", "drift")])
+        self.assertEqual(sorted(path.name for path in hooks.iterdir()), ["main.go", "ramtoshiya-hooks"])
+        _, rows = self.execute(True, "codex")
+        self.assertEqual([(row["host"], row["status"]) for row in rows], [("build", "updated"), ("codex", "updated")])
+        self.assertEqual((installed / "hooks/ramtoshiya-hooks").read_text(), "package main // v2\n")
+        self.assertEqual(self.changes("codex"), ["plugin add example@example", "plugin add example@example"])
+
+    def test_failed_hook_build_stops_sync_before_any_install(self):
+        self.use_hook_plugin("package main // broken\n")
+        self.fake_cli("codex", {"plugin add example@example": self.deploy("codex", self.root / "plugins/ramtoshiya")})
+        operation, rows = self.execute(True, "codex")
+        self.assertEqual([(row["host"], row["status"]) for row in rows], [("build", "conflict")])
+        self.assertIn("main.go: syntax error", rows[0]["detail"])
+        self.assertEqual(self.changes("codex"), [])
+        self.assertFalse(operation.state_path.exists())
 
     def test_git_source_checks_include_untracked_files_and_symlinks(self):
         (self.source / "unexpected").symlink_to(self.home / "private")

@@ -45,7 +45,9 @@ def temporary(output):
 
 
 def build(root):
+    """Build every output and return whether any output's bytes changed."""
     root = Path(root)
+    changed = False
     for relative in OUTPUTS:
         output = root / relative
         built = temporary(output)
@@ -53,24 +55,24 @@ def build(root):
             compile(root, built)
             if not output.is_file() or output.read_bytes() != built.read_bytes():
                 os.replace(built, output)
+                changed = True
         finally:
             built.unlink(missing_ok=True)
+    return changed
 
 
 def status(root):
     root = Path(root)
     states = set()
-    for relative in OUTPUTS:
-        output = root / relative
-        if not output.is_file():
-            states.add("absent")
-            continue
-        built = temporary(output)
-        try:
+    with tempfile.TemporaryDirectory() as directory:
+        built = Path(directory) / "ramtoshiya-hooks"
+        for relative in OUTPUTS:
+            output = root / relative
+            if not output.is_file():
+                states.add("absent")
+                continue
             compile(root, built)
             states.add("ok" if output.read_bytes() == built.read_bytes() else "drift")
-        finally:
-            built.unlink(missing_ok=True)
     return "absent" if "absent" in states else "drift" if "drift" in states else "ok"
 
 

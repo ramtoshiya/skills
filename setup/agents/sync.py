@@ -3,7 +3,7 @@
 import argparse
 from copy import deepcopy
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import fcntl
 import hashlib
 import io
@@ -19,6 +19,7 @@ import tarfile
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import hook_binary  # noqa: E402
 import level  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -431,6 +432,11 @@ def git_files(repository, ref, prefix):
     return mapping
 
 
+def build_outputs(prefix):
+    """Return the hook binaries that the build writes inside a package prefix, relative to the prefix."""
+    return [Path(output).relative_to(prefix) for output in hook_binary.OUTPUTS if Path(output).is_relative_to(prefix)]
+
+
 @dataclass
 class Package:
     entry: dict
@@ -438,10 +444,11 @@ class Package:
     repository: Path
     ref: str
     prefix: str
+    generated: dict = field(default_factory=dict)
 
     @property
     def expected(self):
-        return git_files(self.repository, self.ref, self.prefix)
+        return {**git_files(self.repository, self.ref, self.prefix), **self.generated}
 
     def check(self):
         changed = different(files(self.root), self.expected)
@@ -502,8 +509,13 @@ class Sources:
         source = entry["source"]
         if isinstance(source, str):
             prefix = str(relative_path(source))
-            revision = ref or run("git", "-C", str(self.root), "rev-parse", "HEAD").strip()
-            return Package(entry, self.root / prefix, self.root, revision, prefix)
+            directory = self.root / prefix
+            if ref:
+                return Package(entry, directory, self.root, ref, prefix)
+            revision = run("git", "-C", str(self.root), "rev-parse", "HEAD").strip()
+            generated = {str(name): digest((directory / name).read_bytes())
+                         for name in build_outputs(prefix) if (directory / name).is_file()}
+            return Package(entry, directory, self.root, revision, prefix, generated)
         revision = ref or source["sha"]
         repo = source["url"]
         if not re.fullmatch(r"[\w.-]+/[\w.-]+", repo) or not re.fullmatch(r"[0-9a-f]{40}", revision):
@@ -730,6 +742,18 @@ class Sync:
             except ERRORS as error:
                 self.record(host, name, "conflict", str(error))
 
+    def build_hooks(self, apply):
+        try:
+            if apply:
+                return ("updated", "rebuilt from its Go source") if hook_binary.build(self.root) else ("ok", "matches its Go source")
+            return {
+                "ok": ("ok", "matches its Go source"),
+                "drift": ("drift", "differs from its Go source, run agents:sync"),
+                "absent": ("drift", "missing, run agents:sync"),
+            }[hook_binary.status(self.root)]
+        except (hook_binary.BuildError, OSError, subprocess.SubprocessError) as error:
+            return "conflict", str(error)
+
     def process(self, hosts, apply=False, selected=None):
         if selected is not None:
             selected = set(selected)
@@ -737,6 +761,13 @@ class Sync:
             known.update(key.split(":", 1)[1] for key in self.state["packages"])
             if selected - known:
                 raise Conflict(f"Unknown plugins: {', '.join(sorted(selected - known))}")
+        chosen = [entry for entry in self.marketplace["plugins"] if selected is None or entry["name"] in selected]
+        if (self.root / hook_binary.SOURCE).is_dir() and any(
+                isinstance(entry["source"], str) and build_outputs(relative_path(entry["source"])) for entry in chosen):
+            status, detail = self.build_hooks(apply)
+            self.record("build", "ramtoshiya-hooks", status, detail)
+            if apply and status == "conflict":
+                return self.results
         for host in hosts:
             if not shutil.which(host):
                 self.record(host, "host", "absent", "executable not on PATH")

@@ -65,10 +65,13 @@ environment variables.
 
 The shell hooks are a Go program in `plugins/ramtoshiya/hooks`. The build
 writes it to `plugins/ramtoshiya/hooks/ramtoshiya-hooks`, which Git ignores.
-`mise run hooks:build` builds it, and `npm test` builds it before the Python
-tests run. `setup/agents/hook_binary.py status` prints `ok`, `drift`, or
-`absent` by building to a temporary file and comparing bytes. The first build
-downloads the module dependencies named in `go.sum`, so it needs network access.
+`agents:sync` builds it before it installs any plugin, so the Codex copy gets
+the current binary, and it installs nothing when the build fails.
+`agents:status` builds into a temporary directory and reports drift when the
+checkout's binary is missing or has different bytes. `mise run hooks:build`
+builds it alone, and `npm test` builds it before the Python tests run. The
+first build downloads the module dependencies named in `go.sum`, so it needs
+network access.
 
 ## Keep installs level with origin/main
 
