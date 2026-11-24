@@ -86,12 +86,8 @@ def budget_notice(tokens: int, window: int) -> str:
 
 
 def _thread_from_env(session_id: str) -> Optional[str]:
-    try:
-        from hermes_cli.plugins_session_env import resolve_session_env
-        value = resolve_session_env(session_id).get("BB_THREAD_ID")
-    except Exception:
-        logger.warning("self-compact: could not resolve the bb thread of session %s", session_id, exc_info=True)
-        return None
+    from hermes_cli.plugins_session_env import resolve_session_env
+    value = resolve_session_env(session_id).get("BB_THREAD_ID")
     return value if isinstance(value, str) and THREAD_ID.fullmatch(value) else None
 
 

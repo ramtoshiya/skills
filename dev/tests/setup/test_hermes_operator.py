@@ -320,9 +320,7 @@ class SkillDraftsHookTests(unittest.TestCase):
         self.assertIn("leave the draft top-level", spawn["stdin"])
         self.assertIn("No bb thread shows this Hermes session", self.evidence())
 
-    def test_failing_resolver_and_missing_bb_still_block(self):
-        self.enterContext(mock.patch.dict(sys.modules, hermes_runtime(lambda: self.origin, mock.Mock(
-            side_effect=RuntimeError("gateway gone")))))
+    def test_missing_bb_still_blocks(self):
         self.enterContext(mock.patch.dict(os.environ, {"BB_CLI": "", "PATH": "/nonexistent"}))
 
         self.assertEqual(self.call(self.PATCH)["action"], "block")

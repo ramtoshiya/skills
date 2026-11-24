@@ -148,20 +148,13 @@ def message_text(message: Any) -> str:
 
 
 def write_origin() -> str:
-    try:
-        from tools.write_approval import current_origin
-        return current_origin()
-    except Exception:
-        return "unknown"
+    from tools.write_approval import current_origin
+    return current_origin()
 
 
 def operator_thread(session_id: str) -> str | None:
-    try:
-        from hermes_cli.plugins_session_env import resolve_session_env
-        return resolve_session_env(session_id).get("BB_THREAD_ID") or None
-    except Exception:
-        logger.warning("skill-drafts: could not resolve the bb thread of session %s", session_id, exc_info=True)
-        return None
+    from hermes_cli.plugins_session_env import resolve_session_env
+    return resolve_session_env(session_id).get("BB_THREAD_ID") or None
 
 
 def bb_path() -> str:
