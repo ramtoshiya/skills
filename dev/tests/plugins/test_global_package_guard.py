@@ -329,6 +329,15 @@ class GlobalPackageGuardTests(unittest.TestCase):
             self.assertEqual(output["permissionDecision"], "deny")
             self.assertIn(PROCESS, output["permissionDecisionReason"])
 
+    def test_valid_shell_is_checked_not_refused(self):
+        commands = [
+            "git commit -m 'Document heredocs\n\nStart one with cat <<EOF on its own line.\nEnd it with EOF.'",
+            "base=${file#src/}; git commit -m 'Move $base\n\nKeep the old name.'",
+            "printf '%s\\n' $'don\\'t stop'",
+        ]
+        self.assert_allowed(commands)
+        self.assert_denied(GLOBAL, [f"{command}\nnpm install -g example" for command in commands])
+
     def test_command_text_is_never_executed(self):
         with tempfile.TemporaryDirectory() as directory:
             marker = Path(directory) / "marker"
