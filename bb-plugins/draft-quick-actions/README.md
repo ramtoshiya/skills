@@ -60,10 +60,9 @@ was. If the draft cannot be deleted after the new thread starts, a warning
 names the new thread and you delete the draft yourself.
 
 The environment request comes from Held Drafts, which records it when
-`bb draft create` makes the draft. A draft created by a Held Drafts version
-that did not record it cannot move to another provider. The error asks you
-to recreate it with `bb draft create`. Models from its own provider still
-work.
+`bb draft create` makes the draft. A draft with no recorded environment
+cannot move to another provider, and the error says so. Models from its own
+provider still work.
 
 ## Run a draft whose model belongs to another provider
 

@@ -52,8 +52,8 @@ message that was sent.
 ## Requirements
 
 An installed Held Drafts plugin must create the drafts. Moving a draft to
-another provider needs a draft made by a Held Drafts version that records
-the draft's environment request. Scheduled messages, grouped messages,
+another provider needs the draft's environment request, which Held Drafts
+records when it creates the draft. Scheduled messages, grouped messages,
 retries, and other plugins' waits are outside this action. The plugin uses
 BB's experimental thread action, app overlay, and model picker APIs and
 requires verification after host API changes.

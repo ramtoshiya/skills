@@ -172,7 +172,7 @@ test("a draft without a recorded environment is not moved to another provider", 
   const harness = await setup(t, { metadata: {} });
   await assert.rejects(
     harness.behavior.callRpc("runDraft", { ...target, execution: { providerId: "codex", model: "gpt-6-luna" } }),
-    /bb draft create/,
+    /no recorded environment/,
   );
   for (const call of ["threads.queuedMessages.send", "threads.spawn", "threads.delete"]) {
     assert.equal(harness.inspection.sdk.callsTo(call).length, 0, call);

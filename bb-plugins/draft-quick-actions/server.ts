@@ -96,7 +96,7 @@ export default function plugin(bb: BbPluginApi) {
     );
     if (!metadata.success) {
       throw new Error(
-        "This draft was created before Held Drafts recorded its environment, so it cannot move to another provider. Recreate it with bb draft create, or choose a model from its own provider.",
+        "This draft has no recorded environment, so it cannot move to another provider. Choose a model from its own provider.",
       );
     }
     const spawned = await bb.sdk.threads.spawn({
