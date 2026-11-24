@@ -195,11 +195,34 @@ test('discovery failures never launch Claude or expose the key', async t => {
 test('refuses unsafe proxy URLs before sending the key or launching Claude', async t => {
   const f = await fixture(t, [{ id: 'gpt-6-sol', owned_by: 'openai' }]);
   const port = new URL(f.baseUrl).port;
-  for (const url of [`http://localhost.:${port}`, `${f.baseUrl}/v1?route=1`, `${f.baseUrl}/v1#route`]) {
+  for (const [url, message] of [
+    [`http://localhost.:${port}`, /Remote proxies require HTTPS/],
+    [`${f.baseUrl}/v1?route=1`, /must not contain credentials, a query, or a fragment/],
+    [`${f.baseUrl}/v1#route`, /must not contain credentials, a query, or a fragment/],
+    ['http://example.com', /Remote proxies require HTTPS/],
+  ]) {
     const result = await f.run([], { CLIPROXY_BASE_URL: url });
     assert.equal(result.code, 1, url);
+    assert.match(result.stderr, message, url);
     assert.ok(!result.stderr.includes('test-client-key'));
   }
+  assert.deepEqual(f.requests, []);
+  await assert.rejects(f.capture(), { code: 'ENOENT' });
+});
+
+test('reports a missing key and an unreadable config without exposing config contents', async t => {
+  const f = await fixture(t, []);
+  const empty = join(f.dir, 'empty.json');
+  await writeFile(empty, '{}');
+  const missing = await f.run([], { CLAUDEX_CONFIG: empty });
+  assert.equal(missing.code, 1);
+  assert.match(missing.stderr, /Set CLIPROXY_API_KEY or apiKey/);
+  const broken = join(f.dir, 'broken.json');
+  await writeFile(broken, '{"apiKey": "private-config-key" oops');
+  const unreadable = await f.run([], { CLAUDEX_CONFIG: broken });
+  assert.equal(unreadable.code, 1);
+  assert.match(unreadable.stderr, /claudex: .*config/i);
+  assert.ok(!unreadable.stderr.includes('private-config-key'));
   assert.deepEqual(f.requests, []);
   await assert.rejects(f.capture(), { code: 'ENOENT' });
 });

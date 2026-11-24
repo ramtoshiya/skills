@@ -7,7 +7,14 @@ const { spawn } = require('node:child_process');
 function connection() {
   const defaultConfig = path.join(os.homedir(), '.config/claudex/config.json');
   const configPath = process.env.CLAUDEX_CONFIG || (fs.existsSync(defaultConfig) ? defaultConfig : undefined);
-  const config = configPath ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : {};
+  let config = {};
+  if (configPath) {
+    try {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    } catch {
+      throw new Error('Could not read the claudex config as JSON. Check CLAUDEX_CONFIG or ~/.config/claudex/config.json');
+    }
+  }
   let key = process.env.CLIPROXY_API_KEY || config.apiKey;
   if (typeof key === 'string') {
     const reference = /^\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))$/.exec(key);
@@ -141,7 +148,14 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  const { key, baseUrl } = connection();
+  let key, baseUrl;
+  try {
+    ({ key, baseUrl } = connection());
+  } catch (error) {
+    console.error('claudex: ' + error.message);
+    process.exitCode = 1;
+    return;
+  }
   const response = await fetch(baseUrl + '/v1/models', {
     headers: { Authorization: 'Bearer ' + key },
     signal: AbortSignal.timeout(5000), redirect: 'error',
