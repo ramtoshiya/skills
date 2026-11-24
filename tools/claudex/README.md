@@ -86,7 +86,10 @@ first Astra model when the catalog has nothing else. Discovery still runs when
 you pass `--model`, which overrides the main model.
 The Fable slot in `/model` shows the selected Astra model ID, even when a newer
 Sol model is selected for main and Opus. If no Astra is available, it shows
-the main model instead.
+the main model instead. If neither the main nor the Sonnet role uses Terra,
+claudex offers the newest visible Terra as a separate model in Claude Code and
+bb. This does not change the default or the subagent model. If you set
+`ANTHROPIC_CUSTOM_MODEL_OPTION`, claudex keeps your choice.
 `--help`, `-h`, `--version`, and `-v` alone run Claude Code without discovery.
 
 The wrapper enables auto-compact for `claudex` sessions without changing the

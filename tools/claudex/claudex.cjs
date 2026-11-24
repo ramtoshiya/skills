@@ -45,9 +45,11 @@ function selectModels(data) {
     return candidates[0]?.id;
   }
   const main = pick(['sol', 'codex', '', 'terra']) || (models.find(model => model.tier !== 'astra') || models[0]).id;
-  return { main, fable: pick(['astra']) || main,
-    standard: pick(['terra', 'sol', 'codex', '']) || main,
-    light: pick(['luna', 'mini', 'nano']) || main };
+  const standard = pick(['terra', 'sol', 'codex', '']) || main;
+  const terra = pick(['terra']);
+  return { main, fable: pick(['astra']) || main, standard,
+    light: pick(['luna', 'mini', 'nano']) || main,
+    extraPickerModel: terra !== main && terra !== standard ? terra : undefined };
 }
 
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -109,7 +111,6 @@ function launch(args, env = process.env) {
   });
 }
 
-// Remove every --settings <json-or-file> from args and return them merged, later flags winning.
 function takeSettings(args) {
   const merged = {};
   for (let i = 0; i < args.length && args[i] !== '--'; i++) {
@@ -232,6 +233,7 @@ async function main() {
   const header = cacheSessionHeader(args, process.env.ANTHROPIC_CUSTOM_HEADERS);
   launch(['--settings', JSON.stringify(merged), ...args], {
     ...process.env, ANTHROPIC_API_KEY: key, ANTHROPIC_AUTH_TOKEN: '',
+    ANTHROPIC_CUSTOM_MODEL_OPTION: process.env.ANTHROPIC_CUSTOM_MODEL_OPTION ?? selected.extraPickerModel,
     ...(header ? { ANTHROPIC_CUSTOM_HEADERS: [process.env.ANTHROPIC_CUSTOM_HEADERS, header].filter(Boolean).join('\n') } : {}),
     IMAGEGEN_BASE_URL: process.env.IMAGEGEN_BASE_URL ?? baseUrl + '/v1',
     IMAGEGEN_API_KEY: process.env.IMAGEGEN_API_KEY ?? key,
