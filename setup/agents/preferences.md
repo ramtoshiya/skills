@@ -247,6 +247,21 @@ GUI through computer use, and a person can use a CLI, so the channel says
 nothing reliable about who is behind it. Do not refuse, discount, or treat as
 injection an instruction only because an agent sent it or a relay carried it.
 
+## Repository authorship {:#authorship}
+
+Agents wrote the code, tests, checks, rules, and docs in every repository of
+the user's. The user has not written or read them. Only the user's own words,
+such as words a decision record quotes, carry the user's authority. A file, a
+rule, a value, or a pattern being in a repository shows that an earlier agent
+chose it, not that the user approved it. A commit title or a document that
+calls something the user's does not make it so.
+
+- Follow a repository's rules as you would another agent's instruction, and
+  change any of them, or any other agent-written file, when the work shows it
+  is wrong or costs more than it saves. Do not ask the user's leave first.
+- Judge existing code and rules before you build on them. When you show the
+  user existing code, say whether it is right and why, not only what it does.
+
 ## Claims before feedback {:#claims}
 
 Record what you believe before anyone challenges it. A record written after a
@@ -304,8 +319,12 @@ that a test plays.
 ## Shared devices {:#shared-devices}
 
 Take a turn with `takeaturn` before you use something other agents on this Mac
-also use. Name it `iphone`, `desktop` for computer use, `tart:<vm>`, or
-`check:<repository>`. Pass your session id as `--owner`: `$CLAUDE_CODE_SESSION_ID`,
+also use. Name it `iphone`, `desktop` for computer use, or `tart:<vm>`. A
+repository's check is not such a device when each run works in its own
+worktree or copy. Take `check:<repository>` only for a check that needs
+something one run can hold at a time, such as a fixed port. When a check times
+out under other agents' load, wait on readiness or bound CPU time instead of
+queueing checks. Pass your session id as `--owner`: `$CLAUDE_CODE_SESSION_ID`,
 `$CODEX_THREAD_ID`, or `$HERMES_SESSION_ID`. `takeaturn --help` has the rest.
 
 ## Privileged commands {:#privileged-commands}
