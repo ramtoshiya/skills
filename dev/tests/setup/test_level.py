@@ -48,7 +48,12 @@ def uv_python_dir():
     return subprocess.run(["uv", "python", "dir"], capture_output=True, text=True, check=True).stdout.strip()
 
 
-class LevelTests(unittest.TestCase):
+class LevelFixture:
+    """A shared checkout, its origin, and a worktree, with the installs that `level.py sync` makes."""
+
+    # Install the Hermes operator profile too, for tests that read what that install writes.
+    hermes = False
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -99,7 +104,7 @@ class LevelTests(unittest.TestCase):
         self.git(self.shared, "worktree", "add", "-q", "-b", "task", str(self.worktree), "origin/main")
         self.installed = self.home / ".hermes/profiles/operator/skills/operator-handoff/SKILL.md"
 
-        result = self.level("sync", "--hermes")
+        result = self.level("sync", *(["--hermes"] if self.hermes else []))
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def git(self, cwd, *args, env=None):
@@ -131,6 +136,194 @@ class LevelTests(unittest.TestCase):
 
     def remote_main(self):
         return self.git(self.remote, "rev-parse", "main")
+
+    def push_bb_plugin(self, text):
+        (self.worktree / "bb-plugins/demo").mkdir(parents=True, exist_ok=True)
+        (self.worktree / "bb-plugins/demo/package-lock.json").write_text("{}\n")
+        self.git(self.worktree, "add", "bb-plugins/demo/package-lock.json")
+        self.commit(self.worktree, "bb-plugins/demo/package.json", text)
+        return self.run_git(self.worktree, "push", "-q", "origin", "HEAD:main")
+
+    def install_calls(self):
+        calls = Path(self.env["CALLS"])
+        lines = calls.read_text().splitlines() if calls.exists() else []
+        return [call["args"] for call in map(json.loads, lines) if call["args"][:2] in (["plugin", "install"], ["npm", "ci"])]
+
+    def install_bb_plugin(self, source):
+        (self.home / "bb-plugins.json").write_text(json.dumps(
+            [{"id": "demo", "source": f"path:{source}", "providerIds": ["demo-agent"]}]))
+
+    def set_turn(self, status):
+        (self.home / "bb-threads.json").write_text(json.dumps([{"id": "thr_2", "providerId": "demo-agent",
+                                                                 "status": status}]))
+
+    def push_claudex(self, text, env=None):
+        """Push a change under tools/claudex. Its install step copies into the paths the real one writes."""
+        target = self.worktree / "tools/claudex"
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "install.sh").write_text(CLAUDEX_INSTALL)
+        (target / "claudex.cjs").write_text(f"// {text}\n")
+        self.git(self.worktree, "add", "tools/claudex")
+        self.run_git(self.worktree, "commit", "-q", "-m", f"claudex {text}", env=env)
+        return self.run_git(self.worktree, "push", "-q", "origin", "HEAD:main", env=env)
+
+    def installed_claudex(self):
+        return (self.home / ".local/share/claudex/claudex.cjs").read_text()
+
+
+class LevelTests(LevelFixture, unittest.TestCase):
+    def test_ignored_file_in_the_shared_checkout_stops_a_fast_forward_that_would_replace_it(self):
+        before = self.git(self.shared, "rev-parse", "HEAD")
+        (self.shared / ".env").write_text("local secret\n")
+        (self.worktree / ".env").write_text("tracked by mistake\n")
+        self.git(self.worktree, "add", "-f", ".env")
+        self.git(self.worktree, "commit", "-q", "-m", "track .env")
+
+        push = self.run_git(self.worktree, "push", "-q", "origin", "HEAD:main")
+
+        self.assertEqual(push.returncode, 0)
+        self.assertIn("STOPPED", push.stderr)
+        self.assertEqual((self.shared / ".env").read_text(), "local secret\n")
+        self.assertEqual(self.git(self.shared, "rev-parse", "HEAD"), before)
+
+    def test_bb_plugin_from_the_shared_checkout_is_reinstalled_when_no_turn_uses_it(self):
+        self.push_bb_plugin('{"name": "demo"}\n')
+        self.install_bb_plugin(self.shared / "bb-plugins/demo")
+        code, rows = self.status()
+        self.assertEqual(code, 1)
+        self.assertIn("no record", rows[("bb", "plugin:demo")]["detail"])
+
+        self.set_turn("active")
+        push = self.push_bb_plugin('{"name": "demo", "version": "2"}\n')
+
+        self.assertEqual(push.returncode, 0)
+        self.assertIn("postponed demo", push.stderr)
+        self.assertEqual(self.install_calls(), [])
+        self.assertEqual(self.status()[1][("bb", "plugin:demo")]["status"], "drift")
+
+        self.set_turn("idle")
+        self.assertEqual(self.level("sync").returncode, 0)
+
+        home = f"{self.shared}/bb-plugins/demo"
+        self.assertEqual(self.install_calls(), [["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund", home],
+                                              ["plugin", "install", f"path:{home}", "--yes"]])
+        code, rows = self.status()
+        self.assertEqual(code, 0, rows)
+        self.assertEqual(rows[("bb", "plugin:demo")]["status"], "ok")
+
+    def test_bb_plugin_running_from_a_copy_is_reported_and_left_where_it_is(self):
+        self.push_bb_plugin('{"name": "demo"}\n')
+        copy = self.tmp / "preserved/demo"
+        self.install_bb_plugin(copy)
+
+        self.assertEqual(self.level("sync").returncode, 0)
+
+        self.assertEqual(self.install_calls(), [])
+        code, rows = self.status()
+        self.assertEqual(code, 1)
+        self.assertIn(f"bb plugin install path:{self.shared}/bb-plugins/demo --yes",
+                      rows[("bb", "plugin:demo")]["detail"])
+        self.assertIn(f"npm ci --ignore-scripts --prefix {self.shared}/bb-plugins/demo",
+                      rows[("bb", "plugin:demo")]["detail"])
+
+    def test_cli_tool_the_machine_already_has_follows_main_and_one_it_lacks_is_left_alone(self):
+        self.assertEqual(self.push_claudex("first").returncode, 0)
+        code, rows = self.status()
+        self.assertEqual((code, rows[("cli", "claudex")]["status"]), (0, "absent"))
+        self.assertFalse((self.home / ".local/bin/claudex").exists())
+
+        install = subprocess.run(["sh", str(self.shared / "tools/claudex/install.sh")], env=self.env,
+                                 capture_output=True, text=True)
+        self.assertEqual(install.returncode, 0, install.stderr)
+        self.assertEqual(self.status()[1][("cli", "claudex")]["status"], "ok")
+
+        self.assertEqual(self.push_claudex("second").returncode, 0)
+
+        self.assertIn("// second", self.installed_claudex())
+        code, rows = self.status()
+        self.assertEqual(code, 0, rows)
+        self.assertEqual(rows[("cli", "claudex")]["status"], "ok")
+
+    def test_status_fails_while_the_installed_claudex_differs_from_the_shared_checkout(self):
+        self.assertEqual(self.push_claudex("first").returncode, 0)
+        subprocess.run(["sh", str(self.shared / "tools/claudex/install.sh")], env=self.env, check=True,
+                       capture_output=True)
+
+        self.assertEqual(self.push_claudex("second", env=self.without_hook()).returncode, 0)
+        self.git(self.shared, "merge", "-q", "--ff-only", "origin/main", env=self.without_hook())
+
+        code, rows = self.status()
+        self.assertEqual(code, 1)
+        self.assertEqual(rows[("cli", "claudex")]["status"], "drift")
+        self.assertIn("claudex.cjs", rows[("cli", "claudex")]["detail"])
+        self.assertNotIn("// second", self.installed_claudex())
+
+        self.assertEqual(self.level("sync").returncode, 0)
+
+        self.assertIn("// second", self.installed_claudex())
+        self.assertEqual(self.status()[0], 0)
+
+    def test_claudex_provider_is_rebuilt_after_claudex_changes_and_waits_for_a_running_turn(self):
+        self.assertEqual(self.push_claudex("first").returncode, 0)
+        plugin = self.worktree / "bb-plugins/claudex-native"
+        plugin.mkdir(parents=True)
+        (plugin / "package.json").write_text('{"name": "claudex-native"}\n')
+        self.git(self.worktree, "add", "bb-plugins/claudex-native")
+        self.run_git(self.worktree, "commit", "-q", "-m", "plugin")
+        self.assertEqual(self.run_git(self.worktree, "push", "-q", "origin", "HEAD:main").returncode, 0)
+        home = self.shared / "bb-plugins/claudex-native"
+        (self.home / "bb-plugins.json").write_text(json.dumps(
+            [{"id": "claudex-native", "source": f"path:{home}", "providerIds": ["claudex"]}]))
+        subprocess.run(["sh", str(self.shared / "tools/claudex/install.sh")], env=self.env, check=True,
+                       capture_output=True)
+        self.assertEqual(self.level("sync").returncode, 0)
+        Path(self.env["CALLS"]).write_text("")
+        self.assertEqual(self.status()[0], 0)
+
+        (self.home / "bb-threads.json").write_text(json.dumps([{"id": "thr_2", "providerId": "claudex",
+                                                                 "status": "active"}]))
+        push = self.push_claudex("second")
+
+        self.assertEqual(push.returncode, 0)
+        self.assertIn("postponed claudex-native", push.stderr)
+        self.assertIn("// second", self.installed_claudex())
+        self.assertEqual(self.install_calls(), [])
+        code, rows = self.status()
+        self.assertEqual((code, rows[("bb", "plugin:claudex-native")]["status"]), (1, "drift"))
+
+        (self.home / "bb-threads.json").write_text("[]")
+        self.assertEqual(self.level("sync").returncode, 0)
+
+        self.assertEqual(self.install_calls(), [["plugin", "install", f"path:{home}", "--yes"]])
+        self.assertEqual(self.status()[0], 0)
+
+    def test_takeaturn_follows_the_pin_and_status_names_an_old_build(self):
+        bin_dir = self.tmp / "mise-bin"
+        bin_dir.mkdir()
+        (bin_dir / "mise").write_text(FAKE_MISE)
+        (bin_dir / "mise").chmod(0o755)
+        self.env["PATH"] = os.pathsep.join([str(bin_dir), self.env["PATH"]])
+        pin = re.search(r'^COMMIT = "([0-9a-f]{40})"$', (ROOT / "setup/agents/takeaturn.py").read_text(), re.M)[1]
+        self.assertEqual(self.status()[1][("takeaturn", "cli")]["status"], "drift")
+
+        self.assertEqual(self.level("sync").returncode, 0)
+
+        calls = [json.loads(line) for line in Path(self.env["CALLS"]).read_text().splitlines()]
+        installs = [call for call in calls if call["args"][:2] == ["mise", "exec"]]
+        self.assertEqual([call["args"][-1] for call in installs], [f"github.com/ramtoshiya/takeaturn@{pin}"])
+        self.assertEqual(installs[0]["gobin"], str(self.home / ".local/bin"))
+        code, rows = self.status()
+        self.assertEqual(code, 0, rows)
+        self.assertEqual(rows[("takeaturn", "cli")]["status"], "ok")
+
+        (self.home / ".local/bin/takeaturn").write_text("#!/bin/sh\necho '{\"version\": \"v0.0.0-1-0123456789ab\"}'\n")
+        code, rows = self.status()
+        self.assertEqual(code, 1)
+        self.assertIn(f"is at 0123456789ab, and the pin is {pin[:12]}", rows[("takeaturn", "cli")]["detail"])
+
+
+class HermesLevelTests(LevelFixture, unittest.TestCase):
+    hermes = True
 
     def test_push_from_a_worktree_reaches_the_shared_checkout_and_the_install(self):
         self.commit(self.worktree, HANDOFF, "pushed from a worktree\n")
@@ -168,20 +361,6 @@ class LevelTests(unittest.TestCase):
         code, rows = self.status()
         self.assertEqual(code, 1)
         self.assertEqual(rows[("checkout", "main")]["status"], "drift")
-
-    def test_ignored_file_in_the_shared_checkout_stops_a_fast_forward_that_would_replace_it(self):
-        before = self.git(self.shared, "rev-parse", "HEAD")
-        (self.shared / ".env").write_text("local secret\n")
-        (self.worktree / ".env").write_text("tracked by mistake\n")
-        self.git(self.worktree, "add", "-f", ".env")
-        self.git(self.worktree, "commit", "-q", "-m", "track .env")
-
-        push = self.run_git(self.worktree, "push", "-q", "origin", "HEAD:main")
-
-        self.assertEqual(push.returncode, 0)
-        self.assertIn("STOPPED", push.stderr)
-        self.assertEqual((self.shared / ".env").read_text(), "local secret\n")
-        self.assertEqual(self.git(self.shared, "rev-parse", "HEAD"), before)
 
     def test_diverged_shared_checkout_stops_and_keeps_both_sides(self):
         self.commit(self.shared, "local.txt", "local commit\n", env=self.without_hook())
@@ -259,150 +438,8 @@ class LevelTests(unittest.TestCase):
         self.assertNotIn("only in the worktree", self.installed.read_text())
         self.assertEqual(self.status()[0], 0)
 
-    def push_bb_plugin(self, text):
-        (self.worktree / "bb-plugins/demo").mkdir(parents=True, exist_ok=True)
-        (self.worktree / "bb-plugins/demo/package-lock.json").write_text("{}\n")
-        self.git(self.worktree, "add", "bb-plugins/demo/package-lock.json")
-        self.commit(self.worktree, "bb-plugins/demo/package.json", text)
-        return self.run_git(self.worktree, "push", "-q", "origin", "HEAD:main")
 
-    def install_calls(self):
-        calls = Path(self.env["CALLS"])
-        lines = calls.read_text().splitlines() if calls.exists() else []
-        return [call["args"] for call in map(json.loads, lines) if call["args"][:2] in (["plugin", "install"], ["npm", "ci"])]
-
-    def install_bb_plugin(self, source):
-        (self.home / "bb-plugins.json").write_text(json.dumps(
-            [{"id": "demo", "source": f"path:{source}", "providerIds": ["demo-agent"]}]))
-
-    def set_turn(self, status):
-        (self.home / "bb-threads.json").write_text(json.dumps([{"id": "thr_2", "providerId": "demo-agent",
-                                                                 "status": status}]))
-
-    def test_bb_plugin_from_the_shared_checkout_is_reinstalled_when_no_turn_uses_it(self):
-        self.push_bb_plugin('{"name": "demo"}\n')
-        self.install_bb_plugin(self.shared / "bb-plugins/demo")
-        code, rows = self.status()
-        self.assertEqual(code, 1)
-        self.assertIn("no record", rows[("bb", "plugin:demo")]["detail"])
-
-        self.set_turn("active")
-        push = self.push_bb_plugin('{"name": "demo", "version": "2"}\n')
-
-        self.assertEqual(push.returncode, 0)
-        self.assertIn("postponed demo", push.stderr)
-        self.assertEqual(self.install_calls(), [])
-        self.assertEqual(self.status()[1][("bb", "plugin:demo")]["status"], "drift")
-
-        self.set_turn("idle")
-        self.assertEqual(self.level("sync").returncode, 0)
-
-        home = f"{self.shared}/bb-plugins/demo"
-        self.assertEqual(self.install_calls(), [["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund", home],
-                                              ["plugin", "install", f"path:{home}", "--yes"]])
-        code, rows = self.status()
-        self.assertEqual(code, 0, rows)
-        self.assertEqual(rows[("bb", "plugin:demo")]["status"], "ok")
-
-    def test_bb_plugin_running_from_a_copy_is_reported_and_left_where_it_is(self):
-        self.push_bb_plugin('{"name": "demo"}\n')
-        copy = self.tmp / "preserved/demo"
-        self.install_bb_plugin(copy)
-
-        self.assertEqual(self.level("sync").returncode, 0)
-
-        self.assertEqual(self.install_calls(), [])
-        code, rows = self.status()
-        self.assertEqual(code, 1)
-        self.assertIn(f"bb plugin install path:{self.shared}/bb-plugins/demo --yes",
-                      rows[("bb", "plugin:demo")]["detail"])
-        self.assertIn(f"npm ci --ignore-scripts --prefix {self.shared}/bb-plugins/demo",
-                      rows[("bb", "plugin:demo")]["detail"])
-
-    def push_claudex(self, text, env=None):
-        """Push a change under tools/claudex. Its install step copies into the paths the real one writes."""
-        target = self.worktree / "tools/claudex"
-        target.mkdir(parents=True, exist_ok=True)
-        (target / "install.sh").write_text(CLAUDEX_INSTALL)
-        (target / "claudex.cjs").write_text(f"// {text}\n")
-        self.git(self.worktree, "add", "tools/claudex")
-        self.run_git(self.worktree, "commit", "-q", "-m", f"claudex {text}", env=env)
-        return self.run_git(self.worktree, "push", "-q", "origin", "HEAD:main", env=env)
-
-    def installed_claudex(self):
-        return (self.home / ".local/share/claudex/claudex.cjs").read_text()
-
-    def test_cli_tool_the_machine_already_has_follows_main_and_one_it_lacks_is_left_alone(self):
-        self.assertEqual(self.push_claudex("first").returncode, 0)
-        code, rows = self.status()
-        self.assertEqual((code, rows[("cli", "claudex")]["status"]), (0, "absent"))
-        self.assertFalse((self.home / ".local/bin/claudex").exists())
-
-        install = subprocess.run(["sh", str(self.shared / "tools/claudex/install.sh")], env=self.env,
-                                 capture_output=True, text=True)
-        self.assertEqual(install.returncode, 0, install.stderr)
-        self.assertEqual(self.status()[1][("cli", "claudex")]["status"], "ok")
-
-        self.assertEqual(self.push_claudex("second").returncode, 0)
-
-        self.assertIn("// second", self.installed_claudex())
-        code, rows = self.status()
-        self.assertEqual(code, 0, rows)
-        self.assertEqual(rows[("cli", "claudex")]["status"], "ok")
-
-    def test_status_fails_while_the_installed_claudex_differs_from_the_shared_checkout(self):
-        self.assertEqual(self.push_claudex("first").returncode, 0)
-        subprocess.run(["sh", str(self.shared / "tools/claudex/install.sh")], env=self.env, check=True,
-                       capture_output=True)
-
-        self.assertEqual(self.push_claudex("second", env=self.without_hook()).returncode, 0)
-        self.git(self.shared, "merge", "-q", "--ff-only", "origin/main", env=self.without_hook())
-
-        code, rows = self.status()
-        self.assertEqual(code, 1)
-        self.assertEqual(rows[("cli", "claudex")]["status"], "drift")
-        self.assertIn("claudex.cjs", rows[("cli", "claudex")]["detail"])
-        self.assertNotIn("// second", self.installed_claudex())
-
-        self.assertEqual(self.level("sync").returncode, 0)
-
-        self.assertIn("// second", self.installed_claudex())
-        self.assertEqual(self.status()[0], 0)
-
-    def test_claudex_provider_is_rebuilt_after_claudex_changes_and_waits_for_a_running_turn(self):
-        self.assertEqual(self.push_claudex("first").returncode, 0)
-        plugin = self.worktree / "bb-plugins/claudex-native"
-        plugin.mkdir(parents=True)
-        (plugin / "package.json").write_text('{"name": "claudex-native"}\n')
-        self.git(self.worktree, "add", "bb-plugins/claudex-native")
-        self.run_git(self.worktree, "commit", "-q", "-m", "plugin")
-        self.assertEqual(self.run_git(self.worktree, "push", "-q", "origin", "HEAD:main").returncode, 0)
-        home = self.shared / "bb-plugins/claudex-native"
-        (self.home / "bb-plugins.json").write_text(json.dumps(
-            [{"id": "claudex-native", "source": f"path:{home}", "providerIds": ["claudex"]}]))
-        subprocess.run(["sh", str(self.shared / "tools/claudex/install.sh")], env=self.env, check=True,
-                       capture_output=True)
-        self.assertEqual(self.level("sync").returncode, 0)
-        Path(self.env["CALLS"]).write_text("")
-        self.assertEqual(self.status()[0], 0)
-
-        (self.home / "bb-threads.json").write_text(json.dumps([{"id": "thr_2", "providerId": "claudex",
-                                                                 "status": "active"}]))
-        push = self.push_claudex("second")
-
-        self.assertEqual(push.returncode, 0)
-        self.assertIn("postponed claudex-native", push.stderr)
-        self.assertIn("// second", self.installed_claudex())
-        self.assertEqual(self.install_calls(), [])
-        code, rows = self.status()
-        self.assertEqual((code, rows[("bb", "plugin:claudex-native")]["status"]), (1, "drift"))
-
-        (self.home / "bb-threads.json").write_text("[]")
-        self.assertEqual(self.level("sync").returncode, 0)
-
-        self.assertEqual(self.install_calls(), [["plugin", "install", f"path:{home}", "--yes"]])
-        self.assertEqual(self.status()[0], 0)
-
+class CliToolTableTests(unittest.TestCase):
     def test_every_cli_tool_lists_the_files_and_directory_its_install_step_writes(self):
         sys.path.insert(0, str(ROOT / "setup/agents"))
         self.addCleanup(sys.path.remove, str(ROOT / "setup/agents"))
@@ -414,30 +451,6 @@ class LevelTests(unittest.TestCase):
                 self.assertIn(source, script)
                 self.assertIn(f"$HOME/{Path(target).parent}", script)
             self.assertIn(f"$HOME/{Path(tool.command).parent}", script)
-
-    def test_takeaturn_follows_the_pin_and_status_names_an_old_build(self):
-        bin_dir = self.tmp / "mise-bin"
-        bin_dir.mkdir()
-        (bin_dir / "mise").write_text(FAKE_MISE)
-        (bin_dir / "mise").chmod(0o755)
-        self.env["PATH"] = os.pathsep.join([str(bin_dir), self.env["PATH"]])
-        pin = re.search(r'^COMMIT = "([0-9a-f]{40})"$', (ROOT / "setup/agents/takeaturn.py").read_text(), re.M)[1]
-        self.assertEqual(self.status()[1][("takeaturn", "cli")]["status"], "drift")
-
-        self.assertEqual(self.level("sync").returncode, 0)
-
-        calls = [json.loads(line) for line in Path(self.env["CALLS"]).read_text().splitlines()]
-        installs = [call for call in calls if call["args"][:2] == ["mise", "exec"]]
-        self.assertEqual([call["args"][-1] for call in installs], [f"github.com/ramtoshiya/takeaturn@{pin}"])
-        self.assertEqual(installs[0]["gobin"], str(self.home / ".local/bin"))
-        code, rows = self.status()
-        self.assertEqual(code, 0, rows)
-        self.assertEqual(rows[("takeaturn", "cli")]["status"], "ok")
-
-        (self.home / ".local/bin/takeaturn").write_text("#!/bin/sh\necho '{\"version\": \"v0.0.0-1-0123456789ab\"}'\n")
-        code, rows = self.status()
-        self.assertEqual(code, 1)
-        self.assertIn(f"is at 0123456789ab, and the pin is {pin[:12]}", rows[("takeaturn", "cli")]["detail"])
 
 
 if __name__ == "__main__":
