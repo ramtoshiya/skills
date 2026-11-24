@@ -1,19 +1,8 @@
-"""Name a bb session after the user's message, not after bb's instructions.
+"""Add bb's `<system_instructions>` block to the control wrappers that Hermes's titler strips.
 
-bb starts every thread's first message with a `<system_instructions>` block
-(its plugin text, AGENTS.md, and the skill list) and puts the user's text after
-the closing tag. Hermes titles a session from that message, so the title
-described the instructions, such as "BB environment setup instructions #12",
-and bb adopted it whenever its own title generation failed.
-
-Hermes's titler already drops recognized control wrappers and titles the prose
-after them. This plugin adds bb's block to that list. Only the titler reads the
-list, so the message the model receives is unchanged.
-
-Hermes offers no hook for the title input, so the plugin appends to
-`agent.title_generator._CONTROL_WRAPPERS`. If a Hermes update renames it,
-`register` raises and the plugin fails to load, and `npm test` fails against
-the installed Hermes.
+Hermes has no hook for the title input, so this appends to the private
+`agent.title_generator._CONTROL_WRAPPERS`. If a Hermes update renames it, `register` raises
+and the plugin fails to load.
 """
 
 from __future__ import annotations

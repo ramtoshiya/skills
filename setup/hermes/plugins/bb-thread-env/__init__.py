@@ -1,20 +1,8 @@
-"""Give each Hermes session's commands the id of the bb thread that shows the session.
+"""Export the session's bb thread id as BB_THREAD_ID and unset the other per-thread names.
 
-bb starts `hermes acp` with BB_THREAD_ID, but that process only views the
-session. Tools run in the shared gateway, whose environment has no BB_*
-variables, so `bb status` and `bb nest spawn` in the terminal
-had no thread. Several bb threads can share one checkout, so the working
-directory cannot name the thread.
-
-The thread id that is bound to the session is the one bb puts in the env of
-the session's `bb-bridge` MCP server. The gateway keeps that server list in
-memory only, under the session's own editor scope. This plugin reads the id
-from there and exports it as BB_THREAD_ID. The bridge's host, port, and token
-in the same env are never exported.
-
-The other per-thread names are unset, so a value inherited by the gateway can
-never name another thread. The bb CLI finds its server and project from the
-thread id.
+The id comes from Hermes's undocumented gateway state (`gateway.run_api._ACTIVE_RUNNER`
+and each authority's `_local_editor_mcp`), so a Hermes update can break it. `docs/setup.md`
+describes the symptom.
 """
 
 from __future__ import annotations
