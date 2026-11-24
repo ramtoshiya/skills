@@ -2,12 +2,11 @@ import json
 import os
 from pathlib import Path
 import subprocess
-import sys
 import tempfile
 import unittest
 from unittest import mock
 
-HOOK = [sys.executable, str(Path(__file__).resolve().parents[3] / "plugins/ramtoshiya-cc/hooks/commit-trailer-guard.py")]
+HOOK = [str(Path(__file__).resolve().parents[3] / "plugins/ramtoshiya/hooks/ramtoshiya-hooks"), "commit-trailer"]
 TRAILER = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 SOFT_LIMIT = 1 << 20
 HARD_LIMIT = 1 << 30
@@ -92,6 +91,9 @@ class CommitTrailerGuardTests(unittest.TestCase):
         self.assertEqual(output["hookEventName"], "PreToolUse")
         self.assertEqual(output["permissionDecision"], "deny")
         self.assertIn("Co-Authored-By", output["permissionDecisionReason"])
+        codex = json.loads(self.run_hook(json.dumps({
+            "tool_name": "exec_command", "tool_input": {"cmd": f"git commit -m 'x\n\n{TRAILER}'"}})))
+        self.assertEqual(codex["hookSpecificOutput"]["permissionDecision"], "deny")
         monitor = self.run_hook(json.dumps({
             "tool_name": "Monitor", "tool_input": {"command": f"git commit -m 'x\n\n{TRAILER}'"}}))
         self.assertIn("deny", monitor)

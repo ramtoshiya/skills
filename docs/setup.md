@@ -57,11 +57,18 @@ mise does not back up the files it overwrites. Copy the files listed below
 before the first run, or set up
 [dotfile history](https://mise.jdx.dev/dotfiles/history.html) first.
 
-`mise.toml` also declares the repository's Actions analyzers and the Node.js
-and uv versions that `npm test` uses. Run `mise install --locked` to install
-them without applying the machine setup. Loading the
+`mise.toml` also declares the repository's Actions analyzers, Go, and the
+Node.js and uv versions that `npm test` uses. Run `mise install --locked` to
+install them without applying the machine setup. Loading the
 checkout puts installed tools on mise's activated `PATH` but declares no
 environment variables.
+
+The shell hooks are a Go program in `plugins/ramtoshiya/hooks`. The build
+writes it to `plugins/ramtoshiya/hooks/ramtoshiya-hooks`, which Git ignores.
+`mise run hooks:build` builds it, and `npm test` builds it before the Python
+tests run. `setup/agents/hook_binary.py status` prints `ok`, `drift`, or
+`absent` by building to a temporary file and comparing bytes. The first build
+downloads the module dependencies named in `go.sum`, so it needs network access.
 
 ## Keep installs level with origin/main
 

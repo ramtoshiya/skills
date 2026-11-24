@@ -10,7 +10,10 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const units = join(root, 'dev/tests/unittest_units.py');
 // The hooks need Python 3.11 or newer, and the system python3 can be older.
-const python = ['run', '--no-project', '--managed-python', '--python', '>=3.11', 'python', units];
+const uv = ['run', '--no-project', '--managed-python', '--python', '>=3.11', 'python'];
+const python = [...uv, units];
+
+execFileSync('uv', [...uv, join(root, 'setup/agents/hook_binary.py'), 'build'], { cwd: root, stdio: 'inherit' });
 
 const listed = ['dev/tests/plugins', 'dev/tests/setup'].flatMap(dir =>
   JSON.parse(execFileSync('uv', [...python, 'list', dir], { cwd: root, encoding: 'utf8' })).map(unit => ({ dir, ...unit })));

@@ -20,3 +20,7 @@ auth.json
 __pycache__/
 *.pyc
 .DS_Store
+
+# The hook binary and its temporary build file, built by setup/agents/hook_binary.py.
+/plugins/*/hooks/ramtoshiya-hooks
+/plugins/*/hooks/.ramtoshiya-hooks.*
