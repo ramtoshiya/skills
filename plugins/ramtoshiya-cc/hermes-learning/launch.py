@@ -12,8 +12,6 @@ import store  # noqa: E402
 
 
 def main():
-    if store.in_coder_runtime():
-        sys.exit("hermes-learning: off in the Hermes coder runtime, which runs Hermes learning itself")
     try:
         home = store.store()
         argv = store.hermes_command(Path(__file__).with_name("server.py"))

@@ -207,13 +207,16 @@ The server reads the session's bb thread at start and picks a role:
 | --- | --- | --- |
 | A bb thread that another thread started (it has a parent) | `skill_view` only. It ends its final answer with `Learning proposals` | Nothing |
 | A bb fork titled `Hermes review` | All three | Hermes's `background_review` origin, which adds its review-only checks and marks new skills as agent-created for the curator |
+| A session that the Hermes coder runtime started, which learns through Hermes itself | None | Nothing |
 | Any other session, in or outside bb, including a fork made for other work | All three | `foreground` |
 
 The server needs Hermes's `hermes` command, on `PATH` or at
 `~/.hermes/hermes-agent/.hermes/bin/hermes`, and the profile directory. When
-either is missing, or in a session that the Hermes coder runtime started, the
-server exits with the reason on stderr and `/mcp` lists it as failed. The
-session goes on without it.
+either is missing, the server exits with the reason on stderr and `/mcp` lists
+it as failed. The session goes on without it. Claude Code remembers that
+failure for 15 minutes and skips the server in every session started in that
+time, so the coder runtime case starts the server with no tools instead of
+exiting.
 
 ## Requirements
 

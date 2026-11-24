@@ -8,7 +8,9 @@ store freshly loaded from disk, as Hermes's /memory and gateway paths load it.
 
 The session's bb thread decides its role: a child thread only reads skills and proposes lessons in its
 final answer, a review fork writes with Hermes's background_review origin (review-only guards, created skills
-marked agent-created for the curator), and any other session writes as foreground.
+marked agent-created for the curator), and any other session writes as foreground. A session of the Hermes
+coder runtime, which learns through Hermes itself, gets no tools. The server still starts there, because
+Claude Code would cache an exit as a failure and skip the server in every session for the next 15 minutes.
 """
 
 import importlib
@@ -18,6 +20,9 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+import store  # noqa: E402
 
 SERVED = ("memory", "skill_manage", "skill_view")
 REVIEW_PROMPT = Path(__file__).with_name("review.md")
@@ -43,7 +48,9 @@ ROLES = {
     "solo": {"tools": SERVED, "origin": "foreground", "instructions": RECORD},
     "review": {"tools": SERVED, "origin": "background_review", "instructions": REVIEW},
     "child": {"tools": ("skill_view",), "origin": "foreground", "instructions": CHILD},
+    "off": {"tools": (), "origin": "foreground", "instructions": ""},
 }
+SKILL_PREFIX = "hermes-skills:"
 AGENT_LOOP = {"memory"}
 PROTOCOL_VERSION = "2025-06-18"
 
@@ -57,6 +64,8 @@ def protocol_stream():
 
 
 def role() -> str:
+    if store.in_coder_runtime():
+        return "off"
     thread_id = os.environ.get("BB_THREAD_ID")
     if not thread_id:
         return "solo"
@@ -103,6 +112,8 @@ def call(name, args, session_id, served):
         return json.dumps({"success": False, "error": f"Unknown tool: {name}"}), True
     import model_tools
     from tools.registry import registry
+    if str(args.get("name", "")).startswith(SKILL_PREFIX):
+        args = {**args, "name": args["name"][len(SKILL_PREFIX):]}
     if name in AGENT_LOOP:
         from tools.memory_tool import load_on_disk_store
         result = registry.dispatch(name, args, store=load_on_disk_store(),
@@ -118,11 +129,13 @@ def call(name, args, session_id, served):
 def main():
     out = protocol_stream()
     current = ROLES[role()]
-    listed = tool_list(current["tools"])
-    # A tools/call imports model_tools too. The import lock makes it wait for this thread.
-    threading.Thread(target=warm_up, daemon=True).start()
-    from tools.skill_provenance import set_current_write_origin
-    set_current_write_origin(current["origin"])
+    listed = []
+    if current["tools"]:
+        listed = tool_list(current["tools"])
+        # A tools/call imports model_tools too. The import lock makes it wait for this thread.
+        threading.Thread(target=warm_up, daemon=True).start()
+        from tools.skill_provenance import set_current_write_origin
+        set_current_write_origin(current["origin"])
     session_id = os.environ.get("CLAUDE_CODE_SESSION_ID") or os.environ.get("BB_THREAD_ID")
 
     def reply(msg_id, result=None, error=None):
