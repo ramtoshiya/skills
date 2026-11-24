@@ -15,7 +15,8 @@ bb draft create --prompt "$(cat brief.md)" --title "Fix the flaky test" \
 
 `bb draft create --help` lists every option. The project defaults to the
 calling thread's project. Without `--new-environment`, the thread uses the
-project's default environment.
+project's default environment. `--machine` and `--base-branch` apply only to
+`--new-environment worktree`, and the command refuses them otherwise.
 
 ## Install
 
@@ -27,8 +28,8 @@ npm install
 bb plugin install . --yes
 ```
 
-`npm install` only fetches type declarations for `npm run typecheck`. bb loads
-`server.ts` directly.
+`npm install` only fetches the packages for `npm run typecheck` and `npm test`.
+bb loads `server.ts` directly.
 
 ## Hold or send
 

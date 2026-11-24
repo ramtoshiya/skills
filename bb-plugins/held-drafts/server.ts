@@ -130,6 +130,14 @@ export default async function plugin(bb: BbPluginApi) {
                 hint: "Add --project <project-id>. Run `bb project list` to find it.",
               });
             }
+            for (const option of ["machine", "base-branch"] as const) {
+              if (options[option] !== undefined && options["new-environment"] !== "worktree") {
+                throw new PluginCliError(`--${option} requires --new-environment worktree`, {
+                  code: "usage",
+                  hint: "Add --new-environment worktree, or drop the option.",
+                });
+              }
+            }
             const hostId =
               options["new-environment"] === "worktree"
                 ? await resolveHostId(bb, options.machine, ctx.threadId)
