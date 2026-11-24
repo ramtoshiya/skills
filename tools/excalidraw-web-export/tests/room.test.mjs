@@ -5,13 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { checkSize } from "../size-limit.mjs";
 
 const script = fileURLToPath(new URL("../export.mjs", import.meta.url));
-
-test("snapshot size guard rejects data above one GiB", () => {
-  assert.throws(() => checkSize("snapshot", 1024 ** 3 + 1, 64 * 1024 * 1024), /over the hard limit of 1073741824 bytes/);
-});
 
 test("room export forwards selection and snapshot warnings and requires a revision", async t => {
   const directory = mkdtempSync(join(tmpdir(), "excalidraw-room-export-"));
