@@ -166,6 +166,7 @@ test('waits for another process holding a write transaction without losing rows'
   const child = spawn(process.execPath, ['--input-type=module', '-e', `
     import { DatabaseSync } from 'node:sqlite'
     const db = new DatabaseSync(process.argv[1])
+    db.exec('PRAGMA busy_timeout = 5000')
     db.exec('BEGIN IMMEDIATE')
     process.stdout.write('locked')
     setTimeout(() => { db.exec('COMMIT'); db.close() }, 150)
