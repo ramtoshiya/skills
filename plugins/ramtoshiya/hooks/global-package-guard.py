@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse package/model policy, Python, and agent test run command guard.
+"""PreToolUse package/model policy, Python, process-kill, and agent test run command guard.
 
 Command text is parsed, never evaluated. This is an ordinary-command guard,
 not a shell sandbox or a complete boundary against deliberate bypass.
@@ -64,6 +64,12 @@ def one_option(args, names, fallback=None):
 
 UNKNOWN_CWD = "The working directory comes from a variable here, so the guard cannot find this command's package settings or relative paths. cd to a literal path first, or run the command from that directory."
 PYTHON_DENIAL = "pip and package installs into a system or Homebrew Python are blocked. Use uv add, uv pip inside a project, uv run --with package==1.2.3 python, or a virtual environment's own bin/pip or bin/python -m pip. Plain Python commands are allowed, so continue the task."
+
+
+PROCESS_DENIAL = "macOS pkill and pgrep read every argument after the first pattern as another pattern, so this command can match and stop other sessions' processes. Put every option before a single pattern, as in pkill -TERM -f 'pattern', and join alternatives into one regular expression with |. -U does not separate sessions because they all run as the same user, so prefer killing the PID you started ($!)."
+PROCESS_VALUE_OPTIONS = set("FGPUdgtu")
+SIGNAL = re.compile(r"-(?:[0-9]+|[A-Z][A-Z0-9]*)")
+REDIRECTION = re.compile(r"[0-9]*(?:<<<|<<-?|<>|>>|<|>)(.*)", re.S)
 
 
 class UnknownCwd(ValueError):
@@ -335,6 +341,32 @@ def unwrap(tokens, inherited=None):
     return tokens[i:], environment
 
 
+def process_patterns(name, args):
+    """Return the operands that macOS pkill or pgrep would read as patterns."""
+    words = []
+    target = False
+    for token in args:
+        match = None if target else REDIRECTION.fullmatch(token)
+        if not target and not match:
+            words.append(token)
+        target = bool(match) and not match[1]
+    i = 1 if name == "pkill" and words and SIGNAL.fullmatch(words[0]) else 0
+    while i < len(words):
+        token = words[i]
+        if token == "--":
+            return words[i + 1:]
+        if token == "-" or not token.startswith("-"):
+            return words[i:]
+        letters = token[1:]
+        for position, letter in enumerate(letters):
+            if letter in PROCESS_VALUE_OPTIONS:
+                if position == len(letters) - 1:
+                    i += 1
+                break
+        i += 1
+    return []
+
+
 def global_flag(args, environment):
     enabled = environment.get("npm_config_global", "false").lower() not in FALSE_VALUES
     for token in args:
@@ -588,6 +620,8 @@ def reason(command, cwd=None, environment=None, depth=0):
         denial_reason = python_reason(tokens[0], args, cwd, effective)
         if denial_reason:
             return denial_reason
+        if name in {"pkill", "pgrep"} and len(process_patterns(name, args)) > 1:
+            return PROCESS_DENIAL
         if name in SHELLS:
             for index, token in enumerate(args[:-1]):
                 if token.startswith("-") and not token.startswith("--") and "c" in token[1:]:

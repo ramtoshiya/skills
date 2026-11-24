@@ -118,6 +118,17 @@ SDK calls, inline scripts, HTTP clients, other loaders, custom wrappers, and
 already-running inference services are outside model-rule coverage. Download
 and review first, then use a local path with a separately isolated runtime.
 
+The same shared guard checks `pkill` and `pgrep`. On macOS both commands read
+every argument after the first pattern as another pattern. So
+`pkill -f "load.ts" -U 501` also stops every process whose command line
+contains `-U` or `501`, which includes other agent sessions. The guard denies a
+`pkill` or `pgrep` command with more than one pattern, including patterns after
+`--`. Put the options first, as in `pkill -TERM -f "load.ts"`, and join
+alternatives into one pattern with `|`. `-U` does not keep sessions apart,
+because every session runs as the same user. Stopping the PID that the agent
+started is safer. The guard does not judge how broad a single pattern is, and
+it does not check `killall`.
+
 `uv python install` is always allowed. The guard
 splits command sequences, follows `sh -c` and similar wrappers, and skips
 heredoc bodies. A denial reaches the agent as the hook's reason.
