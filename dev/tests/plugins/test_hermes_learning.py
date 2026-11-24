@@ -9,6 +9,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[3] / "plugins/ramtoshiya-cc/hermes-learning"
 HOOK = ROOT / "hook.py"
 CLI = ROOT / "cli.py"
+CHECK = ROOT.parents[2] / "dev/automation/memory-consolidation/check.py"
 ENTRY = "runpy.run_module('hermes_learning_entry', run_name='__main__', alter_sys=True)"
 # Stands in for Hermes's tools.skill_usage and appends each call to $CALLS.
 FAKE_USAGE = """import json, os
@@ -161,6 +162,44 @@ class HermesLearningTests(unittest.TestCase):
         coder = self.cli("memory", stdin=entry, env={**self.env, "_HERMES_GATEWAY": "1"})
         self.assertIn("Hermes coder runtime", coder.stderr)
         self.assertFalse(self.calls.exists())
+
+    def test_cli_leaves_staged_writes_to_foreground_sessions(self):
+        review = self.cli("pending", "approve", "abc", env=self.in_thread({"originKind": "fork",
+                                                                          "title": "Hermes review"}))
+        self.assertEqual(review.returncode, 1)
+        self.assertIn("cannot decide them itself", review.stderr)
+
+    def consolidation_check(self, memory_chars, staged=()):
+        (self.store / "memories/MEMORY.md").write_text("x" * memory_chars)
+        for pending_id in staged:
+            (self.store / "pending/memory").mkdir(parents=True, exist_ok=True)
+            (self.store / f"pending/memory/{pending_id}.json").write_text("{}")
+        spawns = self.tmp / "spawns.jsonl"
+        bb = self.tmp / "bb-spawn"
+        bb.write_text("#!/bin/sh\n"
+                      f"python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' \"$@\" >> {spawns}\n"
+                      "for arg; do case $prev in --prompt-file) cp \"$arg\" " f"{self.tmp}/prompt.md;; esac; prev=$arg; done\n"
+                      "echo '{\"id\": \"thr_new\"}'\n")
+        bb.chmod(0o755)
+        result = subprocess.run([sys.executable, str(CHECK)], capture_output=True, text=True, check=True,
+                                env={**self.env, "BB_CLI": str(bb), "BB_PROJECT_ID": "proj_test"})
+        calls = [json.loads(line) for line in spawns.read_text().splitlines()] if spawns.exists() else []
+        return result.stdout, calls
+
+    def test_consolidation_check_is_silent_while_memory_has_room_and_nothing_is_staged(self):
+        self.assertEqual(self.consolidation_check(1759), ("", []))
+
+    def test_consolidation_check_starts_one_full_access_thread_when_memory_is_full_or_a_write_is_staged(self):
+        for chars, staged in ((1760, ()), (10, ("b281298d",))):
+            with self.subTest(chars=chars, staged=staged):
+                (self.tmp / "spawns.jsonl").unlink(missing_ok=True)
+                output, calls = self.consolidation_check(chars, staged)
+                self.assertIn("Started thr_new", output)
+                self.assertEqual(len(calls), 1)
+                self.assertEqual(calls[0][calls[0].index("--permission-mode") + 1], "full")
+                prompt = (self.tmp / "prompt.md").read_text()
+                self.assertIn(f"HERMES_LEARNING_HOME={self.store} {ROOT / 'hermes-learning'}", prompt)
+                self.assertIn('"chars": ' + str(chars), prompt)
 
     def test_session_start_tells_each_role_how_to_learn(self):
         def context(thread):

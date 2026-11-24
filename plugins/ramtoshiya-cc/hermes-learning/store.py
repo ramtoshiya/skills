@@ -16,12 +16,14 @@ DEFAULT_HERMES = "~/.hermes/hermes-agent/.hermes/bin/hermes"
 SENTINEL = "hermes_learning_entry"
 ENTRY = f"runpy.run_module({SENTINEL!r}, run_name='__main__', alter_sys=True)"
 TOOLS = ("memory", "skill_manage", "skill_view")
+# Lists, approves, or rejects memory writes that review forks staged. Only a foreground session decides them.
+PENDING = "pending"
 REVIEW_TITLE = "Hermes review"
 # Each role's tools and the Hermes write origin its writes carry. background_review adds Hermes's review-only
 # checks and marks created skills as agent-created for the curator.
 ROLES = {
-    "top": {"tools": TOOLS, "origin": "foreground"},
-    "solo": {"tools": TOOLS, "origin": "foreground"},
+    "top": {"tools": (*TOOLS, PENDING), "origin": "foreground"},
+    "solo": {"tools": (*TOOLS, PENDING), "origin": "foreground"},
     "review": {"tools": TOOLS, "origin": "background_review"},
     "child": {"tools": ("skill_view",), "origin": "foreground"},
     "off": {"tools": (), "origin": "foreground"},

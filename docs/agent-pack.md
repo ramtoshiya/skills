@@ -206,6 +206,16 @@ including claudex sessions, to the profile at `~/.hermes/profiles/coder`. Set
   reuses the source's prompt cache. It records lessons, sends changes to files
   in the working checkout as proposals, and mails a summary to the source with
   `bb mail send` without waking it. Outside bb the agent records directly.
+- Sessions and review forks only add memory entries when they can. Hermes
+  stages a review fork's removal or rewrite of an entry, and refuses an entry
+  that does not fit. A bb automation in this repository's project runs
+  `dev/automation/memory-consolidation/check.py` every day at 05:30 Asia/Seoul.
+  When `MEMORY.md` or `USER.md` is at 80% of its limit or more, or a write is
+  staged, it starts a Full Access thread titled `Hermes memory consolidation
+  <date>`. Otherwise it prints nothing and no model runs. The thread decides
+  each staged write with `hermes-learning pending`, brings each full target
+  down to 60%, and ends with every removed or rewritten entry in full, so a
+  person can ask for any of them back. Nobody approves its changes first.
 
 The command and the session start hook read the session's bb thread and pick a
 role:
@@ -215,7 +225,7 @@ role:
 | A bb thread that another thread started (it has a parent) | End the final answer with `Learning proposals` | `skill_view` only | Nothing |
 | A bb fork titled `Hermes review` | The fork's prompt | All three | Hermes's `background_review` origin, which adds its review-only checks and marks new skills as agent-created for the curator |
 | A session that the Hermes coder runtime started, which learns through Hermes itself | None | None | Nothing |
-| Any other session, in or outside bb, including a fork made for other work | Record lessons. In bb, also start review forks | All three | `foreground` |
+| Any other session, in or outside bb, including a fork made for other work | Record lessons. In bb, also start review forks | All three, and `pending` for staged writes | `foreground` |
 
 The command needs Hermes's `hermes` command, on `PATH` or at
 `~/.hermes/hermes-agent/.hermes/bin/hermes`, and the profile directory, and it
