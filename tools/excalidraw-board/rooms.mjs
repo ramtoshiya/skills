@@ -3,7 +3,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-function validateName(name) {
+export function validateName(name) {
   if (typeof name !== 'string' || !name.trim() || /\p{Cc}/u.test(name)) {
     throw new Error('Room name must be nonempty and contain no control characters')
   }

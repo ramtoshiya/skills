@@ -45,6 +45,22 @@ test("installed board command runs without the checkout and rejects options with
   assert.equal(malformed.stderr.includes("private-invalid-manifest"), false);
 });
 
+test("room create rejects a control character the registry rejects, before any request", t => {
+  const home = mkdtempSync(join(tmpdir(), "excalidraw-name-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const log = join(home, "requests.log");
+  const preload = join(home, "record-fetch.mjs");
+  writeFileSync(preload, `import { appendFileSync } from "node:fs";\nglobalThis.fetch = async url => { appendFileSync(${JSON.stringify(log)}, "request\\n"); throw new Error("offline"); };\n`);
+  const env = { ...testEnv(home), NODE_OPTIONS: `--import ${preload}` };
+  const cli = join(root, "tools/excalidraw-board/excalidraw-board.mjs");
+  for (const name of ["bad\u0085name", "bad\u0007name", "bad\u007fname"]) {
+    const result = spawnSync(process.execPath, [cli, "room", "create", name], { env, encoding: "utf8", cwd: home });
+    assert.equal(result.status, 1, JSON.stringify(name));
+    assert.match(result.stderr, /Room name must be nonempty and contain no control characters/);
+  }
+  assert.throws(() => readFileSync(log), { code: "ENOENT" });
+});
+
 test("installer refuses to overwrite an unrelated command", t => {
   const home = mkdtempSync(join(tmpdir(), "excalidraw-collision-"));
   t.after(() => rmSync(home, { recursive: true, force: true }));

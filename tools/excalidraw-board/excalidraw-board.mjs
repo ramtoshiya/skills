@@ -2,7 +2,7 @@
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
-import { openRooms } from "./rooms.mjs";
+import { openRooms, validateName } from "./rooms.mjs";
 import { createScene, loadScene, writeScene } from "./protocol.mjs";
 import { compact } from "./scene.mjs";
 import { uploadImage, uploadImages } from "./images.mjs";
@@ -51,10 +51,6 @@ function parseLink(value) {
   if (Buffer.from(match[2], "base64url").toString("base64url") !== match[2]) throw new Error("Invalid room key encoding");
   return { id: match[1], key: match[2] };
 }
-function validName(name) {
-  if (typeof name !== "string" || !name.trim() || /[\x00-\x1f\x7f]/.test(name)) throw new Error("Expected a nonempty name without control characters");
-  return name;
-}
 
 async function main(args) {
   if (!args.length || ["help", "--help", "-h"].includes(args[0])) { console.log(help); return; }
@@ -65,7 +61,8 @@ async function main(args) {
       const command = args[1];
       if (command === "create") {
         const { positionals } = argumentsFor(args.slice(2), {}, 1);
-        const name = validName(positionals[0]);
+        const name = positionals[0];
+        validateName(name);
         const room = { name, id: randomBytes(10).toString("hex"), key: randomBytes(16).toString("base64url") };
         const saved = await createScene(room);
         registry.add(room);
@@ -74,7 +71,8 @@ async function main(args) {
       } else if (command === "import") {
         const { values, positionals } = argumentsFor(args.slice(2), { name: { type: "string" }, stdin: { type: "boolean" } }, 1);
         if (Boolean(values.stdin) === Boolean(positionals.length)) throw new Error("Use either --stdin or a single room link");
-        const room = { ...parseLink(values.stdin ? input().trim() : positionals[0]), name: validName(values.name) };
+        validateName(values.name);
+        const room = { ...parseLink(values.stdin ? input().trim() : positionals[0]), name: values.name };
         await loadScene(room);
         const stored = registry.add(room);
         registry.resolve({ id: stored.id });
