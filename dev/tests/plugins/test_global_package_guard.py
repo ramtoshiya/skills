@@ -1,11 +1,10 @@
 import json
 from pathlib import Path
 import subprocess
-import sys
 import tempfile
 import unittest
 
-HOOK = [sys.executable, str(Path(__file__).resolve().parents[3] / "plugins/ramtoshiya/hooks/global-package-guard.py")]
+HOOK = [str(Path(__file__).resolve().parents[3] / "plugins/ramtoshiya/hooks/ramtoshiya-hooks"), "guard"]
 
 GLOBAL = "Global package installs and mutations are disabled."
 ONE_SHOT = "One-shot execution requires exact package versions"
@@ -337,6 +336,33 @@ class GlobalPackageGuardTests(unittest.TestCase):
         ]
         self.assert_allowed(commands)
         self.assert_denied(GLOBAL, [f"{command}\nnpm install -g example" for command in commands])
+
+    def test_commands_in_every_construct_are_checked(self):
+        global_install = "npm install -g example"
+        self.assert_denied(GLOBAL, [
+            f"({global_install})", f"echo $({global_install})", f'echo "$({global_install})"',
+            f"X=$({global_install})", f"echo x > $({global_install})", f"cat <({global_install})",
+            f"{{ {global_install}; }}", f"f() {{ {global_install}; }}; f",
+            f"while {global_install}; do :; done", f"until {global_install}; do :; done",
+            f"if {global_install}; then :; fi", f"for i in $({global_install}); do :; done",
+            f"case x in x) {global_install};; esac", f"case $({global_install}) in x) :;; esac",
+            f"[[ $({global_install}) ]]", f"echo $(( $({global_install}) + 1 ))",
+            f"time {global_install}", f"! {global_install}", f"echo x | {global_install}",
+            f"bash -lc '{global_install}'", f"env -S '{global_install}'",
+            f"cat <<EOF\n$({global_install})\nEOF", f"echo ok && {global_install}",
+        ])
+        self.assert_allowed([
+            f"cat <<'EOF'\n{global_install}\nEOF", f"echo '{global_install}'", f'echo "{global_install}"',
+            f"echo '$({global_install})'", f'echo "\\$({global_install})"', f"echo ok # {global_install}",
+        ])
+
+    def test_directory_changes_stay_inside_their_scope(self):
+        (self.cwd / ".npmrc").write_text("min-release-age=1\n")
+        self.assert_denied(WEAKER, [
+            "npm install", f"(cd '{self.home}') && npm install", f"echo $(cd '{self.home}') && npm install",
+            f"echo x | (cd '{self.home}') && npm install", f"f() {{ cd '{self.home}'; }}; npm install",
+        ])
+        self.assert_allowed([f"cd '{self.home}' && npm install", f"(cd '{self.home}' && npm install)"])
 
     def test_command_text_is_never_executed(self):
         with tempfile.TemporaryDirectory() as directory:

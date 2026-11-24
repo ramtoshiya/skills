@@ -4,7 +4,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"ramtoshiya-hooks/guard"
+	"ramtoshiya-hooks/shell"
 )
+
+const couldNotVerify = "The package/Python guard could not verify this tool call or its policy settings. Use literal paths and simple policy settings."
 
 type hook struct {
 	run     func(payload) (Output, error)
@@ -13,6 +18,22 @@ type hook struct {
 
 var hooks = map[string]hook{
 	"commit-trailer": {runTrailer, Output{}},
+	"guard":          {runGuard, Output{Deny: couldNotVerify}},
+}
+
+func runGuard(p payload) (Output, error) {
+	call, ok, err := shellCall(p)
+	if err != nil || !ok {
+		return Output{}, err
+	}
+	dir := call.Dir
+	if dir == "" {
+		if dir, err = os.Getwd(); err != nil {
+			return Output{}, err
+		}
+	}
+	deny, err := guard.Check(call.Script, shell.State{Dir: shell.NewDir(shell.Absolute(dir)), Env: shell.EnvFrom(os.Environ())})
+	return Output{Deny: deny}, err
 }
 
 func dispatch(h hook, in io.Reader) (out Output) {
