@@ -349,22 +349,6 @@ def global_flag(args, environment):
     return enabled
 
 
-def positional_arguments(args):
-    words = []
-    i = 0
-    while i < len(args):
-        token = args[i]
-        if token == "--":
-            break
-        if token in VALUE_OPTIONS:
-            i += 2
-            continue
-        if not token.startswith("-"):
-            words.append(token)
-        i += 1
-    return words
-
-
 def positions(args):
     """Positional tokens with indexes, including command targets after --."""
     result = []
@@ -598,8 +582,6 @@ def reason(command, cwd=None, environment=None, depth=0):
             target = args[-1] if args else "~"
             try:
                 cwd = resolve_path(target, cwd, effective).resolve()
-            except UnknownCwd:
-                cwd = None
             except ValueError:
                 cwd = None
             continue
@@ -625,7 +607,7 @@ def reason(command, cwd=None, environment=None, depth=0):
         # Only check mutating subcommands; an echoed command or npm test's
         # arguments do not become package-manager operations.
         package_args = args[:args.index("--")] if "--" in args else args
-        words = positional_arguments(package_args)
+        words = [token for _, token in positions(package_args)]
         if name in {"npm", "pnpm"} and words and words[0] in MUTATIONS:
             if global_flag(package_args, effective):
                 return "Global package installs and mutations are disabled. Use a project dependency or exact-pinned one-shot execution."
