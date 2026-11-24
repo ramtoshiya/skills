@@ -140,12 +140,14 @@ repository and the upstream that
 [upstreams.json](../dev/automation/upstream-updates/upstreams.json) names. It
 keeps these mirrors in `~/.cache/ramtoshiya/upstream-updates/`. The newest
 upstream commit that the pinned commit contains is the last handled one. An
-entry is out of date in three cases:
+entry is out of date in five cases:
 
 - Upstream changed a file under one of the entry's `watch` paths since the
   last handled commit.
 - Upstream added a skill under one of its `newSkillsIn` paths.
 - The pinned commit is not on the entry's `branch`.
+- The pinned commit shares no history with upstream, so the check finds no last
+  handled commit.
 - The issue named in the entry's `retireWhenClosed` is closed and the entry
   still points at its fork. The check reads the issue with `gh`.
 
