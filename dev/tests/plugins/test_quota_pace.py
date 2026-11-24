@@ -137,6 +137,23 @@ class QuotaPaceTests(unittest.TestCase):
         runs_out = datetime.fromisoformat(report["sides"]["codex"]["runs_out_at"])
         self.assertAlmostEqual((runs_out - NOW).total_seconds() / 3600, 12.5, delta=0.5)
 
+    def test_without_a_default_side_work_goes_to_the_side_with_room_in_either_direction(self):
+        self.history("claude", later(48), {23.5: 30, 0.1: 78})
+        self.history("codex", later(48), {23.5: 20, 0.1: 40})
+        report = self.run_pace(bb_usage(claude=(78, later(48)), codex=(40, later(48))), "--eligible", "claude,codex")
+        self.assertEqual(report["route"]["side"], "codex")
+
+    def test_without_a_default_side_both_running_out_picks_the_lower_projection(self):
+        self.history("claude", later(48), {23.5: 40, 0.1: 64})
+        self.history("codex", later(48), {23.5: 27, 0.1: 75})
+        report = self.run_pace(bb_usage(claude=(64, later(48)), codex=(75, later(48))), "--eligible", "claude,codex")
+        self.assertEqual([report["sides"][s]["status"] for s in ("claude", "codex")], ["runs-out", "runs-out"])
+        self.assertEqual(report["route"]["side"], "claude")
+
+    def test_without_a_default_side_a_cold_start_picks_the_lower_reading(self):
+        report = self.run_pace(bb_usage(codex=(95, later(50)), claude=(10, later(50))), "--eligible", "claude,codex")
+        self.assertEqual(report["route"]["side"], "claude")
+
     def test_spillover_counts_the_estimated_cost_of_the_work(self):
         self.history("codex", later(48), {23.5: 27, 0.1: 75})
         self.history("claude", later(48), {23.5: 20, 0.1: 22})
