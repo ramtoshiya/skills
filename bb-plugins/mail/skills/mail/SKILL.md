@@ -32,6 +32,21 @@ These examples show the line, not a complete rule:
 
 A reply to a thread that is waiting on you usually wakes it.
 
+## Correct a waiting message {:#correct}
+
+The recipient reads its waiting messages in order, so a second message that
+corrects the first makes it read the wrong version before the right one.
+While your message still waits, rewrite it into one message instead of
+sending a correction:
+
+```sh
+bb thread queue list <thread> --json   # your message has senderThreadId = your thread
+bb thread queue update <thread> <qmsg id> "$msg"
+bb thread queue delete <thread> <qmsg id>   # for another waiting message the rewrite absorbed
+```
+
+Send a new message only when the old one was already delivered.
+
 ## Many recipients {:#selectors}
 
 `--where` sends to every thread that matches all its terms. Check first with
