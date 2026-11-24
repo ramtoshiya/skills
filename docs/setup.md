@@ -321,18 +321,22 @@ that route. They allow fixes in the user's code or fork and upstream pulls.
 For feasibility questions, the shared instructions ask agents to demonstrate or
 attempt the stated requirement and report fragile routes with their costs.
 
-Before agents use the iPhone, the desktop session, a tart VM, or a shared
-`./check` run, the shared instructions tell them to take a turn with
-`takeaturn`. They pass their session id as the owner. In bb threads they do
+Before agents use the iPhone, the desktop session, a tart VM, or a check that
+needs something only one run can hold, such as a fixed port, the shared
+instructions tell them to take a turn with `takeaturn`. Checks that each run
+in their own worktree or copy do not take a turn. They pass their session id as the owner. In bb threads they do
 not ask other threads by message for a turn.
 
 The coding-agent instructions authorize local commits of completed, validated
 task-owned changes on the current branch, including the default branch. They
 protect unrelated changes and respect explicit no-commit requests. Tasks that
 need isolation use a separate worktree before implementation, not a branch
-switch in the shared checkout. Local commit permission does not authorize
-pushing, publishing, or destructive history changes. When a task does authorize
-a push and the branch has diverged, the agent puts only its own commits on the
+switch in the shared checkout. Agents push finished, checked work to the
+user's own existing remote repositories without asking, including documented
+release and pin-update steps. They do not force push, rewrite published
+history, publish to a package registry, create a repository, change its
+visibility, or push to a repository the user does not own. When a push meets a
+diverged branch, the agent puts only its own commits on the
 current remote branch, reruns the checks, and pushes without force. It asks
 only for a decision the commits do not settle, a history rewrite, a change to
 someone else's work, or a check it cannot fix within the task. The

@@ -98,10 +98,14 @@ applying a changed setting to the local machine, do it as part of the task
 instead of offering it. Ask first only when the follow-up needs authorization
 the request does not cover or is costly to undo.
 
-Follow the caller-approved workflow for scope, review, and completion. Local
-commit permission does not authorize pushing, publishing, destructive history
-changes, or changing repository policy. Report real blockers rather than
-silently narrowing the task.
+Follow the caller-approved workflow for scope, review, and completion. Push
+finished work that passes the repository's checks to the user's own existing
+remote repositories without asking, including the release and pin-update steps
+a repository's docs describe. That does not cover force pushes or other
+rewrites of published history, publishing to a package registry, creating a
+repository or changing its visibility or policy, or pushing to a repository the
+user does not own. Report real blockers rather than silently narrowing the
+task.
 
 ## Delegation {:#delegation}
 
