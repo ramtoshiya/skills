@@ -1134,6 +1134,12 @@ it starts and ends, and the text Claude Code writes between tool calls. The
 last text is the answer, which Hermes shows as usual. A run outside the
 gateway, such as a test, shows no progress.
 
+bb also shows the model's thinking. Claude Code leaves thinking text out of
+its events unless it runs with `--thinking-display summarized`, so the plugin
+passes that flag on every run and hands each summary to the agent as
+reasoning. Hermes forwards reasoning to bb because bb's ACP session turns on
+`show_reasoning`. GPT models through claudex return no thinking text.
+
 ### Working mode
 
 Coder sessions follow the [pstack-mode](https://github.com/ramtoshiya/pstack-mode)

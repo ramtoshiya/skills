@@ -313,7 +313,7 @@ def conversation(key: str, cwd: str, current: Role) -> dict:
 
 
 def cache_prefix_flags(entry: dict, model: str, effort: str | None, plugin_dir: Path) -> list[str]:
-    flags = ["--model", model]
+    flags = ["--model", model, "--thinking-display", "summarized"]
     if effort:
         flags += ["--effort", effort]
     if entry["context"]:
@@ -424,6 +424,9 @@ class LiveProgress:
         self.narrate()
         blocks = [b for b in (event.get("message") or {}).get("content") or [] if isinstance(b, dict)]
         if kind == "assistant":
+            for block in blocks:
+                if block.get("type") == "thinking" and block.get("thinking"):
+                    self.fire("reasoning_callback", block["thinking"])
             self.answer_or_narration = "\n\n".join(b.get("text") or "" for b in blocks if b.get("type") == "text")
             for block in blocks:
                 if block.get("type") == "tool_use":
