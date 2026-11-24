@@ -119,6 +119,15 @@ wins, so choose the model with `--model`. Arguments after `--` are not read.
 A value that is not a JSON object, or a file that cannot be read, stops the
 launch before discovery without echoing its contents.
 
+CLIProxyAPI keys its GPT prompt cache on the `X-Claude-Code-Session-Id` header,
+and a forked Claude Code session runs under a new session id. When you resume a
+session that is a fork, or pass `--fork-session`, claudex adds that header
+with the id of the session the fork was copied from, following the `forkedFrom`
+rows in its transcript back to the first session, so the fork reads the cache of
+its source. A header you set yourself in `ANTHROPIC_CUSTOM_HEADERS` is kept, and
+your own `X-Claude-Code-Session-Id` line wins. Sessions that are not forks send
+no extra header.
+
 A program that starts Claude Code from a configured executable path can use
 `~/.local/bin/claudex` there. claudex forwards its arguments and exit status,
 and `node` and `claude` must be on the `PATH` that program passes to its

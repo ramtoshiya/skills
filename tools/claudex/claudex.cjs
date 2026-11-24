@@ -50,6 +50,53 @@ function selectModels(data) {
     light: pick(['luna', 'mini', 'nano']) || main };
 }
 
+const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function sessionTranscript(id) {
+  const projects = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'projects');
+  try {
+    for (const dir of fs.readdirSync(projects)) {
+      const file = path.join(projects, dir, id + '.jsonl');
+      if (fs.existsSync(file)) return file;
+    }
+  } catch {}
+}
+
+function forkSource(id) {
+  const file = sessionTranscript(id);
+  if (!file) return;
+  const buffer = Buffer.alloc(1 << 20);
+  const descriptor = fs.openSync(file, 'r');
+  let length;
+  try {
+    length = fs.readSync(descriptor, buffer, 0, buffer.length, 0);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  for (const line of buffer.toString('utf8', 0, length).split('\n')) {
+    const source = /"forkedFrom":\{"sessionId":"([^"]+)"/.exec(line)?.[1];
+    if (source && SESSION_ID.test(source)) return source;
+  }
+}
+
+function cacheSessionHeader(args, headers) {
+  if (/^x-claude-code-session-id:/im.test(headers || '')) return;
+  let resumed, fork = false;
+  for (let i = 0; i < args.length && args[i] !== '--'; i++) {
+    if (args[i] === '--fork-session') fork = true;
+    else if ((args[i] === '--resume' || args[i] === '-r') && SESSION_ID.test(args[i + 1] || '')) resumed = args[++i];
+    else if (/^--resume=/.test(args[i]) && SESSION_ID.test(args[i].slice(9))) resumed = args[i].slice(9);
+  }
+  if (!resumed) return;
+  let root = resumed;
+  for (let depth = 0; depth < 32; depth++) {
+    const source = forkSource(root);
+    if (!source || source === root) break;
+    root = source;
+  }
+  if (fork || root !== resumed) return 'X-Claude-Code-Session-Id: ' + root;
+}
+
 function launch(args, env = process.env) {
   const child = spawn('claude', args, { stdio: 'inherit', env });
   child.on('error', () => {
@@ -182,8 +229,10 @@ async function main() {
     },
   };
   const merged = { ...caller, ...settings, env: { ...caller.env, ...settings.env } };
+  const header = cacheSessionHeader(args, process.env.ANTHROPIC_CUSTOM_HEADERS);
   launch(['--settings', JSON.stringify(merged), ...args], {
     ...process.env, ANTHROPIC_API_KEY: key, ANTHROPIC_AUTH_TOKEN: '',
+    ...(header ? { ANTHROPIC_CUSTOM_HEADERS: [process.env.ANTHROPIC_CUSTOM_HEADERS, header].filter(Boolean).join('\n') } : {}),
     IMAGEGEN_BASE_URL: process.env.IMAGEGEN_BASE_URL ?? baseUrl + '/v1',
     IMAGEGEN_API_KEY: process.env.IMAGEGEN_API_KEY ?? key,
   });

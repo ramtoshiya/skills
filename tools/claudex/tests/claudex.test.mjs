@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { createServer } from 'node:http';
@@ -16,6 +16,7 @@ async function fixture(t, catalog, status = 200, codex = { models: [], status: 2
 require('node:fs').writeFileSync(process.env.CAPTURE, JSON.stringify({
   args: process.argv.slice(2), key: process.env.ANTHROPIC_API_KEY,
   token: process.env.ANTHROPIC_AUTH_TOKEN,
+  headers: process.env.ANTHROPIC_CUSTOM_HEADERS,
   imagegenBaseUrl: process.env.IMAGEGEN_BASE_URL,
   imagegenKey: process.env.IMAGEGEN_API_KEY
 }));
@@ -47,7 +48,8 @@ process.exitCode = 7;
         ...process.env, PATH: dir + ':' + process.env.PATH, CAPTURE: capture,
         CLAUDEX_CONFIG: config, TEST_PROXY_KEY: 'test-client-key',
         CLIPROXY_API_KEY: '', CLIPROXY_BASE_URL: '',
-        IMAGEGEN_BASE_URL: undefined, IMAGEGEN_API_KEY: undefined,
+        IMAGEGEN_BASE_URL: undefined, IMAGEGEN_API_KEY: undefined, ANTHROPIC_CUSTOM_HEADERS: undefined,
+        CLAUDE_CONFIG_DIR: join(dir, 'claude-config'),
         ANTHROPIC_API_KEY: 'other-provider-key', ANTHROPIC_AUTH_TOKEN: 'other-token',
         ...extra,
       } });
@@ -316,4 +318,56 @@ test('invalid --settings fails before discovery without exposing its contents', 
     assert.deepEqual(f.requests, []);
     await assert.rejects(f.capture(), { code: 'ENOENT' });
   }
+});
+
+const parentId = '11111111-1111-4111-8111-111111111111';
+const forkId = '22222222-2222-4222-8222-222222222222';
+const grandforkId = '33333333-3333-4333-8333-333333333333';
+
+async function transcript(f, id, forkedFrom) {
+  const dir = join(f.dir, 'claude-config', 'projects', '-some-workspace');
+  await mkdir(dir, { recursive: true });
+  const row = { type: 'user', sessionId: id, ...(forkedFrom ? { forkedFrom: { sessionId: forkedFrom, messageUuid: 'm1' } } : {}) };
+  await writeFile(join(dir, id + '.jsonl'), JSON.stringify(row) + '\n' + JSON.stringify({ type: 'assistant', sessionId: id }) + '\n');
+}
+
+test('a resumed fork shares its source session cache key, through the whole fork chain', async t => {
+  const f = await fixture(t, [{ id: 'gpt-6-sol', owned_by: 'openai' }]);
+  await transcript(f, parentId);
+  await transcript(f, forkId, parentId);
+  await transcript(f, grandforkId, forkId);
+  for (const id of [forkId, grandforkId]) {
+    assert.equal((await f.run(['--resume', id, '-p', 'hi'])).code, 7);
+    assert.equal((await f.capture()).headers, 'X-Claude-Code-Session-Id: ' + parentId);
+  }
+});
+
+test('--fork-session of a plain session sends the source session as the cache key', async t => {
+  const f = await fixture(t, [{ id: 'gpt-6-sol', owned_by: 'openai' }]);
+  await transcript(f, parentId);
+  for (const args of [['--resume', parentId, '--fork-session'], [`--resume=${parentId}`, '--fork-session'], ['-r', parentId, '--fork-session']]) {
+    assert.equal((await f.run(args)).code, 7);
+    assert.equal((await f.capture()).headers, 'X-Claude-Code-Session-Id: ' + parentId);
+  }
+});
+
+test('sessions that need no shared cache key send no session header and keep caller headers', async t => {
+  const f = await fixture(t, [{ id: 'gpt-6-sol', owned_by: 'openai' }]);
+  await transcript(f, parentId);
+  for (const args of [[], ['--resume', parentId], ['--resume', 'not-in-any-project'], ['--continue'], ['--resume', forkId, '--', '--fork-session']]) {
+    assert.equal((await f.run(args, { ANTHROPIC_CUSTOM_HEADERS: 'X-Other: 1' })).code, 7);
+    assert.equal((await f.capture()).headers, 'X-Other: 1');
+  }
+  assert.equal((await f.run(['--resume', parentId])).code, 7);
+  assert.equal((await f.capture()).headers, undefined);
+});
+
+test('a caller headers value is kept and extended, and its own session header wins', async t => {
+  const f = await fixture(t, [{ id: 'gpt-6-sol', owned_by: 'openai' }]);
+  await transcript(f, parentId);
+  await transcript(f, forkId, parentId);
+  await f.run(['--resume', forkId], { ANTHROPIC_CUSTOM_HEADERS: 'X-Other: 1' });
+  assert.equal((await f.capture()).headers, 'X-Other: 1\nX-Claude-Code-Session-Id: ' + parentId);
+  await f.run(['--resume', forkId], { ANTHROPIC_CUSTOM_HEADERS: 'x-claude-code-session-id: caller' });
+  assert.equal((await f.capture()).headers, 'x-claude-code-session-id: caller');
 });
