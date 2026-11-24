@@ -71,9 +71,10 @@ export type Route =
   | { kind: "child"; parentThreadId: string }
   | { kind: "relay"; hostThreadId: string; logicalParentThreadId: string };
 
-export function chooseRoute(lineage: readonly ThreadLink[]): Route {
+type Lineage = readonly [caller: ThreadLink, ...ancestors: ThreadLink[]];
+
+export function chooseRoute(lineage: Lineage): Route {
   const [caller, ...ancestors] = lineage;
-  if (!caller) throw new Error("chooseRoute needs the caller thread");
   if (caller.canSpawnChild) return { kind: "child", parentThreadId: caller.id };
   const host = ancestors.find((thread) => thread.canSpawnChild);
   if (!host) throw new Error(`No ancestor of ${caller.id} can take a child thread.`);

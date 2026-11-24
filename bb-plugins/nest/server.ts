@@ -53,13 +53,13 @@ function usage<T>(parse: () => T): T {
 }
 
 export default function plugin(bb: BbPluginApi) {
-  async function ancestorsUpToSpawner(caller: Thread): Promise<ThreadLink[]> {
-    const links: ThreadLink[] = [];
-    let thread: Thread | null = caller;
-    while (thread !== null && links.length < MAX_ANCESTORS) {
-      links.push({ id: thread.id, canSpawnChild: thread.canSpawnChild });
-      if (thread.canSpawnChild || thread.parentThreadId === null) break;
+  async function ancestorsUpToSpawner(caller: Thread): Promise<[ThreadLink, ...ThreadLink[]]> {
+    const link = (thread: Thread): ThreadLink => ({ id: thread.id, canSpawnChild: thread.canSpawnChild });
+    const links: [ThreadLink, ...ThreadLink[]] = [link(caller)];
+    let thread = caller;
+    while (!thread.canSpawnChild && thread.parentThreadId !== null && links.length < MAX_ANCESTORS) {
       thread = await bb.sdk.threads.get({ threadId: thread.parentThreadId });
+      links.push(link(thread));
     }
     return links;
   }
