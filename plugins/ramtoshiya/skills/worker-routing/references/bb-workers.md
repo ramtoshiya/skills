@@ -51,32 +51,24 @@ After it finishes, run `git status` to confirm that the checkout did not change.
 
 ## Wait for workers {:#wait}
 
-Wait for workers through parent notifications. When a worker's turn completes, fails, or stops on a
-question or an approval, BB sends a `[bb system]` message to your thread. For a worker that
-`bb nest spawn` placed past the depth limit, the message starts with
-`[nest] Automatic report from your worker` instead and needs no reply. The message steers into
-your running turn, or starts a new turn when you are idle. Do other work meanwhile. When the next
-step needs a result and no other work is left, end your turn with one line that names the workers
-you are waiting for. Do not loop on `bb thread show` or `bb thread wait`.
+Every parent waits for a worker in the foreground and keeps its turn open, whether it is a top-level
+session or a bb child. Do other work first when there is some. When the next step needs the result,
+run this with a limit below your shell tool's timeout:
 
-When your own thread is a BB child, ending a turn reports that turn to your parent as your result.
-`bb status` then shows a `Parent` and `Parent notifications: auto`. Keep the turn open instead. Run
-`bb thread wait <worker-id> --timeout <limit> && bb thread output <worker-id>` in the foreground,
-with a limit below your shell tool's timeout. Run it again only when it exits with code 2, which
-means it timed out. For a worker that is your bb child, the `mail` bb plugin drops the completion
-message for a reply this command already printed. A nest relay message still arrives.
+```sh
+bb thread wait <worker-id> --timeout <limit> && bb thread output <worker-id>
+```
 
-Do the same for a long command, test run, or review: run it in the foreground and keep the turn.
-Do not start it in the background and end the turn, because the parent receives that turn as a
-completed result. If a turn must end before a scheduled resume and has nothing to report, reply with
-only `[no-op]`.
+Run it again only when it exits with code 2, which means it timed out. Do not end the turn to wait.
+For a bb child, ending a turn reports it to your own parent as your result. The `mail` bb plugin
+drops the completion message for a worker reply that this command already printed. A nest relay
+message still arrives. For a worker that the nest command placed past the depth limit, it starts
+with `[nest] Automatic report from your worker` and needs no reply.
 
-If a worker's notice leaves you nothing to report or do, reply with exactly `[no-op]`. The `mail` and
-`nest` bb plugins drop that turn's notice, so your own parent is not woken. Do not `bb thread tell` a
-worker to acknowledge it. Send progress to your parent with `bb mail send`, which does not wake it.
-
-Both messages quote a final reply of up to 4,000 characters. A longer reply arrives as one line
-with its first line and length. Read it with `bb thread output <id>`.
+The messages that bb and nest send quote a final reply of up to 4,000 characters. A longer reply
+arrives as one line with its first line and length, and `bb thread output <worker-id>` prints it
+whole. When that output is only `[no-op]` or empty, read `bb thread log <worker-id>` back to the
+worker's last other reply before you call it stalled or finished.
 
 ## Change a running worker's model {:#move}
 
