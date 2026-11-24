@@ -65,6 +65,23 @@ class HermesLearningTests(unittest.TestCase):
                                 capture_output=True, text=True, env=env or self.env, check=True)
         return json.loads(result.stdout)
 
+    def role_of(self, thread):
+        """The server's role for a bb thread, read through a fake `bb thread show`."""
+        bb = self.tmp / "bb"
+        bb.write_text(f"#!/bin/sh\ncat <<'EOF'\n{json.dumps({'thread': thread})}\nEOF\n")
+        bb.chmod(0o755)
+        code = ("import runpy, sys; sys.argv = ['server']; "
+                f"server = runpy.run_path({str(ROOT / 'server.py')!r}); print(server['role']())")
+        env = {**self.env, "BB_CLI": str(bb), "BB_THREAD_ID": "thr_test"}
+        return subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True,
+                              env=env, check=True).stdout.strip()
+
+    def test_only_a_titled_review_fork_writes_as_a_review(self):
+        self.assertEqual(self.role_of({"originKind": "fork", "title": "Hermes review"}), "review")
+        self.assertEqual(self.role_of({"originKind": "fork", "title": "(1) feature work"}), "top")
+        self.assertEqual(self.role_of({"parentThreadId": "thr_parent"}), "child")
+        self.assertEqual(self.role_of({}), "top")
+
     def test_session_start_adds_the_memory_snapshot(self):
         (self.store / "memories/USER.md").write_text("Prefers short answers.\n")
         (self.store / "memories/MEMORY.md").write_text("The build runs with npm test.\n")

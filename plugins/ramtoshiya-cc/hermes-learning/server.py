@@ -25,12 +25,13 @@ RECORD = ("Hermes learning store: memory holds the USER.md and MEMORY.md notes s
           "skills are the hermes-skills plugin. Load these tools with ToolSearch before the first call. When this "
           "session confirms a lesson a later session would reuse, such as a user preference or correction, a fact "
           "about the machine or a project, or a procedure that worked, record it then: memory for a short fact, "
-          "skill_manage for a procedure (skill_view the skill before you patch it). Record only what the user "
-          "said or a tool result showed.")
+          "skill_manage for a procedure (skill_view the skill before you patch it). Record only what a person "
+          "or an agent in the conversation stated, or a tool result showed.")
+REVIEW_TITLE = "Hermes review"
 FORK = (f" When the conversation as a whole is worth reviewing for lessons, for example after a long task with "
         f"several corrections, start a review fork instead of recording piece by piece: run "
-        f"`bb thread fork \"$BB_THREAD_ID\" --lifecycle-owner-thread \"$BB_THREAD_ID\" --prompt-file "
-        f"{REVIEW_PROMPT}` and go on with your work. The fork mails you its summary.")
+        f"`bb thread fork \"$BB_THREAD_ID\" --lifecycle-owner-thread \"$BB_THREAD_ID\" --title \"{REVIEW_TITLE}\" "
+        f"--prompt-file {REVIEW_PROMPT}` and go on with your work. The fork mails you its summary.")
 CHILD = ("You are a child agent that another agent started. Read Hermes skills, but do not record memory or "
          "skills. End your final answer with a `Learning proposals` section of at most five bullets. Each "
          "bullet is something your own tool runs in this task showed that a later session could reuse, such "
@@ -64,7 +65,8 @@ def role() -> str:
     thread = json.loads(shown.stdout or "{}").get("thread") or {}
     if thread.get("parentThreadId"):
         return "child"
-    return "review" if thread.get("originKind") == "fork" else "top"
+    is_review = thread.get("originKind") == "fork" and (thread.get("title") or "").startswith(REVIEW_TITLE)
+    return "review" if is_review else "top"
 
 
 def tool_list(served):

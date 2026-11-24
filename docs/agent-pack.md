@@ -191,10 +191,11 @@ including claudex sessions, to the profile at `~/.hermes/profiles/coder`. Set
   its interval has passed, because no Hermes agent runs for the profile
   otherwise.
 - The agent decides when to learn. The server's instructions tell it to record
-  a lesson that the user or a tool result confirmed. In bb, when a whole
+  a lesson that a person or an agent in the conversation stated, or a tool
+  result showed. In bb, when a whole
   conversation is worth reviewing, it starts a review with
   `bb thread fork "$BB_THREAD_ID" --lifecycle-owner-thread "$BB_THREAD_ID"
-  --prompt-file <plugin>/hermes-learning/review.md`. The fork appears in bb as
+  --title "Hermes review" --prompt-file <plugin>/hermes-learning/review.md`. The fork appears in bb as
   a thread and reuses the source's prompt cache. It records lessons, sends
   changes to files in the working checkout as proposals, and mails a summary to
   the source with `bb mail send` without waking it. Outside bb the agent
@@ -205,8 +206,8 @@ The server reads the session's bb thread at start and picks a role:
 | Session | Tools | Writes as |
 | --- | --- | --- |
 | A bb thread that another thread started (it has a parent) | `skill_view` only. It ends its final answer with `Learning proposals` | Nothing |
-| A bb fork | All three | Hermes's `background_review` origin, which adds its review-only checks and marks new skills as agent-created for the curator |
-| Any other session, in or outside bb | All three | `foreground` |
+| A bb fork titled `Hermes review` | All three | Hermes's `background_review` origin, which adds its review-only checks and marks new skills as agent-created for the curator |
+| Any other session, in or outside bb, including a fork made for other work | All three | `foreground` |
 
 The server needs Hermes's `hermes` command, on `PATH` or at
 `~/.hermes/hermes-agent/.hermes/bin/hermes`, and the profile directory. When
