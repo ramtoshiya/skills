@@ -17,10 +17,12 @@ const listed = ['dev/tests/plugins', 'dev/tests/setup'].flatMap(dir =>
 
 describe('python', { concurrency: availableParallelism() }, () => {
   for (const { dir, name, ids } of listed) {
-    it(`${dir} ${name}`, async () => {
+    it(`${dir} ${name}`, async t => {
       const { error, output } = await new Promise(done => execFile('uv', [...python, 'run', dir, ...ids],
         { cwd: root, maxBuffer: 64 * 1024 * 1024 }, (error, stdout, stderr) => done({ error, output: stdout + stderr })));
       assert.ok(!error, output);
+      const ran = output.match(/^Ran (\d+) tests? /m)?.[1];
+      if (ran && output.includes(`OK (skipped=${ran})`)) t.skip(`unittest skipped all ${ran}`);
     });
   }
 });
