@@ -82,7 +82,7 @@ plugins/                          Skills and hooks for supported hosts
 tools/                            Independently installed commands and their tests
 bb-plugins/                       Plugins for the bb app, installed separately
 setup/                            Machine configuration copied or merged by mise
-dev/                              Repository tests, automation, evals, and disabled skills
+dev/                              Repository tests, automation, evals, desktop verification, and disabled skills
 docs/                             Human-facing documentation
 mise.toml, mise.lock              Machine setup and pinned development tools
 package.json                      Aggregate repository test command

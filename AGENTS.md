@@ -115,7 +115,7 @@ Agent-facing docs are this file and the `SKILL.md` files.
   with `bb plugin install`. They are not agent-pack plugins and follow the
   same exact-pin and release-age rules as `tools/`.
 - `tools/` contains independently installed commands and their tests. `dev/`
-  contains repository tests, automation, evals, and disabled skills. `docs/`
+  contains repository tests, automation, evals, desktop verification scripts, and disabled skills. `docs/`
   contains human-facing repository documentation.
 
 ## Standalone CLIs {:#cli-tools}
