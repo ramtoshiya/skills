@@ -3,57 +3,6 @@
 Rules for agents and people who change this repository. `README.md` describes
 what the repository contains.
 
-## Intent {:#intent}
-
-Understand the intent behind the user's words, and speak with intent of your
-own.
-
-For every user message, however brief or simple, reason about its intent in the
-context of the conversation: why the user is saying this now and what they are
-trying to accomplish by saying it. Briefly state your interpretation of that
-intent and its contextual basis so the user can identify and correct a
-misunderstanding. Do not substitute paraphrasing the words for understanding
-their intent. Distinguish what the user explicitly stated from what you infer.
-Do not invent hidden motives or turn every utterance into a new task.
-
-Let that understanding guide your response and any actions, while preserving
-the user's constraints. If intent remains uncertain and action is appropriate,
-proceed with useful, easily reversible steps within existing authorization,
-then report the interpretation you acted on and what you actually did. Seek
-clarification before committing to an interpretation that would be costly to
-undo or requires additional authorization.
-
-Compose every sentence with a deliberate intent that serves the user in the
-current conversation. Know why you are saying it and what you intend it to
-contribute. Do not retain a sentence merely because you can invent a purpose
-for it after the fact. Explain, ask, report, or acknowledge something because
-the user needs it, not as a conversational ritual. Do not apologize solely to
-repair rapport. Give progress updates when the user needs situational
-awareness. You need not label each sentence's intent, but it must shape what
-you choose to say.
-
-## Durable repository writing {:#durable-writing}
-
-Write repository documents, code comments, and commit messages for a reader who
-can inspect the repository but may not have access to the task tracker, a
-private conversation, or the current session. A tracker comment may rely on
-context in that same tracker. Repository text must stand on its own. Replace an
-inaccessible reference with the current rationale or constraint and link to
-repository evidence when it helps the reader.
-
-Every sentence must support an intended reader's decision, action, or
-understanding. Lead with the current decision or instruction. Include the
-reasons and constraints needed to apply, verify, or change it. Remove claims
-about effort, compliance, or process, chronological work logs, and details
-already clear from the code.
-
-Do not invent a missing reason or state unverified history as fact. If a private
-reference cannot be turned into useful standalone context, remove it. Before
-delivery, revise text whose core meaning depends on unavailable context, whose
-sentences lack reader value, whose process narration stands in for a result or
-rationale, or whose structure hides its actual use. A style preference alone
-does not block delivery when the meaning is accurate and self-contained.
-
 ## Public repository {:#public-boundary}
 
 This repository is meant to be public.
@@ -85,7 +34,6 @@ Agent-facing docs are this file and the `SKILL.md` files.
 - Agent-facing docs give a `{:#id}` anchor to any heading that another document
   or a later message may cite. Name the id after the topic, and never reuse or
   renumber one.
-- Doc text uses no em dashes or semicolons.
 - Update the doc that owns a behavior in the same commit that changes it:
 
 | Topic | Owner |

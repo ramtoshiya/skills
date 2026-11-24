@@ -326,6 +326,11 @@ The managed plugin synchronization workflow reads host selections from
 `setup/agents/hosts.json`. This policy file does not install plugins during
 `mise bootstrap`.
 
+The shared instructions ask agents to state briefly how they read the intent
+of each user message, so the user can correct a misreading. They ask that
+repository text, including comments and commit messages, stand on its own for
+a reader without the conversation, and use no em dashes or semicolons.
+
 The shared instructions distinguish missing configuration and invalid or incompatible
 tools from an absent installation. They direct agents to inspect documented trusted
 locations and report unresolved searches before concluding a prerequisite is missing.
