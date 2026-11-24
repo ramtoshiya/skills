@@ -150,9 +150,9 @@ export function chooseWorker() {
     ({ side, why } = report);
   }
   if (side === 'claude') return { provider: 'claude-code', model: newestModel('sonnet', 'claude-code'), reasoning: 'high', why };
-  const model = newestModel('terra', 'codex');
-  if (model) return { provider: 'codex', model, reasoning: 'high', why };
-  throw new Error('newest-model found no terra model on codex');
+  const model = newestModel('terra', 'claudex');
+  if (model) return { provider: 'claudex', model, reasoning: 'high', why };
+  throw new Error('newest-model found no terra model on claudex');
 }
 
 function bb(...args) {

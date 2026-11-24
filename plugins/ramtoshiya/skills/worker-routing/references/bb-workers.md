@@ -27,8 +27,8 @@ installed and stop.
   the heredoc out of `$(...)`. `--prompt-file -` fails, because plugin commands cannot read
   multi-line standard input. `--prompt-file <path>` works.
 
-- `--provider` is `claude-code` for a worker on Claude, and `codex` or `claudex` for a GPT worker
-  on that route.
+- `--provider` is `claude-code` for a worker on Claude and `claudex` for a GPT worker. The `codex`
+  provider is disabled in BB, so `bb nest spawn --provider codex` fails with HTTP 409.
 - `--model` is the output of `newest-model`, as the skill's first section requires. If the script
   exits nonzero, do not start the worker with an empty `--model`.
 - `--reasoning-level` is the row's effort. Confirm that `bb provider models <provider> --json` lists

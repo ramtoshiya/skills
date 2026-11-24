@@ -101,14 +101,17 @@ The `worker-routing` skill is the one policy for choosing a worker's model.
   GPT worker is handed off to a new Claude thread in the same environment.
   For anything else the agent proposes urgency to you instead of switching.
 - In bb, Sonnet-level workers run on Claude or on GPT Terra models through
-  `codex`, whichever weekly quota has more room. No side is the default, so
+  `claudex`, whichever weekly quota has more room. The Codex provider stays
+  disabled in bb, and `claudex` draws on the same Codex account. No side is the default, so
   work does not pile onto one quota until it runs out. Opus-level work stays
   on Claude, except that a Terra worker whose task outgrew it reruns on GPT
   Sol through the same provider.
 - bb reads weekly quota through its enabled Provider usage plugin's read-only
   `getUsage` RPC on the thread's machine, with a five-minute cache allowance.
-  Before each batch of new workers, the skill's `quota-pace.py` reads any
-  side that lookup missed, or every side on other hosts, from the
+  Before each batch of new workers, the skill's `quota-pace.py` reads the GPT
+  side from `codex app-server`, which bb's usage lookup omits while its Codex
+  provider is disabled. It reads a Claude side that lookup missed, and any side
+  on other hosts that `codex app-server` does not supply, from the
   `quotio-cli` command in [Machine setup](setup.md). It projects each side's
   weekly use at its scheduled reset from the last 24 hours of use. New work
   goes to the side with the lower projected use at its reset, or the lower

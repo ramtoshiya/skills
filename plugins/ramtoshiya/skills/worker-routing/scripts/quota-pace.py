@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import re
@@ -349,7 +350,8 @@ def choose(prefer: str, eligible: list[str], sides: dict[str, Side]):
     return target, f"{prefer} is limited. {why}"
 
 
-def read_codex_credits() -> tuple[list[dict], str | None]:
+@functools.cache
+def codex_rate_limits() -> tuple[dict | None, str | None]:
     requests = [
         {"id": 1, "method": "initialize", "params": {"clientInfo": {"name": "quota-pace", "version": "1"}}},
         {"method": "initialized"},
@@ -361,7 +363,7 @@ def read_codex_credits() -> tuple[list[dict], str | None]:
             stderr=subprocess.DEVNULL, text=True,
         )
     except OSError as error:
-        return [], f"codex app-server could not start: {error}"
+        return None, f"codex app-server could not start: {error}"
     timer = threading.Timer(30, process.kill)
     timer.start()
     result = None
@@ -380,7 +382,25 @@ def read_codex_credits() -> tuple[list[dict], str | None]:
         process.kill()
         process.wait()
     if result is None:
-        return [], "codex app-server returned no rate limit read"
+        return None, "codex app-server returned no rate limit read"
+    return result, None
+
+
+def read_codex(now) -> Reading | None:
+    result, _ = codex_rate_limits()
+    limits = (result or {}).get("rateLimits") or {}
+    weekly_minutes = WEEK.total_seconds() / 60
+    for window in (limits.get("primary"), limits.get("secondary")):
+        if window and window.get("windowDurationMins") == weekly_minutes \
+                and window.get("usedPercent") is not None and window.get("resetsAt"):
+            return Reading(Sample(now, float(window["usedPercent"]), parse_time(window["resetsAt"])))
+    return None
+
+
+def read_codex_credits() -> tuple[list[dict], str | None]:
+    result, error = codex_rate_limits()
+    if result is None:
+        return [], error
     summary = result.get("rateLimitResetCredits") or {}
     credits = [c for c in summary.get("credits") or [] if c.get("status") == "available"]
     options = [
@@ -470,6 +490,9 @@ def main(argv=None) -> int:
 
     readings, notes = current_readings(sys.stdin.read(), now)
     missing = [side for side in eligible if side not in readings]
+    if "codex" in missing and (codex := read_codex(now)):
+        readings["codex"] = codex
+        missing.remove("codex")
     if missing:
         found, quotio_note = read_quotio(missing, now)
         readings.update(found)

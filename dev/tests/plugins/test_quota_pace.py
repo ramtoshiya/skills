@@ -371,6 +371,54 @@ class QuotaPaceTests(unittest.TestCase):
         for private in ("raw-id-q", "person@example.com"):
             self.assertNotIn(private, output)
 
+    def codex_limits(self, used, duration_mins=10080, resets=None):
+        self.codex_response.write_text(json.dumps({
+            "rateLimits": {"limitId": "codex", "secondary": None, "primary": {
+                "usedPercent": used, "windowDurationMins": duration_mins,
+                "resetsAt": int((resets or later(50)).timestamp())}},
+            "rateLimitResetCredits": {"availableCount": 0, "credits": []},
+        }))
+
+    def test_codex_app_server_supplies_the_gpt_reading_without_quotio(self):
+        self.codex_limits(86)
+        report = self.run_pace(bb_usage(claude=(42, later(50))), "--eligible", "claude,codex")
+        self.assertEqual(report["sides"]["codex"]["used"], 86)
+        self.assertNear(report["sides"]["codex"]["resets_at"], later(50))
+        self.assertEqual(report["route"]["side"], "claude")
+        self.assertEqual([n for n in report.get("notes", []) if "quotio-cli" in n], [])
+
+    def test_codex_app_server_reading_works_with_no_lookup_input(self):
+        self.codex_limits(30)
+        report = self.run_pace("", "--eligible", "codex")
+        self.assertEqual(report["route"]["side"], "codex")
+        self.assertEqual([n for n in report.get("notes", []) if "quotio-cli" in n], [])
+
+    def test_codex_app_server_reading_at_100_marks_the_side_limited(self):
+        self.codex_limits(100)
+        report = self.run_pace(bb_usage(claude=(42, later(50))), "--eligible", "claude,codex")
+        self.assertEqual(report["sides"]["codex"]["status"], "limited")
+        self.assertEqual(report["route"]["side"], "claude")
+
+    def test_a_codex_window_that_is_not_weekly_is_not_a_reading(self):
+        self.codex_limits(5, duration_mins=300)
+        report = self.run_pace(bb_usage(claude=(42, later(50))), "--eligible", "claude,codex")
+        self.assertEqual(report["sides"]["codex"]["status"], "no-reading")
+
+    def test_quotio_supplies_the_gpt_reading_when_app_server_has_none(self):
+        self.quotio_response.write_text(json.dumps({
+            "accounts": [{"id": "fixture", "provider_id": "codex"}],
+            "usage": [{"account_id": "fixture", "metrics": [
+                {"display_name": "Weekly", "quota": {"used_percent": 61}, "resets_at": iso(later(50))},
+            ]}],
+        }))
+        report = self.run_pace(bb_usage(claude=(42, later(50))), "--eligible", "claude,codex")
+        self.assertEqual(report["sides"]["codex"]["used"], 61)
+
+    def test_one_app_server_call_serves_the_reading_and_the_reset_credits(self):
+        self.codex_limits(100)
+        self.run_pace(bb_usage(claude=(100, later(50))), "--eligible", "claude,codex")
+        self.assertEqual(self.codex_methods(), ["initialize", "initialized", "account/rateLimits/read"])
+
     def test_empty_input_reads_fractional_utc_quotio_timestamps(self):
         state = self.tmp / "state/ramtoshiya/quota-samples.json"
         state.parent.mkdir(parents=True)

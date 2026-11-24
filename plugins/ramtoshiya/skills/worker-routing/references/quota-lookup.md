@@ -11,24 +11,27 @@ machine rather than inside the agent's command sandbox. Read `bb status --json` 
 
 ```sh
 usage=$(bb plugin rpc call bb--provider-usage getUsage --input-file /dev/stdin --json <<'JSON'
-{"force":false,"machineIds":["<machine-id>"],"providerIds":["claude-code","codex"],"maxAgeMs":300000}
+{"force":false,"machineIds":["<machine-id>"],"providerIds":["claude-code"],"maxAgeMs":300000}
 JSON
 )
 printf '%s' "$usage" | uv run --no-project --managed-python --python '>=3.11' python \
   <skill-dir>/scripts/quota-pace.py --eligible <sides>
 ```
 
-The script reads the `Weekly limit` window of `claude-code` and `codex` when `usage.status` is
-`ok`. Claude's percentage is a rounded reading. Use a provider usage-limit error to confirm
+The script reads the `Weekly limit` window of `claude-code` when `usage.status` is `ok`. BB reports
+no GPT usage while its `codex` provider is disabled, so the script reads the `codex` side itself:
+it asks the installed `codex app-server` for `account/rateLimits/read` and takes the 10080-minute
+window's `usedPercent` and `resetsAt`. The `claudex` proxy uses the same Codex account. If the
+piped lookup does include a `codex` reading, the script uses that one. Claude's percentage is a rounded reading. Use a provider usage-limit error to confirm
 that Claude stopped accepting work. Do not combine accounts from other machines. The RPC can
 be callable even when `bb plugin rpc list` does not advertise it. Do not enable or install a
 plugin just for this lookup.
 
-For each eligible side that the piped output lacks, the script runs
-`quotio-cli usage --provider <side> --no-saved-accounts --format json` itself. It joins
+For a Claude reading that the piped output lacks, or when `codex app-server` returns no weekly window,
+the script runs `quotio-cli usage --provider <side> --no-saved-accounts --format json` itself. It joins
 `usage[].account_id` to `accounts[].id`, reads the `Weekly` metric, and never prints the output.
-Outside BB, or when the RPC fails, run the script with no input (`</dev/null`) and it reads every
-eligible side this way. It looks for `quotio-cli` on PATH, at `~/.local/bin/quotio-cli`, and at
+Outside BB, or when the RPC fails, run the script with no input (`</dev/null`). It reads the `codex`
+side from `codex app-server` and the `claude` side this way. It looks for `quotio-cli` on PATH, at `~/.local/bin/quotio-cli`, and at
 `Contents/Helpers/quotio-cli` in `/Applications/Quotio.app` and `/Applications/Quotio Beta.app`.
 When it finds none, or the command returns no figure for a side, that side has no reading and a
 note says which. A side without a reading is never the fallback for a limited side.
