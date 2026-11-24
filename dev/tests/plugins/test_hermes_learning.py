@@ -134,7 +134,33 @@ class HermesLearningTests(unittest.TestCase):
         self.assertIn(f"the Hermes learning store {self.tmp / 'absent'} does not exist", result.stderr)
         no_hermes = {**self.env, "PATH": "/usr/bin:/bin", "HOME": str(self.tmp)}
         self.assertIn("Hermes is not installed", launch(no_hermes).stderr)
-        self.assertIn("off in the Hermes coder runtime", launch({**self.env, "_HERMES_GATEWAY": "1"}).stderr)
+
+    def test_server_lists_no_tools_in_the_coder_runtime(self):
+        """Claude Code caches a failed plugin server for every session for 15 minutes, so the server must
+        start and stay empty here instead of exiting."""
+        requests = [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+                    {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}]
+        result = subprocess.run([sys.executable, str(LAUNCH)], capture_output=True, text=True,
+                                env={**self.env, "_HERMES_GATEWAY": "1"},
+                                input="".join(json.dumps(r) + "\n" for r in requests))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        replies = {reply["id"]: reply["result"] for reply in map(json.loads, result.stdout.splitlines())}
+        self.assertEqual(replies[1]["serverInfo"]["name"], "hermes-learning")
+        self.assertEqual(replies[2], {"tools": []})
+
+    def test_skill_names_reach_hermes_without_the_plugin_prefix(self):
+        """Claude Code lists the skills as hermes-skills:<name>, and agents pass that name to the tools."""
+        fake = self.tmp / "fake"
+        (fake / "tools/registry.py").write_text("registry = None\n")
+        (fake / "model_tools.py").write_text(
+            "import json\ndef handle_function_call(name, args, **_):\n    return json.dumps(args)\n")
+        code = (f"import json, runpy, sys; sys.path.insert(0, {str(fake)!r}); "
+                f"server = runpy.run_path({str(ROOT / 'server.py')!r}); "
+                "print(server['call']('skill_view', {'name': 'hermes-skills:flaky-checks'}, 's', "
+                "('skill_view',))[0])")
+        sent = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True,
+                              env=self.env, check=True).stdout
+        self.assertEqual(json.loads(sent), {"name": "flaky-checks"})
 
 
 if __name__ == "__main__":
