@@ -197,6 +197,7 @@ class HermesLearningTests(unittest.TestCase):
                 self.assertIn("Started thr_new", output)
                 self.assertEqual(len(calls), 1)
                 self.assertEqual(calls[0][calls[0].index("--permission-mode") + 1], "full")
+                self.assertEqual(calls[0][calls[0].index("--environment") + 1], str(ROOT.parents[2]))
                 prompt = (self.tmp / "prompt.md").read_text()
                 self.assertIn(f"HERMES_LEARNING_HOME={self.store} {ROOT / 'hermes-learning'}", prompt)
                 self.assertIn('"chars": ' + str(chars), prompt)

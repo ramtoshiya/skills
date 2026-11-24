@@ -64,7 +64,9 @@ def main():
     with tempfile.TemporaryDirectory() as folder:
         prompt_file = Path(folder) / "prompt.md"
         prompt_file.write_text(prompt, encoding="utf-8")
-        shown = json.loads(bb("thread", "spawn", "--project", os.environ["BB_PROJECT_ID"], "--permission-mode", "full",
+        # The checkout's existing environment. Without one bb creates a worktree, which this thread never uses.
+        shown = json.loads(bb("thread", "spawn", "--project", os.environ["BB_PROJECT_ID"], "--environment", str(REPO),
+                              "--permission-mode", "full",
                               "--provider", "claude-code", "--model", model, "--reasoning-level", "high",
                               "--title", f"Hermes memory consolidation {today}", "--prompt-file", str(prompt_file),
                               "--json"))
