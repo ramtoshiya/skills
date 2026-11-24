@@ -212,14 +212,26 @@ class GlobalPackageGuardTests(unittest.TestCase):
                     self.assertIn(WEAKER, guard.reason(routed, self.home, self.environment) or "")
                 path.unlink()
 
-    def test_uv_config_precedence_tool_config_and_pip_namespace(self):
+    def test_uv_reads_project_age_policy_from_tool_uv_only(self):
         (self.cwd / "pyproject.toml").write_text('[project]\nname = "example"\nexclude-newer = "1 day"\n')
         self.assert_allowed(["uv sync"])
         (self.cwd / "pyproject.toml").write_text('[tool.uv]\nexclude-newer = "1 day"\n')
         self.assert_denied(WEAKER, ["uv sync"])
-        self.assert_allowed(["uvx example==1.2.3"])  # Tool commands ignore project config.
+
+    def test_uvx_ignores_project_config(self):
+        (self.cwd / "pyproject.toml").write_text('[tool.uv]\nexclude-newer = "1 day"\n')
+        self.assert_denied(WEAKER, ["uv sync"])
+        self.assert_allowed(["uvx example==1.2.3"])
+
+    def test_uv_toml_overrides_pyproject_tool_uv(self):
+        (self.cwd / "pyproject.toml").write_text('[tool.uv]\nexclude-newer = "1 day"\n')
+        self.assert_denied(WEAKER, ["uv sync"])
+        (self.cwd / "uv.toml").write_text('exclude-newer = "3 days"\n')
+        self.assert_allowed(["uv sync"])
+
+    def test_uv_pip_reads_the_pip_namespace(self):
         (self.cwd / "uv.toml").write_text('exclude-newer = "3 days"\n[pip]\nexclude-newer = "1 day"\n')
-        self.assert_allowed(["uv sync"])  # uv.toml takes precedence over pyproject.toml.
+        self.assert_allowed(["uv sync"])
         self.assert_denied(WEAKER, ["uv pip install example"])
 
     def test_config_disabling_or_relocation_does_not_remove_age_requirement(self):

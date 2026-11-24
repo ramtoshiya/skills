@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""PreToolUse package/model policy, Python, process-kill, and agent test run command guard.
-
-Command text is parsed, never evaluated. This is an ordinary-command guard,
-not a shell sandbox or a complete boundary against deliberate bypass.
-"""
 import json
 from datetime import datetime, timezone
 import os
@@ -32,11 +27,11 @@ NPM_PIN = re.compile(r"(?:@[A-Za-z0-9._-]+/)?[A-Za-z0-9._-]+@"
 PYTHON_PIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(?:\[[A-Za-z0-9_,.-]+\])?=="
                         r"[0-9]+(?:\.[0-9]+)*(?:(?:a|b|rc)[0-9]+)?"
                         r"(?:\.post[0-9]+)?(?:\.dev[0-9]+)?(?:\+[A-Za-z0-9.-]+)?")
+UNVERSIONED_PACKAGE = ""
 PYTHON_COMMAND = re.compile(r"(?:python|pip)(?:[0-9]+(?:\.[0-9]+)*)?")
 
 
 def options(args, names):
-    """Read literal option values without interpreting shell text."""
     values = []
     i = 0
     while i < len(args):
@@ -98,11 +93,6 @@ def nearest(cwd, name):
 
 
 def scalar_settings(path, keys, yaml=False):
-    """Read policy keys only; YAML policy keys must be simple root scalars.
-
-    Unsupported/duplicate policy syntax fails closed. Unrelated config and
-    credentials are never returned or printed.
-    """
     result = {}
     if path is None or not path.exists():
         return result
@@ -113,8 +103,6 @@ def scalar_settings(path, keys, yaml=False):
         match = re.match(r"\s*([A-Za-z][A-Za-z0-9_.-]*(?:\[\])?)\s*[:=]\s*(.*)", line)
         key = match[1].removesuffix("[]") if match else None
         if key not in keys:
-            # Flow mappings and YAML quoted/nested keys cannot silently hide
-            # an age-policy override from this dependency-free reader.
             if yaml and any(re.search(r"\b" + re.escape(k) + r"\b\s*['\"]?\s*:", line) for k in keys):
                 raise ValueError("unsupported YAML policy syntax")
             continue
@@ -163,12 +151,6 @@ def uv_settings(path):
 
 
 def freshness_reason(family, args, environment, cwd, user_tool=False, pip=False):
-    """Require a configured age floor; reject any weaker policy declaration.
-
-    Checking every discovered policy declaration is deliberately conservative:
-    a stronger CLI value does not excuse a weak project/user override. This
-    avoids guessing manager-version-specific precedence without running it.
-    """
     if cwd is None:
         directory = one_option(args, {"--directory", "-C"}) or (one_option(args, {"--project"}) if family == "uv" else None) or (one_option(args, {"--prefix"}) if family == "npm" else None)
         if directory is not None:
@@ -219,8 +201,6 @@ def freshness_reason(family, args, environment, cwd, user_tool=False, pip=False)
                 raise ValueError("invalid per-package cutoff")
             exemptions.append((value.split("=", 1)[1], "uv"))
         if environment.get("uv_exclude_newer_package"):
-            # The mapping syntax depends on uv version; don't accept an
-            # unverified package-specific bypass via the environment.
             return "Package-specific age overrides must use reviewed config or explicit flags."
     else:
         key = {"npm": "min-release-age", "pnpm": "minimumReleaseAge", "yarn": "npmMinimalAgeGate"}[family]
@@ -274,8 +254,6 @@ def freshness_reason(family, args, environment, cwd, user_tool=False, pip=False)
 
 
 def without_heredoc_bodies(command):
-    # Here-doc bodies are script/data payloads, not outer-shell command tokens.
-    # Their contents are outside this guard's ordinary-command coverage.
     output = []
     pending = []
     for line in command.splitlines(keepends=True):
@@ -342,7 +320,6 @@ def unwrap(tokens, inherited=None):
 
 
 def process_patterns(name, args):
-    """Return the operands that macOS pkill or pgrep would read as patterns."""
     words = []
     target = False
     for token in args:
@@ -382,7 +359,6 @@ def global_flag(args, environment):
 
 
 def positions(args):
-    """Positional tokens with indexes, including command targets after --."""
     result = []
     i = 0
     while i < len(args):
@@ -400,7 +376,6 @@ def positions(args):
 
 
 def package_operation(name, args):
-    """Return (family, manager options, requested one-shot packages, mode)."""
     words = positions(args)
     sub = words[0][1] if words else ""
     family = {"npx": "npm", "pnpx": "pnpm", "pnx": "pnpm", "uvx": "uv"}.get(name, name)
@@ -437,17 +412,15 @@ def package_operation(name, args):
         explicit = options(manager_args, {"--from"}) if family == "uv" else options(manager_args, {"--package", "-p"})
         packages = explicit or ([target[1]] if target else [])
         if not packages:
-            return family, manager_args, [""], user_tool, pip
+            return family, manager_args, [UNVERSIONED_PACKAGE], user_tool, pip
     if name == "uv" and sub == "run":
         target = words[1] if len(words) > 1 else None
         manager_args = args[:target[0]] if target else args
     if family == "uv":
         packages.extend(options(manager_args, {"--with"}))
         if options(manager_args, {"--with-editable"}):
-            # Editable/local code has no registry version or publish-age
-            # metadata. Keep project development available outside one-shots.
             if one_shot:
-                packages.append("")
+                packages.append(UNVERSIONED_PACKAGE)
     return family, manager_args, packages, user_tool, pip
 
 
@@ -485,7 +458,6 @@ def python_reason(executable, args, cwd, environment):
 
 
 def model_option(args, names):
-    """Read all model option declarations, rejecting missing/dynamic values."""
     values = []
     i = 0
     while i < len(args):
@@ -505,14 +477,12 @@ def model_option(args, names):
 
 
 def model_reason(name, args, cwd, environment):
-    """Guard common acquisition/loading CLIs, not arbitrary SDK code."""
     if name in {"hf", "huggingface-cli", "ollama"} and len(args) == 2 and args[1] in {"--help", "-h"}:
         return None
     if name in {"hf", "huggingface-cli"} and args[:1] == ["download"]:
         revisions = model_option(args[1:], {"--revision"})
         if not revisions or any(not re.fullmatch(r"[0-9a-fA-F]{40}", v) for v in revisions):
             return "Model downloads require --revision with a full 40-character commit hash from a reviewed publisher. Branches and tags are mutable."
-        # Dataset/space repositories can also carry executable/model artifacts.
         return None
     if name == "ollama" and args[:1] in (["pull"], ["run"], ["create"]):
         return "Ollama pull/run/create cannot establish immutable artifact provenance here. Use a reviewed commit-pinned download and an explicit local model path instead."
@@ -544,7 +514,6 @@ def model_reason(name, args, cwd, environment):
         return "Model loading requires an explicit local artifact path. Download a reviewed full revision first, then verify the artifact hashes."
     models.extend(model_option(args, {"--adapter-path"}))
     for value in models:
-        # A repo id (publisher/model) must not silently trigger a Hub fetch.
         if not (value.startswith(("/", "./", "../", "~/"))):
             return "Model loading requires an explicit local artifact path, not a repository id or mutable model name."
         path = resolve_path(value, cwd, environment)
@@ -558,7 +527,6 @@ def model_reason(name, args, cwd, environment):
 
 
 def model_command(tokens):
-    """Expose uv run and Python -m targets without evaluating script bodies."""
     if not tokens:
         return "", []
     name, args = PurePath(tokens[0]).name, tokens[1:]
@@ -638,8 +606,6 @@ def reason(command, cwd=None, environment=None, depth=0):
             return "Model options require explicit literal values and existing local paths."
         if denial_reason:
             return denial_reason
-        # Only check mutating subcommands; an echoed command or npm test's
-        # arguments do not become package-manager operations.
         package_args = args[:args.index("--")] if "--" in args else args
         words = [token for _, token in positions(package_args)]
         if name in {"npm", "pnpm"} and words and words[0] in MUTATIONS:
