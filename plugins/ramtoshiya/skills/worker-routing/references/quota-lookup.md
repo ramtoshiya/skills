@@ -15,7 +15,7 @@ usage=$(bb plugin rpc call bb--provider-usage getUsage --input-file /dev/stdin -
 JSON
 )
 printf '%s' "$usage" | uv run --no-project --managed-python --python '>=3.11' python \
-  <skill-dir>/scripts/quota-pace.py --prefer <side> --eligible <sides>
+  <skill-dir>/scripts/quota-pace.py --eligible <sides>
 ```
 
 The script reads the `Weekly limit` window of `claude-code` and `codex` when `usage.status` is

@@ -42,7 +42,7 @@ on an Agent call, and `--model` and `--reasoning-level` on `bb nest spawn`.
 Without them, an Agent subagent on another model runs at that model's saved effort,
 which may be `low`, and a BB worker runs on your own model and effort.
 
-| Row | On a GPT route | Work |
+| Row | On the `codex` side | Work |
 | --- | --- | --- |
 | `sonnet` `high` | `terra` `high` | The default for implementation: the brief states the behavior and acceptance criteria, the change stays inside one component, and no design decision is open. Also sorting and summarizing results against fixed criteria, and reads that need interpretation, including explanations, research, calculations, and reconciling mismatches, even when read-only. Split input over about 100K tokens across several workers |
 | `opus` `high` | Stays on Claude | Top-tier work: design questions and memos, reviews, changes across components or boundaries such as a file format or persisted state, concurrency, recovery, security, and debugging an unknown cause |
@@ -77,9 +77,9 @@ When work becomes urgent, judge its row again at that moment:
 - A `sonnet` row keeps its row. An `opus` row becomes `fable`. Urgent
   work does not use `opus`.
 - Never lower a model at this moment. A worker already on Sol moves to `fable`.
-- Urgent work runs on Claude, whatever the route: `sonnet` or `fable`.
-- Urgent work runs `quota-pace` with `--prefer claude --no-spill`, so a pace
-  projection never moves it. Pass `--eligible claude,codex` unless the calling
+- Urgent work runs on Claude: `sonnet` or `fable`.
+- Urgent work runs `quota-pace` with `--prefer claude`, so only a usage limit
+  moves it, never a pace projection. Pass `--eligible claude,codex` unless the calling
   workflow ties the role to the Claude family. When the Fable window is
   exhausted by a Fable usage-limit error, use `opus`. When the script routes
   urgent work to `codex`, use the row's GPT column, and `sol` for `opus` or `fable`.
@@ -105,19 +105,17 @@ missing, as it is while BB's Claude Code setting `subagentsDisabled` is on. Read
 [BB workers](references/bb-workers.md) before your first spawn there. When no tool
 can start a worker, follow the calling workflow's fallback.
 
-Without a thread tool, every worker runs on Claude, so skip the route file and the
-quota. Otherwise read `~/.config/ramtoshiya/worker-route.json` once at the start.
-Its `workers` value is `claude`, `codex`, or `claudex`. A missing file or any other
-value means `claude`. The `codex` and `claudex` routes share the Codex quota, so both
-are the `codex` side below, and the route's side is the default side for new work.
-On those routes the table's GPT column applies, on the route's provider. The `opus`
-rows and your own judgement stay on Claude.
+Without a thread tool, every worker runs on Claude, so skip the quota. Otherwise no
+side is the default. Each batch of new work goes to the side with the most room, so
+work does not pile onto one side until it runs out. The `claude` side runs the
+table's Claude rows on `claude-code`. The `codex` side runs the GPT column on
+`codex`, unless your host names another provider for it. The `opus` rows and your
+own judgement stay on Claude.
 
 Before you start a batch of new workers, read the quota and pipe it into
 `scripts/quota-pace.py`, as [Quota lookup](references/quota-lookup.md) describes.
 Pass these flags:
 
-- `--prefer`: the route's side.
 - `--eligible`: the sides the work may run on. A row with both columns may run on
   `claude,codex`. An `opus` row, and a role the calling workflow ties to the Claude
   family, may run on `claude` only. A seat outside the Claude family may run on
@@ -126,9 +124,7 @@ Pass these flags:
   in this session, with the time of the error. When the error named a limit
   shorter than the weekly one, such as Claude's session limit, and the reset time
   it gave, pass `--limited <side>=<time>/<reset time>`.
-- `--work <percent>`: the work's expected share of the weekly quota, when the
-  measured use of similar workers gives one.
-- `--no-spill`: for urgent work.
+- `--prefer claude`: for urgent work only.
 
 Start the worker on the side in `route.side`. The script decides as follows:
 
@@ -138,15 +134,15 @@ Start the worker on the side in `route.side`. The script decides as follows:
   After a usage-limit error, a side stays limited until its reading shows a window
   that started after the error or a lower reading on the same schedule. A flag
   with a reset time keeps the side limited until that time.
-- When the default side is limited, the work goes to another eligible side with
-  a current reading and no active limit, even when that side's pace is unknown. A side
-  without a current reading has no confirmed capacity, so it does not take the
-  work. The script asks `quotio-cli` for any eligible side the piped lookup
+- Among the eligible sides with a current reading and no active limit, the work
+  goes to the one with the lowest expected use at its scheduled reset: the
+  projection from its recent pace, or the current reading when its pace is unknown.
+  A side without a current reading has no confirmed capacity, so it does not take
+  the work. The script asks `quotio-cli` for any eligible side the piped lookup
   missed before it decides.
-- When the default side's recent pace runs it out before its scheduled reset, the
-  work moves only to another eligible side whose projection holds the work through
-  its own reset. When both project running out, or the other side's pace is unknown,
-  the work stays on the default side.
+- When no eligible side has a reading or a limit, the lookup failed, and the work
+  goes to `claude` when it is eligible.
+- Urgent work stays on `claude` unless Claude is limited.
 
 When `route.side` is `null`, no eligible side has confirmed capacity. Do not start the
 worker and do not move it to another model family. Tell the user which role is
@@ -167,9 +163,8 @@ When the report has `reset_options`, show them to the user with your report: eac
 credit's scope, claim deadline, how long its quota lasts once claimed, and the use
 the outage would cost. A reset that the user performs shows in the next reading.
 
-Say in your report when you switch, and quote the script's `why`. If the lookup or
-the script fails, report the specific failure once and start new work on the default
-side. If the default side has an active usage-limit error or is Codex at 100%,
-report the role as blocked. When you compact, write the route, each side's status
-and figures from the last report, each `--limited` flag, and which work is urgent
-into the handoff note.
+Quote the script's `why` in your report. If the script itself fails, report the
+specific failure once and start new work on `claude`, unless Claude has an active
+usage-limit error. Then report the role as blocked. When you compact, write each
+side's status and figures from the last report, each `--limited` flag, and which
+work is urgent into the handoff note.

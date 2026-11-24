@@ -85,8 +85,8 @@ bb thread wait <child id> --timeout 600 && bb thread output <child id>
 - Every worker that the mode or a workflow asks for is such a child coder. `--provider {provider}` replaces the \
 provider that ramtoshiya:worker-routing and its BB workers reference name.
 - Choose the model and effort by the rows of the ramtoshiya:worker-routing skill, and pass both on every spawn: `sonnet` \
-`high` for implementation and reads that need interpretation, and `opus` `high` for top-tier work. On a GPT route, the \
-model is the output of `newest-model <family> claudex`, or the Claude row when that exits 1. Never pass an Astra model.
+`high` for implementation and reads that need interpretation, and `opus` `high` for top-tier work. When quota-pace routes \
+the worker to `codex`, the model is the output of `newest-model <family> claudex`, or the Claude row when that exits 1. Never pass an Astra model.
 - A notice from the child would start a new turn right after this one and cancel Hermes's review of this session, so \
 a hook refuses a spawn without `--parent-notifications off`. Run the wait again when it exits 2 (timeout). Exit 4 \
 means the child failed: read it with `bb thread log <child id>`.

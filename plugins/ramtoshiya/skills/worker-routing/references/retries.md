@@ -15,8 +15,8 @@ whatever its reason. `sonnet` `high` moves to `opus` `high`.
 If `opus` `high` outgrows its row, split the work or change the approach. A step-up never goes to
 `fable`. Only urgency does.
 
-On the `codex` or `claudex` route, a Terra worker that outgrew its row reruns on the same provider
-on `sol` `high`, so the step-up stays on the route's quota.
+A Terra worker that outgrew its row reruns on the same provider on `sol` `high`, so the step-up
+stays on the Codex quota.
 
 After two materially identical failures without progress, change the approach or name the missing
 capability.
@@ -24,7 +24,7 @@ capability.
 ## Seats outside the Claude family {:#cross-family}
 
 When the calling workflow needs a seat outside the Claude family, such as a cross-model judge,
-start it with the thread tool on the GPT route's provider, or on `codex` when the route is
-`claude`. Give it the family the route table names for its row, or `sol` at the row's effort for an
+start it with the thread tool on the provider of the `codex` side. Give it the family the table's
+GPT column names for its row, or `sol` at the row's effort for an
 `opus` row. Without a thread tool, or while `quota-pace.py` reports the `codex` side limited, the
 seat cannot run, so follow the calling workflow's fallback.

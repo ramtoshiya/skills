@@ -100,27 +100,25 @@ The `worker-routing` skill is the one policy for choosing a worker's model.
   work runs on Claude, and a top-tier row moves from Opus to Fable. A running
   GPT worker is handed off to a new Claude thread in the same environment.
   For anything else the agent proposes urgency to you instead of switching.
-- The file `~/.config/ramtoshiya/worker-route.json` decides where
-  Sonnet-level workers run in bb. With `{"workers": "codex"}` or
-  `{"workers": "claudex"}` they run on GPT Terra models through that
-  provider. Without the file they run on Claude. Opus-level work stays on
-  Claude, except that a Terra worker whose task outgrew it reruns on GPT Sol
-  through the same provider.
+- In bb, Sonnet-level workers run on Claude or on GPT Terra models through
+  `codex`, whichever weekly quota has more room. No side is the default, so
+  work does not pile onto one quota until it runs out. Opus-level work stays
+  on Claude, except that a Terra worker whose task outgrew it reruns on GPT
+  Sol through the same provider.
 - bb reads weekly quota through its enabled Provider usage plugin's read-only
   `getUsage` RPC on the thread's machine, with a five-minute cache allowance.
   Before each batch of new workers, the skill's `quota-pace.py` reads any
   side that lookup missed, or every side on other hosts, from the
   `quotio-cli` command in [Machine setup](setup.md). It projects each side's
   weekly use at its scheduled reset from the last 24 hours of use. New work
-  moves to the other side when the route's side is projected to run out and
-  the other side is projected to have room. It also moves when the route's
-  side hits a usage limit and the other side has a current reading and no
-  active limit. A running worker that hits a usage limit moves the same way,
+  goes to the side with the lower projected use at its reset, or the lower
+  current reading when a side has no recent pace. A side with a usage limit
+  or without a current reading takes no work. A running worker that hits a usage limit moves the same way,
   by handoff to a new thread, without asking you first. Claude's reported 100% can be a rounded
   reading, so Claude stays eligible until a request hits a usage limit. A Codex
   reading of 100% marks Codex limited. A side that hit a limit comes back when
   a reading shows its quota renewed, or after the reset time that a shorter
-  limit's error named. Urgent work moves only on a limit.
+  limit's error named. Urgent work stays on Claude and moves only on a limit.
 - When no eligible side can take a worker, including when the other side
   has no current reading after a limit, the agent reports the blocked
   role, each side's scheduled reset, and the reset credits it can see: Codex

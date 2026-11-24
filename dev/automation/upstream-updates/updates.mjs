@@ -140,27 +140,19 @@ function newestModel(family, provider) {
 }
 
 export function chooseWorker() {
-  let route = 'claude';
-  try {
-    route = readJson(join(homedir(), '.config/ramtoshiya/worker-route.json')).workers;
-  } catch {}
-  if (!['claude', 'codex', 'claudex'].includes(route)) route = 'claude';
-  const prefer = route === 'claude' ? 'claude' : 'codex';
   const pace = run('uv', ['run', '--no-project', '--managed-python', '--python', '>=3.11', 'python',
-    join(ROUTING, 'quota-pace.py'), '--prefer', prefer, '--eligible', 'claude,codex']);
-  let side = prefer;
-  let why = `quota lookup failed, using the route's side: ${pace.stderr.trim().split('\n').pop()}`;
+    join(ROUTING, 'quota-pace.py'), '--eligible', 'claude,codex']);
+  let side = 'claude';
+  let why = `quota lookup failed, using claude: ${pace.stderr.trim().split('\n').pop()}`;
   if (pace.status === 0) {
     const report = JSON.parse(pace.stdout).route;
     if (!report.side) throw new Error(`No provider has confirmed quota: ${report.why}`);
     ({ side, why } = report);
   }
   if (side === 'claude') return { provider: 'claude-code', model: newestModel('sonnet', 'claude-code'), reasoning: 'high', why };
-  for (const provider of route === 'claude' ? ['codex'] : [route, 'codex']) {
-    const model = newestModel('terra', provider);
-    if (model) return { provider, model, reasoning: 'high', why };
-  }
-  throw new Error('newest-model found no terra model on the codex route');
+  const model = newestModel('terra', 'codex');
+  if (model) return { provider: 'codex', model, reasoning: 'high', why };
+  throw new Error('newest-model found no terra model on codex');
 }
 
 function bb(...args) {

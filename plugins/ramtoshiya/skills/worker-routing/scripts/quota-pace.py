@@ -323,30 +323,30 @@ def forecast(side_name: str, reading: Sample | None, sources: list[tuple[str, li
     return side
 
 
-def choose(prefer: str, eligible: list[str], sides: dict[str, Side], work: float, spill: bool):
-    home = prefer if prefer in eligible else eligible[0]
-    open_sides = [s for s in eligible if sides[s].status != "limited"]
-    if home in open_sides:
-        if spill and sides[home].status == "runs-out":
-            for alternative in open_sides:
-                projected = sides[alternative].projected_at_reset
-                if alternative != home and sides[alternative].status == "fits" and projected + work < 100:
-                    return alternative, (
-                        f"{home} runs out at {sides[home].runs_out_at}, before its reset at {sides[home].resets_at}. "
-                        f"{alternative} projects {projected}% at its reset"
-                    )
-            return home, f"{home} projects running out, and no other eligible side projects room through its reset"
-        return home, f"{home} is the default side and has no active usage limit"
-    observed = [s for s in open_sides if sides[s].used is not None]
-    if observed:
-        alternative = observed[0]
-        return alternative, (
-            f"{home} is limited. {alternative} reads {sides[alternative].used}%, status {sides[alternative].status}"
-        )
-    return None, (
-        f"{home} is limited, and no other eligible side has a usable current reading. "
-        "Report the outage, the scheduled resets, and the reset options"
-    )
+def roomiest(eligible: list[str], sides: dict[str, Side]):
+    observed = [s for s in SIDES if s in eligible and sides[s].status != "limited" and sides[s].used is not None]
+    if not any(sides[s].used is not None or sides[s].status == "limited" for s in eligible):
+        target = "claude" if "claude" in eligible else eligible[0]
+        return target, f"No eligible side has a reading, so the lookup failed. Report it and use {target}"
+    if not observed:
+        return None, ("No eligible side has a usable current reading without an active limit. "
+                      "Report the outage, the scheduled resets, and the reset options")
+
+    def expected(side: str) -> float:
+        projected = sides[side].projected_at_reset
+        return sides[side].used if projected is None else projected
+
+    target = min(observed, key=expected)
+    readings = ", ".join(f"{s} {'reads' if sides[s].projected_at_reset is None else 'projects'} {expected(s)}%"
+                         for s in observed)
+    return target, f"{target} has the most room at its reset: {readings}"
+
+
+def choose(prefer: str, eligible: list[str], sides: dict[str, Side]):
+    if prefer in eligible and sides[prefer].status != "limited":
+        return prefer, f"{prefer} is the urgent side and has no active usage limit"
+    target, why = roomiest([s for s in eligible if s != prefer], sides)
+    return target, f"{prefer} is limited. {why}"
 
 
 def read_codex_credits() -> tuple[list[dict], str | None]:
@@ -443,11 +443,9 @@ def reset_options(eligible, sides, readings, offers, now) -> dict:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Pick the side for new workers from recent weekly quota use.")
-    parser.add_argument("--prefer", choices=SIDES, required=True)
+    parser.add_argument("--prefer", choices=SIDES)
     parser.add_argument("--eligible", required=True)
     parser.add_argument("--limited", action="append", default=[], metavar="SIDE=TIME[/RESET]")
-    parser.add_argument("--work", type=float, default=0.0, metavar="PERCENT")
-    parser.add_argument("--no-spill", action="store_true")
     parser.add_argument("--offer", action="append", default=[], metavar="KIND=CLAIM_BY")
     args = parser.parse_args(argv)
     eligible = [s for s in args.eligible.split(",") if s]
@@ -498,7 +496,8 @@ def main(argv=None) -> int:
     if readings:
         save_state(path, state, now)
 
-    target, why = choose(args.prefer, eligible, sides, args.work, not args.no_spill)
+    target, why = (roomiest(eligible, sides) if args.prefer is None
+                   else choose(args.prefer, eligible, sides))
     report = {"route": {"side": target, "why": why}, "sides": {k: asdict(v) for k, v in sides.items()}}
     if target is None or any(sides[s].status in ("limited", "runs-out") for s in eligible):
         report["reset_options"] = reset_options(eligible, sides, readings, offers, now)
