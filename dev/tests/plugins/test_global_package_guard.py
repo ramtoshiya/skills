@@ -1,17 +1,11 @@
-import importlib.util
 import json
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
 
-SCRIPT = Path(__file__).resolve().parents[3] / "plugins/ramtoshiya/hooks/global-package-guard.py"
-spec = importlib.util.spec_from_file_location("global_package_guard", SCRIPT)
-guard = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(guard)
-
+HOOK = [sys.executable, str(Path(__file__).resolve().parents[3] / "plugins/ramtoshiya/hooks/global-package-guard.py")]
 
 GLOBAL = "Global package installs and mutations are disabled."
 ONE_SHOT = "One-shot execution requires exact package versions"
@@ -20,6 +14,7 @@ UNCONFIGURED = "Package operations require a configured three-day release-age fl
 EXEMPTION = "Release-age exemption lists weaken the three-day policy."
 PYTHON = "pip and package installs into a system or Homebrew Python are blocked."
 PROCESS = "macOS pkill and pgrep read every argument after the first pattern as another pattern"
+UNKNOWN_CWD = "The working directory comes from a variable here"
 
 
 class GlobalPackageGuardTests(unittest.TestCase):
@@ -41,8 +36,10 @@ class GlobalPackageGuardTests(unittest.TestCase):
         path.write_text(content)
         return path
 
-    def check(self, command):
-        return guard.reason(command, self.cwd, self.environment)
+    def check(self, command, cwd=None):
+        payload = {"tool_name": "Bash", "cwd": str(cwd or self.cwd), "tool_input": {"command": command}}
+        output = self.hook(payload, self.environment)
+        return output["permissionDecisionReason"] if output else None
 
     def assert_denied(self, message, commands):
         for command in commands:
@@ -55,8 +52,7 @@ class GlobalPackageGuardTests(unittest.TestCase):
                 self.assertIsNone(self.check(command))
 
     def hook(self, payload, environment=None):
-        result = subprocess.run([sys.executable, str(SCRIPT)], input=json.dumps(payload), text=True,
-                                capture_output=True, env=environment)
+        result = subprocess.run(HOOK, input=json.dumps(payload), text=True, capture_output=True, env=environment)
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)["hookSpecificOutput"] if result.stdout else None
 
@@ -115,7 +111,7 @@ class GlobalPackageGuardTests(unittest.TestCase):
             ("uv run mlx_lm.generate --model ./model --adapter-path publisher/adapter", "local artifact"),
         ]:
             with self.subTest(command=command):
-                self.assertIn(message, guard.reason(command, self.cwd, self.environment))
+                self.assertIn(message, self.check(command) or "")
 
     def test_global_mutations(self):
         self.assert_denied(GLOBAL, [
@@ -209,7 +205,7 @@ class GlobalPackageGuardTests(unittest.TestCase):
                 path.write_text(content)
                 self.assert_denied(WEAKER, [command])
                 for routed in [f"cd '{self.cwd}' && {command}", f"{command} --directory '{self.cwd}'"]:
-                    self.assertIn(WEAKER, guard.reason(routed, self.home, self.environment) or "")
+                    self.assertIn(WEAKER, self.check(routed, self.home) or "")
                 path.unlink()
 
     def test_uv_reads_project_age_policy_from_tool_uv_only(self):
@@ -291,12 +287,10 @@ class GlobalPackageGuardTests(unittest.TestCase):
                              'cd $W && cd ~ && uv sync',
                              f'cd $W && uv --directory {self.cwd} sync',
                              'cd "$W" && uvx example==1.2.3'])
-        for command in ['cd "$W" && npm install', "cd $W && bash -lc 'uv sync'",
-                        'cd $W && cd relative && uv sync',
-                        'cd $W && uv --directory relative sync',
-                        'cd $W && python -m mlx_lm.generate --model ./model']:
-            with self.subTest(command=command):
-                self.assertEqual(guard.reason(command, self.cwd, self.environment), guard.UNKNOWN_CWD)
+        self.assert_denied(UNKNOWN_CWD, ['cd "$W" && npm install', "cd $W && bash -lc 'uv sync'",
+                                         'cd $W && cd relative && uv sync',
+                                         'cd $W && uv --directory relative sync',
+                                         'cd $W && python -m mlx_lm.generate --model ./model'])
 
     def test_process_patterns_after_options_only(self):
         self.assert_denied(PROCESS, [

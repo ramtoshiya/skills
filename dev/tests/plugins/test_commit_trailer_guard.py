@@ -1,4 +1,3 @@
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -8,17 +7,16 @@ import tempfile
 import unittest
 from unittest import mock
 
-SCRIPT = Path(__file__).resolve().parents[3] / "plugins/ramtoshiya-cc/hooks/commit-trailer-guard.py"
-spec = importlib.util.spec_from_file_location("commit_trailer_guard", SCRIPT)
-guard = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(guard)
-
+HOOK = [sys.executable, str(Path(__file__).resolve().parents[3] / "plugins/ramtoshiya-cc/hooks/commit-trailer-guard.py")]
 TRAILER = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+SOFT_LIMIT = 1 << 20
+HARD_LIMIT = 1 << 30
 
 
 class CommitTrailerGuardTests(unittest.TestCase):
     def check(self, command, cwd=None):
-        return guard.reason(command, cwd)
+        output = self.run_hook(json.dumps({"tool_name": "Bash", "cwd": cwd, "tool_input": {"command": command}}))
+        return json.loads(output)["hookSpecificOutput"]["permissionDecisionReason"] if output else None
 
     def test_blocks_attribution_in_commit_and_pr_text(self):
         for command in [
@@ -53,7 +51,7 @@ class CommitTrailerGuardTests(unittest.TestCase):
     def test_checks_large_message_files_and_logs_the_size(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch.dict(os.environ, {"XDG_STATE_HOME": directory}):
             message = Path(directory, "large.txt")
-            message.write_text("x" * guard.SOFT_FILE_BYTES + f"\n\n{TRAILER}\n")
+            message.write_text("x" * SOFT_LIMIT + f"\n\n{TRAILER}\n")
             self.assertIsNotNone(self.check("git commit -F large.txt", directory))
             oversized = Path(directory, "oversized.txt")
             oversized.write_text(TRAILER)
@@ -63,9 +61,9 @@ class CommitTrailerGuardTests(unittest.TestCase):
             self.assertEqual(len(lines), 2)
             size = message.stat().st_size
             self.assertRegex(lines[0], rf"Z warning: commit-trailer-guard message file '.*large\.txt' is {size} bytes, "
-                             rf"over the soft limit of {guard.SOFT_FILE_BYTES} bytes$")
-            self.assertTrue(lines[1].endswith(f"is {guard.HARD_LIMIT + 1} bytes, "
-                                              f"over the hard limit of {guard.HARD_LIMIT} bytes, so it was not checked"))
+                             rf"over the soft limit of {SOFT_LIMIT} bytes$")
+            self.assertTrue(lines[1].endswith(f"is {HARD_LIMIT + 1} bytes, "
+                                              f"over the hard limit of {HARD_LIMIT} bytes, so it was not checked"))
 
     def test_allows_clean_commits_and_reading_history(self):
         for command in [
@@ -84,8 +82,7 @@ class CommitTrailerGuardTests(unittest.TestCase):
                 self.assertIsNone(self.check(command))
 
     def run_hook(self, payload):
-        return subprocess.run([sys.executable, str(SCRIPT)], input=payload,
-                              capture_output=True, text=True, check=True).stdout
+        return subprocess.run(HOOK, input=payload, capture_output=True, text=True, check=True).stdout
 
     def test_hook_protocol(self):
         denied = json.loads(self.run_hook(json.dumps({
