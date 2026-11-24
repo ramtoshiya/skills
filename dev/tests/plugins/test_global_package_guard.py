@@ -19,6 +19,7 @@ WEAKER = "Release-age overrides must preserve a minimum of three days"
 UNCONFIGURED = "Package operations require a configured three-day release-age floor."
 EXEMPTION = "Release-age exemption lists weaken the three-day policy."
 PYTHON = "pip and package installs into a system or Homebrew Python are blocked."
+PROCESS = "macOS pkill and pgrep read every argument after the first pattern as another pattern"
 
 
 class GlobalPackageGuardTests(unittest.TestCase):
@@ -284,6 +285,43 @@ class GlobalPackageGuardTests(unittest.TestCase):
                         'cd $W && python -m mlx_lm.generate --model ./model']:
             with self.subTest(command=command):
                 self.assertEqual(guard.reason(command, self.cwd, self.environment), guard.UNKNOWN_CWD)
+
+    def test_process_patterns_after_options_only(self):
+        self.assert_denied(PROCESS, [
+            'pkill -f "^bun tools/check/load.ts$" -U $(id -u)',
+            'pkill -f -- "^bun tools/check/load.ts$" -U $(id -u)',
+            'sudo pkill -f "^bun tools/check/load.ts$" -U $(id -u)',
+            'env pkill -f "^bun tools/check/load.ts$" -U $(id -u)',
+            "sh -c 'pkill -f \"^bun tools/check/load.ts$\" -U $(id -u)'",
+            "bash -lc 'pkill -f \"^bun tools/check/load.ts$\" -U $(id -u)'",
+            'echo $(pkill -f "^bun tools/check/load.ts$" -U $(id -u))',
+            'pattern="^bun tools/check/load.ts$"; pkill -f "$pattern" -U $(id -u)',
+            'pkill -f "src/server.ts" -P $(cat .srv.pid) 2>/dev/null',
+            "pkill -9 -f 'simlock lease.*' -U $(id -u) -n 2>/dev/null",
+            'P=$(pgrep -f "test-worker.*" -n); echo $P',
+            "pgrep -x git -l",
+            "/usr/bin/pgrep -f one two",
+        ])
+        self.assert_allowed([
+            'pkill -U $(id -u) -f "^bun tools/check/load.ts$"',
+            'pkill -TERM -f "ios-board.ts $O/data"',
+            "pkill -9 -f /tmp/thr_x/Electron.app",
+            'pgrep -x "iPhone Mirroring" >/dev/null && echo running',
+            'until ! pgrep -f "$S/review.py" > /dev/null; do sleep 1; done',
+            'pgrep -fl "collect/main.ts" 2>&1 | head',
+            "pgrep -d, -lf 'wjrj|simlock'",
+            "W=$(/usr/bin/pgrep -P $C | head -1)",
+            "git commit -m 'pkill -f x -U 501'",
+            "echo 'pkill -f x -U 501'",
+            "rg -F 'pkill -f x -U 501' notes.md",
+            "cat <<'EOF'\npkill -f x -U 501\nEOF",
+        ])
+
+    def test_process_denial_reaches_both_agents(self):
+        for tool, field in [("Bash", "command"), ("exec_command", "cmd")]:
+            output = self.hook({"tool_name": tool, "tool_input": {field: "pkill -f load.ts -U 501"}})
+            self.assertEqual(output["permissionDecision"], "deny")
+            self.assertIn(PROCESS, output["permissionDecisionReason"])
 
     def test_command_text_is_never_executed(self):
         with tempfile.TemporaryDirectory() as directory:
