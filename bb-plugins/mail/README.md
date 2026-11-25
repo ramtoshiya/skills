@@ -46,10 +46,19 @@ from an agent thread shows `[bb message from thread:<id>]`, as
 
 ## Inbox and wake
 
-A message sent without `--wake` never starts a turn. bb keeps it queued and
-adds it to the recipient's next turn when that turn starts, whatever starts
-it. A message sent while the recipient is working waits for the turn after
-the current one, so it does not interrupt work in progress.
+A message sent without `--wake` never starts a turn. bb keeps it queued
+until the recipient's next turn starts, whatever starts it. A message sent
+while the recipient is working waits for the turn after the current one, so
+it does not interrupt work in progress.
+
+When a message is about to start the recipient's turn, mail holds it for a
+moment, appends every held inbox message to it, and lets it go. The agent
+gets them all in the turn's first prompt, each under its own
+`[bb message from thread:<id>]` line. In the timeline they show inside that
+message. A bb notice, such as a child finishing, cannot carry the inbox,
+because bb refuses edits to its notices. When a notice starts the turn, the
+inbox messages join the running turn instead, and Claude Code shows them only
+after the turn's next tool call.
 
 ### Self-compaction
 
@@ -111,6 +120,9 @@ before the child's latest turn started.
 - If mail is stopped or crashes, held inbox messages are delivered as ordinary
   messages, and bb's notices arrive unchanged. Every check that throws lets
   the message through.
+- If adding the inbox to the first message fails, for example because someone
+  edited that message at the same moment, the message starts the turn alone
+  and the inbox joins the running turn.
 - A completion notice changes in place when bb merges another child's outcome
   into it, and bb emits no event for the merge. Before mail deletes or
   replaces a notice, it reschedules the notice 30 seconds out, conditional on
@@ -146,6 +158,10 @@ A bb update can change any of these:
   `ownership-removed`, `ownership-batch`, and `child-completed`, the subject
   shape `{ kind: "thread", threadId, outcomes }`, and that plugins may delete
   and reschedule these rows.
+- That a plugin may replace a queued message's input with
+  `threads.queuedMessages.update`, that bb refuses this for notice rows, that bb
+  sends a queued group as one prompt, and that bb joins text blocks with
+  nothing between them.
 - That bb sets `originPluginId` on every message a plugin sends, so mail
   cannot use it to tell an inbox message from a wake message, and that bb
   passes the plugin submission only on a message's first delivery attempt.

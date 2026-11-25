@@ -1,5 +1,6 @@
 import { createFakePluginHost, makeMessageDispatchHookContext, makeQueueEntry, makeThreadResponse } from "@get-bb/plugin-sdk/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { INBOX_REASON, MERGE_REASON } from "./mail";
 import plugin from "./server";
 
 type Host = ReturnType<typeof createFakePluginHost>;
@@ -55,6 +56,7 @@ function start(
   const rows = new Map<string, Row>();
   const deleted: string[] = [];
   const holds: Array<{ id: string; sendAt: number | null }> = [];
+  const edits: Array<{ id: string; input: unknown }> = [];
   const mailTags = options.mailTags ?? {};
   const events = options.events ?? {};
   const pages: number[] = [];
@@ -99,6 +101,7 @@ function start(
             return (events[threadId] ?? []).filter((event) => !types || types.includes((event as { type: string }).type as never)) as never;
           },
         },
+        queue: { list: async () => [] },
         queuedMessages: {
           list: async ({ threadId }) => [...rows.values()].filter((row) => row.threadId === threadId) as never,
           delete: async ({ queuedMessageId }) => {
@@ -106,7 +109,7 @@ function start(
             deleted.push(queuedMessageId);
             return undefined as never;
           },
-          update: async ({ queuedMessageId, sendAt, expectedUpdatedAt }) => {
+          update: async ({ queuedMessageId, sendAt, expectedUpdatedAt, input }) => {
             options.beforeUpdate?.(rows, ++updateCalls);
             if (rows.get(queuedMessageId)?.updatedAt !== expectedUpdatedAt) {
               throw new Error("HTTP 409: Queued message changed since editing began");
@@ -115,6 +118,12 @@ function start(
               throw new Error("HTTP 400: sendAt must be in the future; pass null to clear the send time");
             }
             const row = rows.get(queuedMessageId)!;
+            if (input !== undefined) {
+              const edited = { ...row, content: input as Row["content"], updatedAt: row.updatedAt + 1 };
+              rows.set(queuedMessageId, edited);
+              edits.push({ id: queuedMessageId, input });
+              return edited as never;
+            }
             const next = { ...row, sendAt: sendAt ?? null, updatedAt: row.updatedAt + 1 };
             rows.set(queuedMessageId, next);
             holds.push({ id: queuedMessageId, sendAt: sendAt ?? null });
@@ -133,7 +142,7 @@ function start(
     await harness.emitThreadEvent("message.queued", { entry: row });
     return row;
   }
-  return { harness, sent, rows, deleted, holds, mailTags, pages, notice, updateCalls: () => updateCalls };
+  return { harness, sent, rows, deleted, holds, edits, mailTags, pages, notice, updateCalls: () => updateCalls };
 }
 
 const completed = (childId: string) => ({
@@ -149,7 +158,7 @@ afterEach(async () => {
 
 describe("inbox", () => {
   const inbox = { pluginId: "mail", data: { kind: "inbox" } };
-  const heldByMail = { id: "held", waitingOn: { kind: "plugin" as const, pluginId: "mail", reason: "inbox" } };
+  const heldByMail = { id: "held", waitingOn: { kind: "plugin" as const, pluginId: "mail", reason: INBOX_REASON } };
   it.each([
     ["holds an inbox message that would start a turn", { attempt: "start-turn", experimental_submission: inbox }, "wait"],
     ["holds an inbox message sent while the recipient's turn runs", { attempt: "join-turn", experimental_submission: inbox }, "wait"],
@@ -163,6 +172,78 @@ describe("inbox", () => {
     const hook = harness.registrations.hooks["message.dispatch"]!;
     const decision = await hook(makeMessageDispatchHookContext(facts as never));
     expect(decision.action).toBe(action);
+  });
+
+  const mailWait = (reason: string) => ({ kind: "plugin" as const, pluginId: "mail", reason });
+  const text = (value: string) => [{ type: "text" as const, text: value, mentions: [] }];
+
+  async function holdInbox(harness: Host["harness"], rows: Map<string, Row>, id: string, sender: string | null, body: string) {
+    const row = makeQueueEntry({ id, threadId: "WORKER", senderThreadId: sender, initiator: "agent", originPluginId: "mail", content: text(body), waitingOn: mailWait(INBOX_REASON) });
+    rows.set(id, row);
+    await harness.emitThreadEvent("message.queued", { entry: row });
+  }
+
+  it("holds the message that starts a turn while its thread has inbox mail", async () => {
+    const { harness, rows } = start();
+    const hook = harness.registrations.hooks["message.dispatch"]!;
+    await holdInbox(harness, rows, "held", "LEAD", "main moved");
+    const decision = await hook(makeMessageDispatchHookContext({ thread: thread("WORKER"), attempt: "start-turn", initiator: "user" }));
+    expect(decision.action).toBe("wait");
+    const other = await hook(makeMessageDispatchHookContext({ thread: thread("RELAY"), attempt: "start-turn", initiator: "user" }));
+    expect(other.action).toBe("proceed");
+  });
+
+  it("lets a bb notice start the turn unmerged, because bb refuses to edit notices", async () => {
+    const { harness, rows } = start();
+    const hook = harness.registrations.hooks["message.dispatch"]!;
+    await holdInbox(harness, rows, "held", "LEAD", "main moved");
+    const decision = await hook(makeMessageDispatchHookContext({ thread: thread("WORKER"), attempt: "start-turn", initiator: "system" }));
+    expect(decision.action).toBe("proceed");
+  });
+
+  it("puts every held inbox message into the message that starts the turn", async () => {
+    const { harness, rows, deleted, edits } = start();
+    const hook = harness.registrations.hooks["message.dispatch"]!;
+    await holdInbox(harness, rows, "held_1", "LEAD", "main moved");
+    await holdInbox(harness, rows, "held_2", "RELAY", "tests pass");
+    const decision = await hook(makeMessageDispatchHookContext({ thread: thread("WORKER"), attempt: "start-turn", initiator: "user" }));
+    expect(decision.action).toBe("wait");
+    const starter = makeQueueEntry({
+      id: "starter",
+      threadId: "WORKER",
+      content: text("Review the diff."),
+      updatedAt: 5,
+      waitingOn: mailWait((decision as { reason: string }).reason),
+    });
+    rows.set("starter", starter);
+    await harness.emitThreadEvent("message.queued", { entry: starter });
+    await vi.waitFor(() => expect(harness.recheckCount).toBe(1));
+    expect(edits).toEqual([
+      {
+        id: "starter",
+        input: [
+          ...text("Review the diff."),
+          ...text("\n\n[bb message from thread:LEAD]\n\nmain moved"),
+          ...text("\n\n[bb message from thread:RELAY]\n\ntests pass"),
+        ],
+      },
+    ]);
+    expect(deleted).toEqual(["held_1", "held_2"]);
+    const released = await hook(makeMessageDispatchHookContext({ thread: thread("WORKER"), attempt: "start-turn", queuedMessages: [rows.get("starter")!] }));
+    expect(released.action).toBe("proceed");
+  });
+
+  it("starts the turn without the inbox when the starter changed while mail merged", async () => {
+    const { harness, rows, deleted } = start({ beforeUpdate: (rows) => rows.set("starter", { ...rows.get("starter")!, updatedAt: 99 }) });
+    const hook = harness.registrations.hooks["message.dispatch"]!;
+    await holdInbox(harness, rows, "held", "LEAD", "main moved");
+    const starter = makeQueueEntry({ id: "starter", threadId: "WORKER", updatedAt: 5, waitingOn: mailWait(MERGE_REASON) });
+    rows.set("starter", starter);
+    await harness.emitThreadEvent("message.queued", { entry: starter });
+    await vi.waitFor(() => expect(harness.recheckCount).toBe(1));
+    expect(deleted).toEqual([]);
+    const released = await hook(makeMessageDispatchHookContext({ thread: thread("WORKER"), attempt: "start-turn", queuedMessages: [rows.get("starter")!] }));
+    expect(released.action).toBe("proceed");
   });
 
   it("delivers held inbox messages into the recipient's next turn", async () => {

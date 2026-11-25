@@ -115,6 +115,7 @@ export function nestLogicalParent(metadata: unknown): string | null {
 }
 
 export const INBOX_REASON = "Mail inbox: delivered when this thread's next turn starts.";
+export const MERGE_REASON = "Mail inbox: adding held messages to this turn's first message.";
 
 export type DispatchDecision = { action: "proceed" } | { action: "wait"; reason: string };
 
@@ -123,6 +124,7 @@ export const INBOX_SUBMISSION = { kind: "inbox" } as const;
 export type Initiator = "user" | "agent" | "system";
 
 export interface DispatchFacts {
+  thread: { id: string };
   attempt: "join-turn" | "start-turn";
   initiator: Initiator | "mixed";
   experimental_submission: { pluginId: string } | null;
@@ -131,26 +133,66 @@ export interface DispatchFacts {
 
 export interface QueueRow {
   id: string;
+  threadId?: string;
   initiator: Initiator;
-  waitingOn: { kind: string; pluginId?: string } | null;
+  editable?: boolean;
+  waitingOn: { kind: string; pluginId?: string; reason?: string } | null;
 }
 
-export function heldByMail(row: QueueRow, mailPluginId: string): boolean {
-  return row.waitingOn?.kind === "plugin" && row.waitingOn.pluginId === mailPluginId;
+/** bb appends the reasons of other plugins that wait on the same row, so mail's own reason is a prefix. */
+export function mailWait(row: QueueRow, mailPluginId: string): "inbox" | "merge" | null {
+  const wait = row.waitingOn;
+  if (wait?.kind !== "plugin" || wait.pluginId !== mailPluginId) return null;
+  return wait.reason?.startsWith(MERGE_REASON) ? "merge" : "inbox";
 }
+
+type RowId = string;
+type ThreadId = string;
 
 export interface InboxMemory {
-  /** Rows mail held. bb passes the submission marker only on a message's first attempt, and a row released into a turn that ended first comes back without mail's wait. */
-  held: ReadonlySet<string>;
+  /** bb passes the submission marker only on a message's first attempt, and a row released into a turn that ended first comes back without mail's wait. */
+  held: ReadonlyMap<RowId, ThreadId>;
   releasable: ReadonlySet<string>;
+  mergeSettled: ReadonlySet<RowId>;
 }
 
 export function inboxDecision(facts: DispatchFacts, mailPluginId: string, memory: InboxMemory): DispatchDecision {
+  const rows = facts.queuedMessages;
   const waits = (row: QueueRow) =>
-    (heldByMail(row, mailPluginId) || memory.held.has(row.id)) && !(facts.attempt === "join-turn" && memory.releasable.has(row.id));
-  const inbox =
-    facts.queuedMessages.length > 0 ? facts.queuedMessages.every(waits) : facts.experimental_submission?.pluginId === mailPluginId;
-  return inbox ? { action: "wait", reason: INBOX_REASON } : { action: "proceed" };
+    (mailWait(row, mailPluginId) === "inbox" || memory.held.has(row.id)) && !(facts.attempt === "join-turn" && memory.releasable.has(row.id));
+  const inbox = rows.length > 0 ? rows.every(waits) : facts.experimental_submission?.pluginId === mailPluginId;
+  if (inbox) return { action: "wait", reason: INBOX_REASON };
+  const editable = facts.initiator !== "system" && rows.every((row) => row.editable !== false);
+  if (facts.attempt !== "start-turn" || !editable || rows.some((row) => memory.mergeSettled.has(row.id))) return { action: "proceed" };
+  const attempted = new Set(rows.map((row) => row.id));
+  const heldElsewhere = [...memory.held].some(([id, threadId]) => threadId === facts.thread.id && !attempted.has(id));
+  return heldElsewhere ? { action: "wait", reason: MERGE_REASON } : { action: "proceed" };
+}
+
+export interface PromptText {
+  type: "text";
+  text: string;
+  mentions: unknown[];
+}
+export type PromptBlock = PromptText | { type: string };
+
+export interface InboxRow {
+  senderThreadId: string | null;
+  content: readonly PromptBlock[];
+}
+
+/**
+ * Labels each held message with its sender the way bb labels an agent's message, so the merged prompt reads like
+ * separate deliveries. bb joins text blocks with nothing between them, so each message starts on its own paragraph.
+ */
+export function mergedInput(first: readonly PromptBlock[], inbox: readonly InboxRow[]): PromptBlock[] {
+  const labeled = inbox.flatMap(({ senderThreadId, content }) => {
+    const heading = senderThreadId === null ? "\n\n" : `\n\n[bb message from thread:${senderThreadId}]\n\n`;
+    const index = content.findIndex((block) => block.type === "text");
+    if (index === -1) return [{ type: "text", text: heading, mentions: [] } satisfies PromptText, ...content];
+    return content.map((block, at) => (at === index ? { ...block, text: `${heading}${(block as PromptText).text}` } : block));
+  });
+  return [...first, ...labeled];
 }
 
 const REPARENT_KINDS = new Set(["ownership-assigned", "ownership-removed", "ownership-batch"]);
@@ -218,7 +260,10 @@ export function lastTurnItems(eventsNewestFirst: readonly unknown[]): Item[] {
 
 const SELF_COMPACT_RUN = /bb-compact\.mjs["']?\s+run\b/;
 
-/** With `--no-resume` the child waits for the user after compacting, so its completion is real. */
+function resumesAfterCompacting(command: string): boolean {
+  return !command.includes("--no-resume");
+}
+
 export function launchedSelfCompaction(items: readonly Item[]): boolean {
   return items.some(
     (item) =>
@@ -226,7 +271,7 @@ export function launchedSelfCompaction(items: readonly Item[]): boolean {
       item.exitCode === 0 &&
       item.command !== undefined &&
       SELF_COMPACT_RUN.test(item.command) &&
-      !item.command.includes("--no-resume"),
+      resumesAfterCompacting(item.command),
   );
 }
 
@@ -275,8 +320,7 @@ const REPLY_PROBE_CHARS = 300;
 
 /**
  * `bb thread wait` prints only a status line, so only a command that also prints the reply, such as
- * `bb thread wait <id> && bb thread output <id>`, returned the result. It returned this turn's result only if it
- * ended after the child's turn started.
+ * `bb thread wait <id> && bb thread output <id>`, returned the result.
  */
 export function waitState(runsNewestFirst: readonly CommandRun[], childId: string, reply: string | null, childTurnStartedAt: number | null): WaitState {
   const wait = runsNewestFirst.find((run) => /\bbb thread wait\b/.test(run.command) && run.command.includes(childId));
@@ -298,7 +342,6 @@ export function shortCompletion(childId: string, reply: string | null): string |
   return `[mail] @thread:${childId} completed with a ${text.length.toLocaleString("en-US")}-character reply that starts "${clipped}". Read it with \`bb thread output ${childId}\`.`;
 }
 
-/** A turn with nothing to report ends its reply with only this marker. A real result with a stray marker still arrives. */
 export const NO_OP_MARKER = "[no-op]";
 
 export type CompletionDecision =

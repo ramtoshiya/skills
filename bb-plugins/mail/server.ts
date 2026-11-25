@@ -5,7 +5,6 @@ import {
   TURN_EVENT_TYPES,
   UsageError,
   chooseRecipients,
-  heldByMail,
   classifyNotice,
   commandRuns,
   decideCompletion,
@@ -14,6 +13,8 @@ import {
   latestTurnStart,
   launchedSelfCompaction,
   logicalAncestors,
+  mailWait,
+  mergedInput,
   nestLogicalParent,
   parseSelector,
   parseTag,
@@ -63,11 +64,19 @@ export default function plugin(bb: BbPluginApi) {
     return work().catch((error: unknown) => bb.log.warn(`${label}: ${error instanceof Error ? error.message : String(error)}`));
   }
 
-  const inbox = { held: new Set<string>(), releasable: new Set<string>() };
+  const inbox = { held: new Map<string, string>(), releasable: new Set<string>(), mergeSettled: new Set<string>() };
+
+  function remember(row: Row): void {
+    if (mailWait(row, bb.pluginId) === "inbox") inbox.held.set(row.id, row.threadId);
+  }
+
+  void guard("inbox index", async () => {
+    for (const row of await bb.sdk.threads.queue.list({ waitHolder: `plugin:${bb.pluginId}` })) remember(row);
+  });
 
   bb.experimental_hooks.on("message.dispatch", (context) => {
     try {
-      for (const row of context.queuedMessages) if (heldByMail(row, bb.pluginId)) inbox.held.add(row.id);
+      for (const row of context.queuedMessages) remember(row);
       return inboxDecision(context, bb.pluginId, inbox);
     } catch (error) {
       bb.log.warn(`message.dispatch: ${error instanceof Error ? error.message : String(error)}. Letting the message through.`);
@@ -83,6 +92,37 @@ export default function plugin(bb: BbPluginApi) {
       await bb.experimental_hooks.recheck("message.dispatch");
     }),
   );
+
+  /** The edit goes to the last row of the starter's group, because bb sends a group as one prompt in queue order. */
+  async function mergeInbox(starter: Row): Promise<void> {
+    const rows = await bb.sdk.threads.queuedMessages.list({ threadId: starter.threadId });
+    const first = rows.findIndex((row) => row.id === starter.id);
+    if (first === -1) return;
+    let last = first;
+    while (rows[last]!.groupWithNext && last + 1 < rows.length) last += 1;
+    const group = rows.slice(first, last + 1);
+    const held = rows.filter((row, index) => (index < first || index > last) && mailWait(row, bb.pluginId) === "inbox");
+    const target = group.at(-1)!;
+    if (held.length > 0) {
+      try {
+        await bb.sdk.threads.queuedMessages.update({
+          threadId: target.threadId,
+          queuedMessageId: target.id,
+          expectedUpdatedAt: target.updatedAt,
+          input: mergedInput(target.content, held) as Row["content"],
+        });
+        for (const row of held) {
+          await bb.sdk.threads.queuedMessages.delete({ threadId: row.threadId, queuedMessageId: row.id });
+          inbox.held.delete(row.id);
+        }
+        bb.log.info(`inbox merged thread=${starter.threadId} row=${target.id} messages=${held.map((row) => row.id).join(",")}`);
+      } catch (error) {
+        bb.log.warn(`inbox merge failed thread=${starter.threadId} row=${target.id}: ${error instanceof Error ? error.message : String(error)}. The turn starts without it.`);
+      }
+    }
+    for (const row of group) inbox.mergeSettled.add(row.id);
+    await bb.experimental_hooks.recheck("message.dispatch");
+  }
 
   async function currentRow(row: Row): Promise<Row | null> {
     const rows = await bb.sdk.threads.queuedMessages.list({ threadId: row.threadId });
@@ -127,9 +167,7 @@ export default function plugin(bb: BbPluginApi) {
 
   /**
    * bb merges another child's outcome into a pending notice without an event. Any update to the row stops bb from
-   * merging into it, so mail first updates the row against the `updatedAt` it decided on. A failed update returns the
-   * row as it is now, and the caller decides again on that. A claimed row that mail fails to settle is delivered when
-   * the claim's send time comes.
+   * merging into it, so mail first updates the row against the `updatedAt` it decided on.
    */
   async function claim(row: Row, sendAt: number): Promise<Claim> {
     try {
@@ -194,12 +232,14 @@ export default function plugin(bb: BbPluginApi) {
   bb.events.on("message.dispatched", ({ entry }) => {
     inbox.held.delete(entry.id);
     inbox.releasable.delete(entry.id);
+    inbox.mergeSettled.delete(entry.id);
     settling.delete(entry.id);
   });
 
   bb.events.on("message.queued", ({ entry }) =>
     guard("message.queued", async () => {
-      if (heldByMail(entry, bb.pluginId)) inbox.held.add(entry.id);
+      remember(entry);
+      if (mailWait(entry, bb.pluginId) === "merge") return mergeInbox(entry);
       const notice = classifyNotice(entry.systemNotice);
       switch (notice.kind) {
         case "other":
