@@ -210,16 +210,26 @@ including claudex sessions, to the profile at `~/.hermes/profiles/coder`. Set
   reuses the source's prompt cache. It records lessons, sends changes to files
   in the working checkout as proposals, and mails a summary to the source with
   `bb mail send` without waking it. Outside bb the agent records directly.
+- The instructions place a lesson by its scope. A lesson that matters only
+  for one class of task, including your preferences for that kind of work,
+  goes into the skill that governs that class, because every session loads
+  memory whatever its task. Memory keeps short facts that every session needs.
 - Sessions and review forks only add memory entries when they can. Hermes
   stages a review fork's removal or rewrite of an entry, and refuses an entry
   that does not fit. A bb automation in this repository's project runs
   `dev/automation/memory-consolidation/check.py` every day at 05:30 Asia/Seoul.
-  When `MEMORY.md` or `USER.md` is at 80% of its limit or more, or a write is
-  staged, it starts a Full Access thread titled `Hermes memory consolidation
-  <date>`. Otherwise it prints nothing and no model runs. The thread decides
-  each staged write with `hermes-learning pending`, brings each full target
-  down to 60%, and ends with every removed or rewritten entry in full, so a
-  person can ask for any of them back. Nobody approves its changes first.
+  When `MEMORY.md`, `USER.md`, or a learned skill changed since the last
+  consolidation, or a write is staged, it starts a Full Access thread titled
+  `Hermes memory consolidation <date>`. Otherwise it prints nothing and no
+  model runs. The thread decides each staged write with `hermes-learning
+  pending`, keeps each memory entry that every session needs, moves each
+  entry that serves one class of task into that class's skill, drops entries
+  that `~/.claude/CLAUDE.md` or a skill already says, and shortens a target
+  still at 80% of its limit or more down to 60%. It then runs `check.py
+  --mark`, which records the store's state in `consolidated.json` in the
+  profile, so the next check counts only later changes. Its reply lists every
+  changed entry in full with the reason and every skill change, so a person
+  can ask for any of them back. Nobody approves its changes first.
 
 The command and the session start hook read the session's bb thread and pick a
 role:

@@ -169,38 +169,57 @@ class HermesLearningTests(unittest.TestCase):
         self.assertEqual(review.returncode, 1)
         self.assertIn("cannot decide them itself", review.stderr)
 
-    def consolidation_check(self, memory_chars, staged=()):
-        (self.store / "memories/MEMORY.md").write_text("x" * memory_chars)
-        for pending_id in staged:
-            (self.store / "pending/memory").mkdir(parents=True, exist_ok=True)
-            (self.store / f"pending/memory/{pending_id}.json").write_text("{}")
+    def consolidation_check(self, *args):
         spawns = self.tmp / "spawns.jsonl"
+        spawns.unlink(missing_ok=True)
         bb = self.tmp / "bb-spawn"
         bb.write_text("#!/bin/sh\n"
                       f"python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' \"$@\" >> {spawns}\n"
                       "for arg; do case $prev in --prompt-file) cp \"$arg\" " f"{self.tmp}/prompt.md;; esac; prev=$arg; done\n"
                       "echo '{\"id\": \"thr_new\"}'\n")
         bb.chmod(0o755)
-        result = subprocess.run([sys.executable, str(CHECK)], capture_output=True, text=True, check=True,
+        result = subprocess.run([sys.executable, str(CHECK), *args], capture_output=True, text=True, check=True,
                                 env={**self.env, "BB_CLI": str(bb), "BB_PROJECT_ID": "proj_test"})
         calls = [json.loads(line) for line in spawns.read_text().splitlines()] if spawns.exists() else []
         return result.stdout, calls
 
-    def test_consolidation_check_is_silent_while_memory_has_room_and_nothing_is_staged(self):
-        self.assertEqual(self.consolidation_check(1759), ("", []))
+    def test_consolidation_check_is_silent_when_nothing_changed_since_the_last_consolidation(self):
+        (self.store / "memories/USER.md").write_text("Prefers tables.")
+        skill(self.store / "skills/dev/ui-review", "ui-review")
+        self.consolidation_check("--mark")
+        (self.store / "skills/.usage.json").write_text("{}")
+        self.assertEqual(self.consolidation_check(), ("", []))
 
-    def test_consolidation_check_starts_one_full_access_thread_when_memory_is_full_or_a_write_is_staged(self):
-        for chars, staged in ((1760, ()), (10, ("b281298d",))):
-            with self.subTest(chars=chars, staged=staged):
-                (self.tmp / "spawns.jsonl").unlink(missing_ok=True)
-                output, calls = self.consolidation_check(chars, staged)
+    def test_consolidation_check_starts_one_full_access_thread_for_each_kind_of_change(self):
+        def change_memory():
+            (self.store / "memories/USER.md").write_text("Prefers tables.\n\u00a7\nPrefers lists.")
+
+        def change_skill():
+            (self.store / "skills/dev/ui-review/SKILL.md").write_text("---\nname: ui-review\n---\nChanged\n")
+
+        def stage_write():
+            (self.store / "pending/memory").mkdir(parents=True, exist_ok=True)
+            (self.store / "pending/memory/b281298d.json").write_text("{}")
+
+        for change, expected in ((change_memory, '"user"'), (change_skill, '"ui-review"'),
+                                 (stage_write, '"b281298d"')):
+            with self.subTest(change=change.__name__):
+                (self.store / "memories/USER.md").write_text("Prefers tables.")
+                skill(self.store / "skills/dev/ui-review", "ui-review")
+                for pending in (self.store / "pending/memory").glob("*.json"):
+                    pending.unlink()
+                self.consolidation_check("--mark")
+                change()
+                output, calls = self.consolidation_check()
                 self.assertIn("Started thr_new", output)
                 self.assertEqual(len(calls), 1)
                 self.assertEqual(calls[0][calls[0].index("--permission-mode") + 1], "full")
                 self.assertEqual(calls[0][calls[0].index("--environment") + 1], str(ROOT.parents[2]))
                 prompt = (self.tmp / "prompt.md").read_text()
                 self.assertIn(f"HERMES_LEARNING_HOME={self.store} {ROOT / 'hermes-learning'}", prompt)
-                self.assertIn('"chars": ' + str(chars), prompt)
+                self.assertIn(f"{CHECK} --mark", prompt)
+                self.assertNotIn("{{", prompt)
+                self.assertIn(expected, prompt.split("## State")[1])
 
     def test_session_start_tells_each_role_how_to_learn(self):
         def context(thread):

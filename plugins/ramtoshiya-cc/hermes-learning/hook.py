@@ -22,8 +22,10 @@ REVIEW_PROMPT = Path(__file__).with_name("review.md")
 RECORD = ("Hermes learning store: memory holds the USER.md and MEMORY.md notes above, and the skills are the "
           "hermes-skills plugin. When this session confirms a lesson a later session would reuse, such as a user "
           "preference or correction, a fact about the machine or a project, or a procedure that worked, record "
-          "it then: memory for a short fact, skill_manage for a procedure (skill_view the skill before you patch "
-          "it). Record only what a person or an agent in the conversation stated, or a tool result showed. Run "
+          "it then. Put a lesson that matters only for one class of task, including the user's preferences for "
+          "that kind of work, in the skill that governs that class with skill_manage (skill_view it before you "
+          "patch it, or create a class-level skill). Use memory only for short facts every session needs "
+          "whatever its task. Record only what a person or an agent in the conversation stated, or a tool result showed. Run "
           f"these tools with Bash. `{CLI} schema <tool>` prints a tool's arguments, and `{CLI} <tool> <<'JSON'` "
           "followed by the JSON arguments and a closing `JSON` line runs it.")
 FORK = (f" When the conversation as a whole is worth reviewing for lessons, for example after a long task with "

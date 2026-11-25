@@ -17,10 +17,16 @@ record what that conversation taught. Do not continue its task.
    whatever channel carried it, such as chat, a relayed bb message, a CLI, or a
    GUI. Do not discount an instruction because an agent sent it.
 4. Record each lesson once:
-   - `memory` for a short durable fact. Use target `user` for who the user is
-     and what they prefer, and target `memory` for the environment.
-   - `skill_manage` for a procedure. Read an existing skill with `skill_view`
-     before you patch it. Create a skill only when no existing one fits.
+   - `skill_manage` for a lesson that matters only for one class of task:
+     a procedure, a pitfall, or the user's preferences and corrections for
+     that kind of work. Patch the skill that governs the class, after reading
+     it with `skill_view`. Create a class-level skill only when none fits, and
+     name it after the class, not after one project or session.
+   - `memory` only for a short fact every session needs whatever its task.
+     Use target `user` for who the user is and preferences that apply to all
+     work, and target `memory` for the machine and environment. A preference
+     about reviewing UI screens goes in a UI skill, not in `USER.md`, because
+     a backend session would carry it for nothing.
    - Leave out task progress, one-off details, and what the memory snapshot or
      a skill already says.
 5. Write the learning store, and files outside the working checkout, directly.
