@@ -287,10 +287,33 @@ describe("inbox", () => {
     expect(harness.recheckCount).toBe(1);
   });
 
-  it("does not release held messages when the recipient goes idle", async () => {
+  const idle = (id: Id) => ({ thread: { ...thread(id), status: "idle" as const }, lastAssistantText: null });
+
+  it("sends the inbox that arrived during a turn as one message when the turn ends", async () => {
+    const { harness, rows, deleted, edits } = start();
+    const hook = harness.registrations.hooks["message.dispatch"]!;
+    await holdInbox(harness, rows, "held_1", "LEAD", "main moved");
+    await holdInbox(harness, rows, "held_2", "RELAY", "tests pass");
+    await harness.emitThreadEvent("thread.idle", idle("WORKER"));
+    await vi.waitFor(() => expect(harness.recheckCount).toBe(1));
+    expect(edits).toEqual([{ id: "held_1", input: [...text("main moved"), ...text("\n\n[bb message from thread:RELAY]\n\ntests pass")] }]);
+    expect(deleted).toEqual(["held_2"]);
+    const sent = await hook(makeMessageDispatchHookContext({ thread: thread("WORKER"), attempt: "start-turn", queuedMessages: [rows.get("held_1")!] }));
+    expect(sent.action).toBe("proceed");
+  });
+
+  it("leaves the inbox to a queued message that will start the next turn", async () => {
+    const { harness, rows, edits } = start();
+    await holdInbox(harness, rows, "held", "LEAD", "main moved");
+    rows.set("next", makeQueueEntry({ id: "next", threadId: "WORKER", waitingOn: null }));
+    await harness.emitThreadEvent("thread.idle", idle("WORKER"));
+    expect(edits).toEqual([]);
+    expect(harness.recheckCount).toBe(0);
+  });
+
+  it("does nothing when a turn ends with an empty inbox", async () => {
     const { harness } = start();
-    harness.sdk.stub("threads.queue.list", async () => [makeQueueEntry({ id: "held", threadId: "LEAD" })] as never);
-    await harness.emitThreadEvent("thread.idle", { thread: { ...thread("LEAD"), status: "idle" }, lastAssistantText: null });
+    await harness.emitThreadEvent("thread.idle", idle("WORKER"));
     expect(harness.recheckCount).toBe(0);
   });
 });

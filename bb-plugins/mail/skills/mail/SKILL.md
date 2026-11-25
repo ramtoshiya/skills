@@ -11,10 +11,11 @@ wakes the recipient, as `bb mail send --wake` does.
 
 ## Wake or inbox {:#wake-or-inbox}
 
-Without `--wake` the message waits in the recipient's inbox. It starts no
-turn and arrives when the recipient's next turn starts. If the recipient is
-working, it waits for the turn after the current one. With `--wake` it
-starts a turn now, or joins the running one.
+Without `--wake` the message waits in the recipient's inbox. An idle
+recipient gets it when its next turn starts. A recipient that is working gets
+it in one batch with the rest of its inbox when the current turn ends, which
+starts a new turn. With `--wake` it starts a turn now, or joins the running
+one.
 
 ```sh
 bb mail send <thread> --message "FYI: main moved to 3d34cff."

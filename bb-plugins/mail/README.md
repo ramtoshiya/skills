@@ -46,10 +46,12 @@ from an agent thread shows `[bb message from thread:<id>]`, as
 
 ## Inbox and wake
 
-A message sent without `--wake` never starts a turn. bb keeps it queued
-until the recipient's next turn starts, whatever starts it. A message sent
-while the recipient is working waits for the turn after the current one, so
-it does not interrupt work in progress.
+A message sent without `--wake` to an idle thread does not start a turn. It
+waits until the recipient's next turn starts, whatever starts it. A message
+sent while the recipient is working does not interrupt the turn. When the
+turn ends, mail sends every held inbox message as one message, which starts
+the next turn. If another queued message will start that turn, mail leaves
+the inbox to it instead.
 
 When a message is about to start the recipient's turn, mail holds it for a
 moment, appends every held inbox message to it, and lets it go. The agent

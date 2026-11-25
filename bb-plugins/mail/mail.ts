@@ -153,13 +153,16 @@ export interface InboxMemory {
   /** bb passes the submission marker only on a message's first attempt, and a row released into a turn that ended first comes back without mail's wait. */
   held: ReadonlyMap<RowId, ThreadId>;
   releasable: ReadonlySet<string>;
+  sendable: ReadonlySet<RowId>;
   mergeSettled: ReadonlySet<RowId>;
 }
 
 export function inboxDecision(facts: DispatchFacts, mailPluginId: string, memory: InboxMemory): DispatchDecision {
   const rows = facts.queuedMessages;
   const waits = (row: QueueRow) =>
-    (mailWait(row, mailPluginId) === "inbox" || memory.held.has(row.id)) && !(facts.attempt === "join-turn" && memory.releasable.has(row.id));
+    (mailWait(row, mailPluginId) === "inbox" || memory.held.has(row.id)) &&
+    !(facts.attempt === "join-turn" && memory.releasable.has(row.id)) &&
+    !memory.sendable.has(row.id);
   const inbox = rows.length > 0 ? rows.every(waits) : facts.experimental_submission?.pluginId === mailPluginId;
   if (inbox) return { action: "wait", reason: INBOX_REASON };
   const editable = facts.initiator !== "system" && rows.every((row) => row.editable !== false);
@@ -181,10 +184,7 @@ export interface InboxRow {
   content: readonly PromptBlock[];
 }
 
-/**
- * Labels each held message with its sender the way bb labels an agent's message, so the merged prompt reads like
- * separate deliveries. bb joins text blocks with nothing between them, so each message starts on its own paragraph.
- */
+/** bb joins text blocks with nothing between them, so each message starts on its own paragraph. */
 export function mergedInput(first: readonly PromptBlock[], inbox: readonly InboxRow[]): PromptBlock[] {
   const labeled = inbox.flatMap(({ senderThreadId, content }) => {
     const heading = senderThreadId === null ? "\n\n" : `\n\n[bb message from thread:${senderThreadId}]\n\n`;
