@@ -6,6 +6,7 @@ import {
   chooseRoute,
   endedToSelfCompact,
   NO_OP_MARKER,
+  WORKER_INSTRUCTIONS,
   mailTagKeys,
   parseEnvironment,
   parseMetadata,
@@ -51,6 +52,13 @@ function usage<T>(parse: () => T): T {
 }
 
 export default function plugin(bb: BbPluginApi) {
+  // A relay worker also has a physical parent, its host, so this covers both routes.
+  bb.agents.configure(({ thread }) => ({
+    tools: [],
+    skills: ["nest"],
+    instructions: thread.parentThreadId === null ? undefined : WORKER_INSTRUCTIONS,
+  }));
+
   async function ancestorsUpToSpawner(caller: Thread): Promise<[ThreadLink, ...ThreadLink[]]> {
     const link = (thread: Thread): ThreadLink => ({ id: thread.id, canSpawnChild: thread.canSpawnChild });
     const links: [ThreadLink, ...ThreadLink[]] = [link(caller)];

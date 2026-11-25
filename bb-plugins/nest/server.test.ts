@@ -49,6 +49,7 @@ function start() {
   const isThread = (id: string): id is keyof typeof THREADS => id in THREADS;
   host = createFakePluginHost({
     pluginId: "nest",
+    agentSkillIds: ["nest"],
     sdk: {
       threads: {
         get: async ({ threadId }) => {
@@ -307,5 +308,32 @@ describe("logical tree", () => {
     const { harness } = start();
     const result = await harness.callRpc("logicalParents", { keys: ["L5", "L4"] });
     expect(result).toEqual({ L5: { id: "L4", title: "L4 title" }, L4: null });
+  });
+});
+
+describe("worker instructions", () => {
+  const resolve = async (parentThreadId: string | null) => {
+    const { harness } = start();
+    return harness.resolveAgentConfiguration({
+      pluginMetadata: {},
+      thread: { id: "thr_x", title: null, parentThreadId, sourceThreadId: null },
+      project: { id: "proj_x", kind: "standard", name: "x", gitRemoteUrl: null },
+      environment: { id: "env_x", name: null, path: null, branchName: null, workspaceProvisionType: null },
+      host: { id: "host_x", name: "x" },
+      provider: { id: "claude-code", model: "claude-haiku-5-5", capabilities: { supportsNativeUserQuestion: false } },
+      origin: { kind: null, pluginId: null },
+    });
+  };
+
+  it("tells a thread with a parent to end a waiting turn with the marker nest does not relay", async () => {
+    const { instructions, skills } = await resolve("L1");
+    expect(instructions).toContain("`[no-op]`");
+    expect(skills).toEqual(["nest"]);
+  });
+
+  it("adds nothing to a thread without a parent", async () => {
+    const { instructions, skills } = await resolve(null);
+    expect(instructions).toBeNull();
+    expect(skills).toEqual(["nest"]);
   });
 });

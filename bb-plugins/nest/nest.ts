@@ -94,7 +94,7 @@ export function preamble(route: Extract<Route, { kind: "relay" }>): string {
   const host = `@thread:${route.hostThreadId}`;
   return [
     `[nest] Your logical parent is ${parent}, which started you with \`bb nest spawn\`. bb allows only four thread levels, so you run under ${host}, and \`bb status\` shows that thread as your parent with notifications off.`,
-    `Every turn you end is delivered to ${parent} automatically as your result, including failures and questions. Do not send results with \`bb thread tell\`, and never message ${host}. Start your own workers with \`bb nest spawn\`. To wait for them, end your turn with exactly \`${NO_OP_MARKER}\`, the one reply that is not delivered. Each of their results starts a new turn, so do not wait with \`bb thread wait\`.`,
+    `Every turn you end is delivered to ${parent} automatically as your result, including failures and questions. Do not send results with \`bb thread tell\`, and never message ${host}. Start your own workers with \`bb nest spawn\`.`,
     "",
     "Brief:",
     "",
@@ -134,6 +134,8 @@ export function waitingOutcome(interaction: { id: string; payload: unknown }): O
 }
 
 export const NO_OP_MARKER = "[no-op]";
+
+export const WORKER_INSTRUCTIONS = `Another thread started you as its worker, and each turn you end reaches it as your result. When you end a turn only to wait, for your own workers or for a background command, reply with exactly \`${NO_OP_MARKER}\`. Nest and Mail do not pass that reply on, and the result you wait for starts your next turn.`;
 
 export function relayText(workerId: string, outcome: Outcome): string {
   const worker = `@thread:${workerId}`;

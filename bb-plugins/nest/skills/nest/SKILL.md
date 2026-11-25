@@ -66,5 +66,4 @@ and `title`.
 If your first message starts with `[nest] Your logical parent is`, follow it.
 Your turn results reach that thread automatically. Do not send them with
 `bb thread tell`, and never message the thread that `bb status` shows as your
-parent. To wait for your own workers, end your turn with exactly `[no-op]`,
-which Nest does not relay. Each of their results starts a new turn.
+parent.

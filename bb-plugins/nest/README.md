@@ -35,6 +35,12 @@ bb plugin install . --yes
 
 ## How it works
 
+The plugin adds one instruction to every thread that has a parent, on either
+route: when the thread ends a turn only to wait, it replies with exactly
+`[no-op]`. Nest does not relay that reply, and the
+[mail](../mail/README.md) plugin drops its completion notice. A thread gets the
+instruction when bb starts or resumes its provider session.
+
 When bb lets the caller take a child, `bb nest spawn` starts a normal child,
 exactly as `bb thread spawn --parent-self` would. bb then notifies the caller
 when the child finishes.
