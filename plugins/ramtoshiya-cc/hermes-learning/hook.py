@@ -99,8 +99,6 @@ def run_curator(home: Path) -> None:
 
 def session_start(event: dict) -> dict:
     role = store.role()
-    if role == "off":
-        return {}
     try:
         home = store.store()
     except store.Unavailable:

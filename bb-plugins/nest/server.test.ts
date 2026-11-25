@@ -297,47 +297,6 @@ describe("relay", () => {
     expect(sent).toEqual([]);
   });
 
-  it("does not relay a Hermes turn that ended to self-compact, nor bb's compaction turn after it", async () => {
-    const { harness, sent } = start();
-    const call = {
-      type: "item/completed",
-      data: {
-        item: {
-          type: "toolCall",
-          id: "t1",
-          arguments: { action: "compact", note: "# note" },
-          result: "self_compact result\n- **status:** scheduled",
-          presentation: { title: "self_compact" },
-        },
-      },
-    };
-    const message = { type: "item/completed", data: { item: { type: "agentMessage", id: "m1" } } };
-    EVENTS.L5 = [message, call, { type: "turn/started", data: {} }];
-    await harness.emitThreadEvent("thread.idle", { thread: thread("L5"), lastAssistantText: "Compaction is scheduled." });
-    EVENTS.L5 = [{ type: "thread/compacted", data: {} }, message, { type: "turn/started", data: {} }, ...EVENTS.L5];
-    await harness.emitThreadEvent("thread.idle", { thread: thread("L5"), lastAssistantText: "Compressed: 36 → 12 messages" });
-    expect(sent).toEqual([]);
-  });
-
-  it("relays a Hermes turn that scheduled compaction with resume false", async () => {
-    const { harness, sent } = start();
-    const call = {
-      type: "item/completed",
-      data: {
-        item: {
-          type: "toolCall",
-          id: "t1",
-          arguments: { action: "compact", resume: false },
-          result: "self_compact result\n- **status:** scheduled",
-          presentation: { title: "self_compact" },
-        },
-      },
-    };
-    EVENTS.L5 = [call, { type: "turn/started", data: {} }];
-    await harness.emitThreadEvent("thread.idle", { thread: thread("L5"), lastAssistantText: "Which option?" });
-    expect(sent[0]?.text).toContain("Which option?");
-  });
-
   it("does not relay a turn whose reply is only the [no-op] marker", async () => {
     const { harness, sent } = start();
     await harness.emitThreadEvent("thread.idle", { thread: thread("L5"), lastAssistantText: "[no-op]\n" });

@@ -8,16 +8,9 @@ const PAGE_SIZE = 100;
 const DEADLINE_MS = 300_000;
 const CALL_TIMEOUT_MS = 15_000;
 const POLL_MS = 500;
-const LEDGER_GRACE_MS = 2_000;
 const MAIL_PLUGIN_ID = 'mail';
 
-// BB reports any ACP end_turn as a finished compaction, and Hermes ends a noop or refused /compress
-// with end_turn too, so Hermes also needs the committed compaction that its self-compact plugin
-// appends to the ledger.
-const PROVIDERS = {
-  'claude-code': { ledger: false, failureNotice: false },
-  'acp-hermes-agent': { ledger: true, failureNotice: true },
-};
+const PROVIDER = 'claude-code';
 
 function fail(message) {
   throw new Error(message);
@@ -32,19 +25,17 @@ function nonempty(value) {
 }
 
 function parseRun(rest) {
-  const options = { ledger: null, resume: true };
+  const options = { resume: true };
   if (rest[0] !== '--launch-seq' || !/^[1-9][0-9]*$/.test(rest[1] ?? '') ||
       !Number.isSafeInteger(Number(rest[1])) || rest[2] !== '--turn-id' || !nonempty(rest[3])) return null;
   for (let i = 4; i < rest.length; i++) {
     if (rest[i] === '--no-resume' && options.resume) options.resume = false;
-    else if (rest[i] === '--compaction-ledger' && options.ledger === null && isAbsolute(rest[i + 1] ?? '')) options.ledger = rest[++i];
     else return null;
   }
   return { launchSeq: Number(rest[1]), turnId: rest[3], ...options };
 }
 
-const outcome = { compacted: false, phase: 'waiting-caller', resumeAttempted: false };
-let report = null;
+const outcome = { compacted: false, phase: 'waiting-caller' };
 
 async function queuedWorkExcludingMailInbox(bb, threadId, thread) {
   if (thread.queuedMessageCount === 0) return 0;
@@ -72,7 +63,7 @@ async function main() {
   const options = action === 'run' ? parseRun(args.slice(2)) : null;
   if ((!preparing && !options) || !note || !isAbsolute(note) ||
       !/^thr_[A-Za-z0-9_-]+$/.test(threadId ?? '')) {
-    fail('Usage: bb-compact.mjs prepare <absolute-note> or run <absolute-note> --launch-seq <seq> --turn-id <id> [--compaction-ledger <absolute-path>] [--no-resume] inside a BB thread.');
+    fail('Usage: bb-compact.mjs prepare <absolute-note> or run <absolute-note> --launch-seq <seq> --turn-id <id> [--no-resume] inside a BB thread.');
   }
   if (!(await stat(note)).isFile()) fail('The handoff note must be a readable file.');
   await readFile(note, 'utf8');
@@ -84,8 +75,8 @@ async function main() {
   }
   const deadline = Date.now() + DEADLINE_MS;
 
-  async function bb(args, input, { pastDeadline = false } = {}) {
-    const remaining = pastDeadline ? CALL_TIMEOUT_MS : deadline - Date.now();
+  async function bb(args, input) {
+    const remaining = deadline - Date.now();
     if (remaining <= 0) fail('Timed out waiting for BB compaction proof.');
     const stdout = await new Promise((resolve, reject) => {
       const child = execFile(cli, [...args, '--json'], {
@@ -103,25 +94,14 @@ async function main() {
     return value;
   }
 
-  let provider = null;
   async function threadState({ queued = false } = {}) {
     const show = await bb(['thread', 'show', threadId]);
     const thread = show?.thread;
-    if (!isObject(thread) || thread.id !== threadId || !Object.hasOwn(PROVIDERS, thread.providerId) ||
+    if (!isObject(thread) || thread.id !== threadId || thread.providerId !== PROVIDER ||
         !['active', 'starting', 'idle'].includes(thread.status) ||
         !Number.isInteger(thread.queuedMessageCount) || (!queued && await queuedWorkExcludingMailInbox(bb, threadId, thread) !== 0) ||
         thread.archivedAt !== null || thread.deletedAt !== null) {
-      fail(`The thread must be an unarchived thread of a supported provider (${Object.keys(PROVIDERS).join(', ')}) with no queued work or error.`);
-    }
-    if (provider === null) {
-      provider = PROVIDERS[thread.providerId];
-      if (options && provider.ledger !== (options.ledger !== null)) {
-        fail(provider.ledger ? 'This provider needs --compaction-ledger from its self-compact plugin.'
-          : 'This provider takes no --compaction-ledger.');
-      }
-      if (options && provider.failureNotice) report = { bb, threadId, note, resume: options.resume };
-    } else if (provider !== PROVIDERS[thread.providerId]) {
-      fail('The thread changed provider.');
+      fail(`The thread must be an unarchived ${PROVIDER} thread with no queued work or error.`);
     }
     const interactions = await bb(['thread', 'interactions', 'list', threadId]);
     if (!Array.isArray(interactions) || interactions.some(item =>
@@ -197,7 +177,7 @@ async function main() {
 
   if (preparing) {
     const callerHistory = history.slice(start + 1);
-    const commandSeq = provider === PROVIDERS['claude-code'] ? prepareCommandSeq(callerHistory, caller.turnId) : 0;
+    const commandSeq = prepareCommandSeq(callerHistory, caller.turnId);
     const unaccepted = new Map();
     for (const event of callerHistory) {
       if (event.seq < commandSeq) {
@@ -229,7 +209,6 @@ async function main() {
   }
 
   const boundarySeq = cursor;
-  const ledgerBaseline = provider.ledger ? (await readLedger(options.ledger)).length : 0;
   outcome.phase = 'compact-requested';
   const receipt = await bb(['thread', 'compact', threadId]);
   if (!isObject(receipt) || receipt.ok !== true || receipt.threadId !== threadId) {
@@ -294,13 +273,11 @@ async function main() {
     await delay(Math.min(POLL_MS, Math.max(1, deadline - Date.now())));
   }
 
-  if (provider.ledger) proof.ledger = await requireLedgerEntry(options.ledger, ledgerBaseline, deadline);
   outcome.compacted = true;
   outcome.phase = 'proven';
 
   let resumeSent = false;
   if (options.resume) {
-    outcome.resumeAttempted = true;
     const message = `Resume after self-compaction: read ${JSON.stringify(note)} before anything else and continue from its next step. Delete the note when its task is finished.`;
     let delivery;
     try {
@@ -319,63 +296,9 @@ async function main() {
   console.log(JSON.stringify({ compacted: true, resumeSent, evidence: proof }));
 }
 
-// A last line without its newline is still being written.
-function completeLines(text) {
-  return text.split('\n').slice(0, -1);
-}
-
-async function readLedger(path) {
-  let text;
-  try { text = await readFile(path, 'utf8'); } catch (error) { if (error.code === 'ENOENT') return []; throw error; }
-  return completeLines(text).map(line => {
-    let entry;
-    try { entry = JSON.parse(line); } catch { fail('The compaction ledger has a malformed line.'); }
-    if (!isObject(entry) || !nonempty(entry.kind) || !nonempty(entry.reason)) fail('The compaction ledger has a malformed entry.');
-    return entry;
-  });
-}
-
-// Hermes awaits the post_compaction hook before it answers /compact, so the ledger line normally
-// exists before BB records the turn. The grace only covers a slow write.
-async function requireLedgerEntry(path, baseline, deadline) {
-  const until = Math.min(deadline, Date.now() + LEDGER_GRACE_MS);
-  while (true) {
-    const fresh = (await readLedger(path)).slice(baseline);
-    if (fresh.length > 1) fail('Hermes committed more than one compaction after the request, so the proof is ambiguous.');
-    if (fresh.length === 1) {
-      const [entry] = fresh;
-      if (entry.reason !== 'manual' || entry.kind !== 'summarize') {
-        fail(`The only compaction after the request was ${entry.reason} ${entry.kind}, not the requested manual one.`);
-      }
-      return entry;
-    }
-    if (Date.now() >= until) fail('BB reported compaction, but Hermes committed none. The request was a noop or was refused.');
-    await delay(POLL_MS);
-  }
-}
-
-async function sendFailureNotice(error) {
-  const { bb, threadId, note, resume } = report;
-  const awaitingUser = !resume;
-  if (awaitingUser || outcome.resumeAttempted) return false;
-  const late = { pastDeadline: true };
-  try {
-    const thread = (await bb(['thread', 'show', threadId], undefined, late))?.thread;
-    const interactions = await bb(['thread', 'interactions', 'list', threadId], undefined, late);
-    if (thread?.status !== 'idle' || await queuedWorkExcludingMailInbox(bb, threadId, thread) !== 0 || !Array.isArray(interactions) ||
-        interactions.some(item => ['pending', 'resolving'].includes(item?.status))) return false;
-    const text = `Self-compaction did not complete: ${error.message} No retry was made. The handoff note is kept at ${JSON.stringify(note)}. Read it with the self_compact tool's read action, continue the task, and schedule compaction again only at a later natural boundary.`;
-    const delivery = await bb(['thread', 'tell', threadId, '--mode', 'queue', '--message-file', '-'], text, late);
-    return isObject(delivery) && delivery.threadId === threadId && ['sent', 'queued'].includes(delivery.delivery);
-  } catch {
-    return false;
-  }
-}
-
-main().catch(async error => {
-  const failureNoticeSent = report ? await sendFailureNotice(error) : false;
+main().catch(error => {
   console.log(JSON.stringify({ compacted: outcome.compacted || (outcome.phase === 'waiting-caller' ? false : 'unknown'),
-    phase: outcome.phase, error: error.message, failureNoticeSent }));
+    phase: outcome.phase, error: error.message }));
   console.error(`${error.message} No automatic retry was made. Keep the handoff note.`);
   process.exitCode = 1;
 });

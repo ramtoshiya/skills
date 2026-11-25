@@ -44,7 +44,7 @@ class HermesLearningTests(unittest.TestCase):
         self.calls = self.tmp / "calls.jsonl"
         self.env = {**os.environ, "HERMES_LEARNING_HOME": str(self.store), "CALLS": str(self.calls),
                     "PATH": f"{self.tmp / 'bin'}{os.pathsep}{os.environ['PATH']}"}
-        for name in ("_HERMES_GATEWAY", "BB_THREAD_ID", "BB_CLI"):
+        for name in ("BB_THREAD_ID", "BB_CLI"):
             self.env.pop(name, None)
         self.fake_hermes()
 
@@ -116,10 +116,7 @@ class HermesLearningTests(unittest.TestCase):
         links = {path.name: path.resolve() for path in (plugin / "skills").iterdir()}
         self.assertEqual(links, {"flaky-checks": (skills / "dev/flaky-checks").resolve()})
 
-    def test_session_start_is_silent_in_the_coder_runtime_and_without_a_store(self):
-        (self.store / "memories/USER.md").write_text("Prefers short answers.\n")
-        self.assertEqual(self.hook("session-start", {"session_id": "s1"}, {**self.env, "_HERMES_GATEWAY": "1"}), {})
-        self.assertFalse((self.store / "claude-skills-plugin").exists())
+    def test_session_start_is_silent_without_a_store(self):
         missing = {**self.env, "HERMES_LEARNING_HOME": str(self.tmp / "absent")}
         self.assertEqual(self.hook("session-start", {"session_id": "s1"}, missing), {})
 
@@ -154,13 +151,11 @@ class HermesLearningTests(unittest.TestCase):
             self.assertEqual(json.loads(result.stdout.splitlines()[-1]),
                              {"tool": "skill_view", "args": {"name": "flaky-checks"}, "origin": origin})
 
-    def test_cli_refuses_writes_to_child_threads_and_the_coder_runtime(self):
+    def test_cli_refuses_writes_to_child_threads(self):
         entry = json.dumps({"action": "add", "target": "memory", "content": "x"})
         child = self.cli("memory", stdin=entry, env=self.in_thread({"parentThreadId": "thr_parent"}))
         self.assertEqual(child.returncode, 1)
         self.assertIn("Learning proposals", child.stderr)
-        coder = self.cli("memory", stdin=entry, env={**self.env, "_HERMES_GATEWAY": "1"})
-        self.assertIn("Hermes coder runtime", coder.stderr)
         self.assertFalse(self.calls.exists())
 
     def test_cli_leaves_staged_writes_to_foreground_sessions(self):

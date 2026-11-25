@@ -3,12 +3,12 @@ name: self-compact
 description: >-
   Compact this conversation at a boundary you choose and resume without the user. Use when a
   "Context budget" notice says to compact, or when the user asks you to compact yourself and keep
-  working. Covers Claude Code in BB and Paseo, and Hermes in BB.
+  working. Covers Claude Code in BB and Paseo.
 ---
 
 # Self-compact
 
-Claude Code and Hermes compact on their own when the context nears their window, often in the
+Claude Code compacts on its own when the context nears its window, often in the
 middle of a step. This skill compacts earlier, at a point you choose, and carries the task across the
 compaction in a handoff note.
 
@@ -21,8 +21,7 @@ compaction in a handoff note.
 
 ## Write the handoff note {:#handoff}
 
-When the `self_compact` tool is in your tool list, save the note only through that tool, which
-chooses the path. Otherwise write the note to the path the budget warning names. Without a
+Write the note to the path the budget warning names. Without a
 warning, create a file with `mktemp -t handoff`. Never put it inside a repository. Overwrite an
 older note rather than append.
 
@@ -37,8 +36,7 @@ The note is the only reliable state after compaction, so write it for a reader w
 
 ## Compact and resume {:#compact}
 
-When the `self_compact` tool is in your tool list, read [references/hermes.md](references/hermes.md)
-and follow it. Otherwise, when `BB_THREAD_ID` is set, use the BB section. Otherwise, when
+When `BB_THREAD_ID` is set, use the BB section. Otherwise, when
 `PASEO_AGENT_ID` is set, read [references/paseo.md](references/paseo.md) and follow it. Otherwise,
 use the Other hosts section.
 
@@ -46,8 +44,7 @@ use the Other hosts section.
 
 When `BB_THREAD_ID` is set, use the bundled helper. It requires `node` and the installed `bb`
 CLI, and supports BB's `claude-code` provider. It does not install dependencies or change BB
-settings. Hermes uses [references/hermes.md](references/hermes.md), and other providers use the
-fallback below.
+settings. Other providers use the fallback below.
 
 Give this helper exclusive control of the thread until it finishes. Do not launch another helper
 or send more prompts to this thread during that time. Other threads can keep working.
@@ -104,5 +101,4 @@ if scheduling compaction fails.
 ## After compaction {:#after}
 
 Read the handoff note before anything else and continue from its next step without asking whether
-to continue. When the task in the note is finished, delete the note. With the `self_compact` tool,
-read the note with action `read` and delete it with action `clear`.
+to continue. When the task in the note is finished, delete the note.

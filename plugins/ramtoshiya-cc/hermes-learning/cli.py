@@ -23,7 +23,6 @@ REFUSED = {
     "child": "a thread that another thread started only reads skills with skill_view. Put the lesson under "
              "`Learning proposals` in your final answer instead.",
     "review": "a review fork stages memory removals for a later decision and cannot decide them itself.",
-    "off": "this session runs in the Hermes coder runtime, which records learning itself.",
 }
 
 

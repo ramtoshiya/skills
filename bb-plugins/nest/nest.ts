@@ -182,9 +182,6 @@ const itemSchema = z.object({
   type: z.string(),
   command: z.string().optional(),
   exitCode: z.number().nullable().optional(),
-  arguments: z.object({ action: z.string().optional(), resume: z.boolean().optional() }).passthrough().optional().catch(undefined),
-  result: z.string().nullable().optional().catch(undefined),
-  presentation: z.object({ title: z.string().optional() }).passthrough().optional().catch(undefined),
 });
 const eventSchema = z.object({
   type: z.string(),
@@ -193,20 +190,16 @@ const eventSchema = z.object({
 
 export const TURN_EVENT_TYPES = ["turn/started", "item/completed", "thread/compacted"] as const;
 const SELF_COMPACT_RUN = /bb-compact\.mjs["']?\s+run\b/;
-const HERMES_SCHEDULED = /\*\*status:\*\*\s*scheduled\b/;
 
 type Item = z.infer<typeof itemSchema>;
 
 function launchedResumingSelfCompaction(item: Item): boolean {
-  if (item.type === "commandExecution") {
-    return item.exitCode === 0 && item.command !== undefined && SELF_COMPACT_RUN.test(item.command) && !item.command.includes("--no-resume");
-  }
   return (
-    item.type === "toolCall" &&
-    item.presentation?.title === "self_compact" &&
-    item.arguments?.action === "compact" &&
-    item.arguments.resume !== false &&
-    HERMES_SCHEDULED.test(item.result ?? "")
+    item.type === "commandExecution" &&
+    item.exitCode === 0 &&
+    item.command !== undefined &&
+    SELF_COMPACT_RUN.test(item.command) &&
+    !item.command.includes("--no-resume")
   );
 }
 

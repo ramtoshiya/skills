@@ -84,7 +84,6 @@ if (config.invalidJson && args[1] === config.invalidJson) {
   if (!state.deliveredCaller) throw new Error('compaction requested before caller completed');
   state.phase = 'compact';
   save();
-  for (const entry of config.ledgerEntries || []) fs.appendFileSync(path.join(dir, "ledger.jsonl"), JSON.stringify(entry) + "\\n");
   out(config.compactReceipt || { ok: true, threadId: 'thr_self' });
 } else if (args[1] === 'tell') {
   if (config.tellError) {
@@ -407,107 +406,6 @@ test('reports uncertain resume delivery after a failed send without retrying', a
   assert.match(result.stderr, /delivery is uncertain/i);
   assert.equal((await fixture.calls()).filter(call => call.args[1] === 'tell').length, 1);
   assert.equal(await readFile(fixture.note, 'utf8'), 'Continue the task.');
-});
-
-const manual = { sessionId: 'sess_new', oldSessionId: 'sess_old', kind: 'summarize', reason: 'manual', beforeTokens: 240000, afterTokens: 30000 };
-
-async function hermes(t, changes = {}) {
-  const fixture = await setup(t, { provider: 'acp-hermes-agent', ledgerEntries: [manual], ...changes });
-  const ledger = join(fixture.dir, 'ledger.jsonl');
-  const tells = async () => (await fixture.calls()).filter(call => call.args[1] === 'tell');
-  const compacts = async () => (await fixture.calls()).filter(call => call.args[1] === 'compact').length;
-  return { ...fixture, ledger, tells, compacts, runWithLedger: (options = []) => fixture.run(['--compaction-ledger', ledger, ...options]) };
-}
-
-test('proves a Hermes compaction with BB events and one committed manual summary', async t => {
-  const fixture = await hermes(t);
-  const result = await fixture.runWithLedger();
-  assert.equal(result.status, 0, result.stderr);
-  const output = JSON.parse(result.stdout);
-  assert.equal(output.compacted, true);
-  assert.equal(output.resumeSent, true);
-  assert.deepEqual(output.evidence.ledger, manual);
-  assert.equal((await fixture.tells()).length, 1);
-});
-
-test('ignores ledger lines written before the compaction request', async t => {
-  const fixture = await hermes(t);
-  await writeFile(fixture.ledger, JSON.stringify({ ...manual, reason: 'pre_api' }) + '\n');
-  const result = await fixture.runWithLedger();
-  assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout).evidence.ledger, manual);
-});
-
-test('requires the ledger for Hermes and refuses it for Claude before compacting', async t => {
-  const missing = await hermes(t);
-  const withoutLedger = await missing.run();
-  assert.notEqual(withoutLedger.status, 0);
-  assert.match(withoutLedger.stderr, /needs --compaction-ledger/);
-  assert.equal(await missing.compacts(), 0);
-
-  const claude = await setup(t);
-  const withLedger = await claude.run(['--compaction-ledger', join(claude.dir, 'ledger.jsonl')]);
-  assert.notEqual(withLedger.status, 0);
-  assert.match(withLedger.stderr, /takes no --compaction-ledger/);
-  assert.equal((await claude.calls()).filter(call => call.args[1] === 'compact').length, 0);
-});
-
-const unprovenHermes = {
-  'no committed compaction (noop or refusal)': { ledgerEntries: [] },
-  'two committed compactions': { ledgerEntries: [manual, manual] },
-  'an automatic compaction instead of the manual one': { ledgerEntries: [{ ...manual, reason: 'pre_api' }] },
-  'a pruning pass instead of a summary': { ledgerEntries: [{ ...manual, kind: 'prune_tool_results' }] },
-};
-
-for (const [name, changes] of Object.entries(unprovenHermes)) {
-  test(`does not resume a Hermes thread after ${name} and tells it once`, async t => {
-    const fixture = await hermes(t, changes);
-    const result = await fixture.runWithLedger();
-    assert.notEqual(result.status, 0);
-    const output = JSON.parse(result.stdout);
-    assert.equal(output.compacted, 'unknown');
-    assert.equal(output.phase, 'compact-requested');
-    assert.equal(output.failureNoticeSent, true);
-    assert.equal(await fixture.compacts(), 1);
-    const tells = await fixture.tells();
-    assert.equal(tells.length, 1);
-    assert.match(tells[0].input, /^Self-compaction did not complete: .* No retry was made\./);
-    assert.ok(tells[0].input.includes(JSON.stringify(fixture.note)));
-  });
-}
-
-test('sends no Hermes failure notice when the user decision is pending', async t => {
-  const fixture = await hermes(t, { ledgerEntries: [] });
-  const result = await fixture.runWithLedger(['--no-resume']);
-  assert.notEqual(result.status, 0);
-  assert.equal(JSON.parse(result.stdout).failureNoticeSent, false);
-  assert.equal((await fixture.tells()).length, 0);
-});
-
-test('sends no Hermes failure notice into a thread with queued work', async t => {
-  const fixture = await hermes(t, { ledgerEntries: [], queuedAfterCompact: 1 });
-  const result = await fixture.runWithLedger();
-  assert.notEqual(result.status, 0);
-  assert.equal(JSON.parse(result.stdout).failureNoticeSent, false);
-  assert.equal((await fixture.tells()).length, 0);
-});
-
-test('does not follow an uncertain Hermes resume with a failure notice', async t => {
-  const fixture = await hermes(t, { delivery: { threadId: thread, delivery: 'unknown' } });
-  const result = await fixture.runWithLedger();
-  assert.notEqual(result.status, 0);
-  assert.deepEqual(JSON.parse(result.stdout), { compacted: true, phase: 'proven', error: 'Resume delivery is uncertain.', failureNoticeSent: false });
-  assert.equal((await fixture.tells()).length, 1);
-});
-
-test('reports a Hermes failure before compaction without claiming a compaction', async t => {
-  const fixture = await hermes(t, { after: [event(18, 'turn/completed', 'caller', { status: 'failed' })] });
-  const result = await fixture.runWithLedger();
-  assert.notEqual(result.status, 0);
-  const output = JSON.parse(result.stdout);
-  assert.equal(output.compacted, false);
-  assert.equal(output.phase, 'waiting-caller');
-  assert.equal(await fixture.compacts(), 0);
 });
 
 describe('bb-compact', { concurrency: true }, () => {

@@ -269,15 +269,6 @@ background helper. [Agent plugins](agent-pack.md) describes their requirements
 and concurrency limits. Other hosts keep the note current and use Claude
 Code's automatic compaction.
 
-Hermes does not run this hook. The Hermes operator profile's self-compact
-plugin, described in [Machine setup](setup.md), gives the same reminder from
-the same numbers: 75% of the window, then every five points. One difference
-is deliberate. This hook warns again when usage drops and then rises into a
-band it already warned about. The Hermes plugin stays silent until a real
-compaction, because Hermes also reports the smaller requests it makes on the
-side. `dev/tests/setup/test_hermes_self_compact.py` feeds rising usage to both
-and fails when their warnings differ.
-
 Limits:
 
 - The hook is silent when `autoCompactWindow` is missing or `auto`, and it
@@ -310,10 +301,7 @@ store that [Agent plugins](agent-pack.md) describes. The store is
   record key is the skill's frontmatter `name`, which can differ from its
   folder name. This takes about two seconds.
 
-Both hooks do nothing in a session that the Hermes coder runtime starts, which
-injects memory and records learning itself. They recognize it by the
-`_HERMES_GATEWAY=1` variable that every process under a Hermes gateway
-inherits. The session start hook is also silent when the store does not exist.
+The session start hook is silent when the store does not exist.
 The usage hook finds the Hermes interpreter with `hermes
 --print-runtime-command` and reports a missing Hermes as a system message.
 

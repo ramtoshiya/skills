@@ -26,7 +26,6 @@ ROLES = {
     "solo": {"tools": (*TOOLS, PENDING), "origin": "foreground"},
     "review": {"tools": TOOLS, "origin": "background_review"},
     "child": {"tools": ("skill_view",), "origin": "foreground"},
-    "off": {"tools": (), "origin": "foreground"},
 }
 
 
@@ -34,17 +33,9 @@ class Unavailable(Exception):
     """Hermes or the learning store is missing. The message names what is missing."""
 
 
-def in_coder_runtime() -> bool:
-    """The Hermes coder runtime starts Claude Code inside a Hermes gateway, whose marker every child inherits.
-    That runtime injects memory and runs learning itself."""
-    return os.environ.get("_HERMES_GATEWAY") == "1"
-
-
 def role() -> str:
-    """off in the Hermes coder runtime, solo outside bb, child for a thread another thread started, review for a
-    fork titled Hermes review, and top for any other bb thread."""
-    if in_coder_runtime():
-        return "off"
+    """solo outside bb, child for a thread another thread started, review for a fork titled Hermes review, and
+    top for any other bb thread."""
     thread_id = os.environ.get("BB_THREAD_ID")
     if not thread_id:
         return "solo"

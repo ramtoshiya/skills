@@ -17,7 +17,6 @@ import {
   nestLogicalParent,
   parseSelector,
   parseTag,
-  releaseEvent,
   tagKey,
   tagsOf,
   waitState,
@@ -39,8 +38,6 @@ const HOLD_LIMIT_MS = 30_000;
 const POLL_MS = 1_000;
 const RELEASE_MARGIN_MS = 5_000;
 const CLAIM_MS = 30_000;
-const RECHECK_RETRY_MS = 1_500;
-const MAX_RECHECKS = 10;
 
 function chunks<T>(items: readonly T[], size: number): T[][] {
   const result: T[][] = [];
@@ -78,46 +75,14 @@ export default function plugin(bb: BbPluginApi) {
     }
   });
 
-  async function compactionScheduled(threadId: string): Promise<boolean> {
-    try {
-      const events = await bb.sdk.threads.events.list({ threadId, order: "desc", limit: String(EVENT_LIMIT), types: [...TURN_EVENT_TYPES] });
-      return launchedSelfCompaction(lastTurnItems(events));
-    } catch (error) {
-      bb.log.warn(`compaction check: ${error instanceof Error ? error.message : String(error)}. Releasing held messages.`);
-      return false;
-    }
-  }
-
-  /**
-   * bb paces rechecks per thread and drops one that arrives about a second after it re-queued the thread's rows. A
-   * held row has no send time, so nothing else tries it again. When a turn ends that soon after mail held a message,
-   * mail repeats the recheck, a bounded number of times, until the message goes out.
-   */
-  async function recheckAgainUntilSent(threadId: string, rowIds: ReadonlySet<string>): Promise<void> {
-    for (let asked = 1; asked < MAX_RECHECKS; asked++) {
-      await new Promise((resolve) => setTimeout(resolve, RECHECK_RETRY_MS));
-      const [thread, held] = await Promise.all([
-        bb.sdk.threads.get({ threadId }),
-        bb.sdk.threads.queue.list({ waitHolder: `plugin:${bb.pluginId}`, threadId }),
-      ]);
-      if (thread.status !== "idle" || !held.some((row) => rowIds.has(row.id))) return;
+  bb.events.on("thread.active", ({ thread }) =>
+    guard("thread.active", async () => {
+      const held = await bb.sdk.threads.queue.list({ waitHolder: `plugin:${bb.pluginId}`, threadId: thread.id });
+      if (held.length === 0) return;
+      for (const row of held) inbox.releasable.add(row.id);
       await bb.experimental_hooks.recheck("message.dispatch");
-    }
-  }
-
-  for (const event of ["thread.active", "thread.idle"] as const) {
-    bb.events.on(event, ({ thread }) =>
-      guard(event, async () => {
-        if (releaseEvent(thread.providerId) !== event) return;
-        const held = await bb.sdk.threads.queue.list({ waitHolder: `plugin:${bb.pluginId}`, threadId: thread.id });
-        if (held.length === 0 || (event === "thread.idle" && (await compactionScheduled(thread.id)))) return;
-        const rowIds = new Set(held.map((row) => row.id));
-        for (const id of rowIds) inbox.releasable.add(id);
-        await bb.experimental_hooks.recheck("message.dispatch");
-        if (event === "thread.idle") void guard("recheck again", () => recheckAgainUntilSent(thread.id, rowIds));
-      }),
-    );
-  }
+    }),
+  );
 
   async function currentRow(row: Row): Promise<Row | null> {
     const rows = await bb.sdk.threads.queuedMessages.list({ threadId: row.threadId });

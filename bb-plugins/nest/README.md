@@ -62,8 +62,7 @@ take a child. That ancestor is only a host:
   length, and the `bb thread output` command that reads it.
 - A turn that ended only to start self-compaction is not relayed, because the
   worker resumes on its own. That is the helper (`bb-compact.mjs run` without
-  `--no-resume`, exiting 0) for Claude Code, or a Hermes `self_compact` call that
-  scheduled a compaction without `resume: false`. bb's compaction turn after it is not relayed
+  `--no-resume`, exiting 0). bb's compaction turn after it is not relayed
   either.
 - A turn whose whole reply is `[no-op]` (after trimming) is not relayed. A reply that
   only contains the marker is relayed.
@@ -94,9 +93,8 @@ sidebar. It is off by default.
   running at that moment, for example during a bb restart, that result is not
   relayed. Read it with `bb thread output <worker>`.
 - The self-compaction check reads the worker's `commandExecution` events and
-  matches the helper's file name, `run` argument, and exit code 0. For Hermes it
-  reads the `self_compact` `toolCall` item. If the events cannot be read, the
-  result is relayed.
+  matches the helper's file name, `run` argument, and exit code 0. If the
+  events cannot be read, the result is relayed.
 - `--tag` writes into the mail plugin's thread metadata as the key
   `tag:<tag>`. If that write fails, the thread still starts and the output
   says so.

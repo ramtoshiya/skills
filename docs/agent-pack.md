@@ -20,7 +20,7 @@ marketplace file `.claude-plugin/marketplace.json`, which also lists the
 | `mermaid-check` | Runs the Mermaid parser over diagrams before the agent delivers them | Node.js. The first run downloads `@mermaid-js/mermaid-cli` 12.0.0 through `npx` |
 | `read-x` | Reads public X posts, threads, profiles, and searches through the mdfromx HTTP API | HTTP access to [mdfromx](https://mdfromx.com/) and curl |
 | `reorganize-commits` | Rewrites the current branch's commits into reviewable chunks. Runs only when you invoke it | Git |
-| `self-compact` | Compacts the conversation at a boundary the agent picks and resumes from a handoff note without you | BB with Claude Code or Hermes, or macOS Paseo Desktop. Node.js and the `bb` CLI in BB |
+| `self-compact` | Compacts the conversation at a boundary the agent picks and resumes from a handoff note without you | BB with Claude Code, or macOS Paseo Desktop. Node.js and the `bb` CLI in BB |
 | `stable-refs` | Gives documents and plans permanent identifiers that survive edits | Nothing |
 | `worker-routing` | Supplies the shared model, effort, provider, quota, urgency, retry, and escalation policy that agents follow when they start workers, a `newest-model` script that prints the model to pass for each family, and a `quota-pace.py` script that picks the side for new work from recent quota use | BB for cross-provider workers, and for Claude workers when the host hides Claude Code's own subagent tools. Elsewhere, the host's agent tool. `jq`, and the `bb` CLI for the `claudex` catalog. uv for `quota-pace.py`, which reads Quotio's history when the Quotio app records it |
 
@@ -43,9 +43,7 @@ instructions, not automatic hook enforcement.
 The `self-compact` skill compacts the conversation earlier than the host would,
 at a boundary the agent picks. A context budget reminder asks for it from 75%
 of the compaction window. In Claude Code the reminder comes from the
-`ramtoshiya-cc` hook. In the Hermes operator profile it comes from that
-profile's self-compact plugin, described in [Machine setup](setup.md). The
-agent finishes its step and writes a handoff note first.
+`ramtoshiya-cc` hook. The agent finishes its step and writes a handoff note first.
 
 - In BB a helper uses the installed `bb` CLI and Node.js to wait for the turn
   to end and request native compaction. It sends the resume only after the
@@ -53,11 +51,7 @@ agent finishes its step and writes a handoff note first.
   completion. In the `claude-code` provider, the agent launches the helper as a
   Bash background task with completion notifications. The helper allows input
   BB already accepted into the active turn before preparation. New input during
-  preparation still stops the helper. The helper also supports Hermes,
-  which launches it through the profile's `self_compact` tool. For Hermes it
-  also requires the one compaction that Hermes committed after the request,
-  because BB reports a refused or empty `/compact` as finished too. Other
-  providers, pending work, interactions, and missing proof keep the handoff
+  preparation still stops the helper. Other providers, pending work, interactions, and missing proof keep the handoff
   note and stop the helper. Queued work before the request stops it, but
   messages that the mail bb plugin holds in a thread's inbox do not count.
   Messages that queue after the compaction request
@@ -235,7 +229,6 @@ role:
 | --- | --- | --- | --- |
 | A bb thread that another thread started (it has a parent) | End the final answer with `Learning proposals` | `skill_view` only | Nothing |
 | A bb fork titled `Hermes review` | The fork's prompt | All three | Hermes's `background_review` origin, which adds its review-only checks and marks new skills as agent-created for the curator |
-| A session that the Hermes coder runtime started, which learns through Hermes itself | None | None | Nothing |
 | Any other session, in or outside bb, including a fork made for other work | Record lessons. In bb, also start review forks | All three, and `pending` for staged writes | `foreground` |
 
 The command needs Hermes's `hermes` command, on `PATH` or at

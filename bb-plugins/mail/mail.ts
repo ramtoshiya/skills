@@ -115,27 +115,10 @@ export function nestLogicalParent(metadata: unknown): string | null {
 }
 
 export const INBOX_REASON = "Mail inbox: delivered when this thread's next turn starts.";
-export const BUSY_REASON = "Mail: delivered when this thread's current turn ends, as a turn of its own.";
 
 export type DispatchDecision = { action: "proceed" } | { action: "wait"; reason: string };
 
 export const INBOX_SUBMISSION = { kind: "inbox" } as const;
-
-/**
- * bb's ACP bridge steers a running turn by cancelling it and sending the message again. Hermes discards a
- * cancelled turn that has not started yet, so a message steered in at that moment takes the user's message with it.
- */
-export function steersByCancel(providerId: string): boolean {
-  return providerId.startsWith("acp-");
-}
-
-function releaseAttempt(providerId: string): DispatchFacts["attempt"] {
-  return steersByCancel(providerId) ? "start-turn" : "join-turn";
-}
-
-export function releaseEvent(providerId: string): "thread.active" | "thread.idle" {
-  return steersByCancel(providerId) ? "thread.idle" : "thread.active";
-}
 
 export type Initiator = "user" | "agent" | "system";
 
@@ -144,7 +127,6 @@ export interface DispatchFacts {
   initiator: Initiator | "mixed";
   experimental_submission: { pluginId: string } | null;
   queuedMessages: ReadonlyArray<QueueRow>;
-  thread: { providerId: string };
 }
 
 export interface QueueRow {
@@ -164,12 +146,8 @@ export interface InboxMemory {
 }
 
 export function inboxDecision(facts: DispatchFacts, mailPluginId: string, memory: InboxMemory): DispatchDecision {
-  const { providerId } = facts.thread;
-  if (steersByCancel(providerId) && facts.attempt === "join-turn") {
-    return { action: "wait", reason: BUSY_REASON };
-  }
   const waits = (row: QueueRow) =>
-    (heldByMail(row, mailPluginId) || memory.held.has(row.id)) && !(facts.attempt === releaseAttempt(providerId) && memory.releasable.has(row.id));
+    (heldByMail(row, mailPluginId) || memory.held.has(row.id)) && !(facts.attempt === "join-turn" && memory.releasable.has(row.id));
   const inbox =
     facts.queuedMessages.length > 0 ? facts.queuedMessages.every(waits) : facts.experimental_submission?.pluginId === mailPluginId;
   return inbox ? { action: "wait", reason: INBOX_REASON } : { action: "proceed" };
@@ -204,9 +182,6 @@ const itemSchema = z.object({
   command: z.string().optional(),
   exitCode: z.number().nullable().optional(),
   aggregatedOutput: z.string().nullable().optional(),
-  arguments: z.object({ action: z.string().optional(), resume: z.boolean().optional() }).passthrough().optional().catch(undefined),
-  result: z.string().nullable().optional().catch(undefined),
-  presentation: z.object({ title: z.string().optional() }).passthrough().optional().catch(undefined),
 });
 const eventSchema = z.object({
   type: z.string(),
@@ -242,21 +217,16 @@ export function lastTurnItems(eventsNewestFirst: readonly unknown[]): Item[] {
 }
 
 const SELF_COMPACT_RUN = /bb-compact\.mjs["']?\s+run\b/;
-const HERMES_SCHEDULED = /\*\*status:\*\*\s*scheduled\b/;
 
-/**
- * Claude Code runs the helper as a command. Hermes calls its self_compact tool, which only schedules the compaction.
- * With `resume: false` the child then waits for the user, so its completion is real.
- */
+/** With `--no-resume` the child waits for the user after compacting, so its completion is real. */
 export function launchedSelfCompaction(items: readonly Item[]): boolean {
-  return items.some((item) =>
-    item.type === "commandExecution"
-      ? item.exitCode === 0 && item.command !== undefined && SELF_COMPACT_RUN.test(item.command) && !item.command.includes("--no-resume")
-      : item.type === "toolCall" &&
-        item.presentation?.title === "self_compact" &&
-        item.arguments?.action === "compact" &&
-        item.arguments.resume !== false &&
-        HERMES_SCHEDULED.test(item.result ?? ""),
+  return items.some(
+    (item) =>
+      item.type === "commandExecution" &&
+      item.exitCode === 0 &&
+      item.command !== undefined &&
+      SELF_COMPACT_RUN.test(item.command) &&
+      !item.command.includes("--no-resume"),
   );
 }
 
