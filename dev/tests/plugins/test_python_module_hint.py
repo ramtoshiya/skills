@@ -27,6 +27,14 @@ class PythonModuleHintTests(unittest.TestCase):
         self.assertIn("`ramtoshiya_missing_module`", context)
         self.assertIn("uv run --with PACKAGE==VERSION python", context)
 
+    def test_missing_module_in_failed_bash_command_points_at_uv(self):
+        error = "Exit code 1\n" + failed_import("ramtoshiya_missing_module")
+        output = run_hook(json.dumps({"hook_event_name": "PostToolUseFailure", "tool_name": "Bash",
+                                      "tool_input": {"command": "python3 -c 'import ramtoshiya_missing_module'"},
+                                      "error": error}))
+        self.assertEqual(output and output["hookEventName"], "PostToolUseFailure")
+        self.assertIn("`ramtoshiya_missing_module`", output["additionalContext"])
+
     def test_other_output_and_unreadable_input_add_nothing(self):
         for payload in (json.dumps({"tool_name": "Bash", "tool_response": {"stdout": "ok"}}),
                         json.dumps(["not", "an", "event"]), "not json"):
