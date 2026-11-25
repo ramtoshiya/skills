@@ -4,12 +4,11 @@ import subprocess
 import sys
 import unittest
 
-SCRIPT = Path(__file__).resolve().parents[3] / "plugins/ramtoshiya/hooks/python-module-hint.py"
+HOOK = [str(Path(__file__).resolve().parents[3] / "plugins/ramtoshiya/hooks/ramtoshiya-hooks"), "module-hint"]
 
 
 def run_hook(payload):
-    result = subprocess.run([sys.executable, str(SCRIPT)], input=payload, text=True,
-                            capture_output=True, check=True)
+    result = subprocess.run(HOOK, input=payload, text=True, capture_output=True, check=True)
     return json.loads(result.stdout)["hookSpecificOutput"] if result.stdout else None
 
 

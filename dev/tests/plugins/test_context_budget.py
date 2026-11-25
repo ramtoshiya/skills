@@ -2,11 +2,10 @@ import json
 import os
 from pathlib import Path
 import subprocess
-import sys
 import tempfile
 import unittest
 
-SCRIPT = Path(__file__).resolve().parents[3] / "plugins/ramtoshiya-cc/hooks/context-budget.py"
+HOOK = [str(Path(__file__).resolve().parents[3] / "plugins/ramtoshiya-cc/hooks/ramtoshiya-hooks"), "context-budget"]
 
 
 def assistant(tokens, sidechain=False):
@@ -44,7 +43,7 @@ class ContextBudgetTests(unittest.TestCase):
     def run_hook(self, event="PostToolUse", env=None, **extra):
         payload = {"session_id": "s1", "transcript_path": str(self.transcript), "cwd": str(self.project),
                    "scratchpad_dir": str(self.scratch), "hook_event_name": event, **extra}
-        result = subprocess.run([sys.executable, str(SCRIPT)], input=json.dumps(payload),
+        result = subprocess.run(HOOK, input=json.dumps(payload),
                                 capture_output=True, text=True, env=env or self.env, check=True)
         if not result.stdout.strip():
             return None
@@ -122,7 +121,7 @@ class ContextBudgetTests(unittest.TestCase):
         self.assertIsNone(self.run_hook(event="SessionStart", source="resume"))
 
     def test_bad_input_prints_nothing(self):
-        result = subprocess.run([sys.executable, str(SCRIPT)], input="not json",
+        result = subprocess.run(HOOK, input="not json",
                                 capture_output=True, text=True, env=self.env, check=True)
         self.assertEqual(result.stdout, "")
 
