@@ -14,12 +14,17 @@ registered, so no agent runs it.
 | Hermes skill usage | After each Skill tool call | `ramtoshiya-cc` |
 
 Claude Code runs the hooks through `hooks/hooks.json`. The package and
-Python guard and the commit attribution guard are the `guard` and
-`commit-trailer` subcommands of one Go program,
-`plugins/ramtoshiya/hooks/ramtoshiya-hooks`, which Claude Code runs directly. It is
-built from the Go source in that directory, and Git does not track it.
-[Machine setup](setup.md) describes the build. The other hooks are Python
-scripts that use only the standard library, and each runs as:
+Python guard, the commit attribution guard, the Python module hint, and the
+context budget are the `guard`, `commit-trailer`, `module-hint`, and
+`context-budget` subcommands of one Go program, `ramtoshiya-hooks`, which
+Claude Code runs directly. It is built from the Go source in
+`plugins/ramtoshiya/hooks` into the `hooks` directory of both plugins, and Git
+does not track it. [Machine setup](setup.md) describes the build. A running
+session keeps the hook commands it read when it started, so
+`python-module-hint.py` and `ramtoshiya-cc/hooks/context-budget.py` stay at
+their earlier paths and hand each call to the same subcommands. The Hermes
+learning hooks and the Git hygiene check are Python scripts that use only the
+standard library, and each runs as:
 
 ```sh
 uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python <hook>
@@ -160,8 +165,7 @@ hook process.
 
 ## Python module hint
 
-`plugins/ramtoshiya/hooks/python-module-hint.py` reads a shell command's
-output after it runs. When the output contains `ModuleNotFoundError: No module
+The `module-hint` subcommand reads a shell command's output after it runs. When the output contains `ModuleNotFoundError: No module
 named '<module>'`, it tells the agent to rerun the command as
 `uv run --with PACKAGE==VERSION python SCRIPT ARGS`. Agents otherwise tend to
 report a script as unrunnable when the system Python lacks one of its
@@ -248,8 +252,7 @@ command, so a bug in the hook cannot block every shell call.
 
 ## Context budget
 
-`plugins/ramtoshiya-cc/hooks/context-budget.py` lets the agent compact at a
-point it chooses instead of in the middle of a step. Hook input does not
+The `context-budget` subcommand lets the agent compact at a point it chooses instead of in the middle of a step. Hook input does not
 include the context size, so after each tool call and each prompt the hook
 reads the token usage of the last main-conversation reply from the transcript.
 It compares that with the numeric `autoCompactWindow` setting, taken from the

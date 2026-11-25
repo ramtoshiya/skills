@@ -48,9 +48,16 @@ func shellCall(p payload) (call ShellCall, ok bool, err error) {
 	return call, true, err
 }
 
-func truthyString(raw json.RawMessage) (string, error) {
+func falsy(raw json.RawMessage) bool {
 	switch strings.TrimSpace(string(raw)) {
 	case "", "null", `""`, "0", "false", "[]", "{}":
+		return true
+	}
+	return false
+}
+
+func truthyString(raw json.RawMessage) (string, error) {
+	if falsy(raw) {
 		return "", nil
 	}
 	var s string
@@ -61,26 +68,33 @@ func truthyString(raw json.RawMessage) (string, error) {
 }
 
 type Output struct {
-	Deny string
+	HookEventName            string `json:"hookEventName"`
+	PermissionDecision       string `json:"permissionDecision,omitempty"`
+	PermissionDecisionReason string `json:"permissionDecisionReason,omitempty"`
+	AdditionalContext        string `json:"additionalContext,omitempty"`
 }
 
-type permissionOutput struct {
-	HookSpecificOutput struct {
-		HookEventName            string `json:"hookEventName"`
-		PermissionDecision       string `json:"permissionDecision"`
-		PermissionDecisionReason string `json:"permissionDecisionReason"`
-	} `json:"hookSpecificOutput"`
+func deny(reason string) Output {
+	if reason == "" {
+		return Output{}
+	}
+	return Output{HookEventName: "PreToolUse", PermissionDecision: "deny", PermissionDecisionReason: reason}
+}
+
+func addContext(event, text string) Output {
+	if text == "" {
+		return Output{}
+	}
+	return Output{HookEventName: event, AdditionalContext: text}
 }
 
 func (o Output) write(w io.Writer) error {
-	if o.Deny == "" {
+	if o.HookEventName == "" {
 		return nil
 	}
-	var out permissionOutput
-	out.HookSpecificOutput.HookEventName = "PreToolUse"
-	out.HookSpecificOutput.PermissionDecision = "deny"
-	out.HookSpecificOutput.PermissionDecisionReason = o.Deny
 	enc := json.NewEncoder(w)
 	enc.SetEscapeHTML(false)
-	return enc.Encode(out)
+	return enc.Encode(struct {
+		HookSpecificOutput Output `json:"hookSpecificOutput"`
+	}{o})
 }

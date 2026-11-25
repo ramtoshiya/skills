@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python \"${CLAUDE_PLUGIN_ROOT}/hooks/python-module-hint.py\"",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/ramtoshiya-hooks\" module-hint",
             "timeout": 5
           }
         ]

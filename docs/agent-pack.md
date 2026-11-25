@@ -242,8 +242,8 @@ the mode of the thread that started them.
 
 ## Requirements
 
-The package guard and the commit attribution guard are a Go program that you
-build in a clone of this repository with [mise](https://mise.jdx.dev/getting-started.html),
+The package guard, the commit attribution guard, the Python module hint, and
+the context budget hook are one Go program that you build in a clone of this repository with [mise](https://mise.jdx.dev/getting-started.html),
 as Install describes. The other hooks run with
 [uv](https://docs.astral.sh/uv/getting-started/installation/)
 in offline mode, so a uv-managed Python 3.11 or newer must already be installed
@@ -277,8 +277,8 @@ Install [Claude Code](https://code.claude.com/docs/en/setup) from its own
 instructions.
 
 Git does not track the hook binary, so install from a local clone where it is
-built. A marketplace added straight from GitHub has no binary, and its guard
-hooks fail on every shell command. Clone the repository and build the binary:
+built. A marketplace added straight from GitHub has no binary, and its hooks
+fail on every call. Clone the repository and build the binary:
 
 ```sh
 git clone https://github.com/ramtoshiya/skills.git
@@ -435,12 +435,12 @@ plugins, also follow [Third-party skills](upstream-skills.md).
 .claude-plugin/marketplace.json            Marketplace read by Claude Code and Codex
 plugins/ramtoshiya/.claude-plugin/plugin.json  Plugin manifest
 plugins/ramtoshiya/skills/                     Skills
-plugins/ramtoshiya/hooks/*.go, guard/, shell/  Go source of the package and commit attribution guards
-plugins/ramtoshiya/hooks/ramtoshiya-hooks      The guards' binary, built from that source and ignored by Git
-plugins/ramtoshiya/hooks/python-module-hint.py     uv hint after a failed import
+plugins/ramtoshiya/hooks/*.go, guard/, shell/  Go source of the hook program
+plugins/ramtoshiya/hooks/ramtoshiya-hooks      The hook binary, built from that source and ignored by Git
 plugins/ramtoshiya/hooks/git-hygiene-guard.py      Stop check, not registered
 plugins/ramtoshiya/hooks/hooks.json            Hook registration
 plugins/ramtoshiya-cc/                         Skills and hooks of the `ramtoshiya-cc` plugin
+plugins/ramtoshiya-cc/hooks/ramtoshiya-hooks   The same hook binary, built for `ramtoshiya-cc`
 plugins/ramtoshiya-cc/hermes-learning/         Hermes learning command, hooks, and review prompt
 ```
 

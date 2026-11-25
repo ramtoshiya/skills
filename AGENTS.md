@@ -51,8 +51,9 @@ Agent-facing docs are this file and the `SKILL.md` files.
   plugins, documented in `docs/agent-pack.md`. Hook rules live only in the
   hook program and scripts. `hooks/hooks.json` only registers events and
   must not add or change rules.
-- The package guard and the commit attribution guard are one Go program in
-  `plugins/ramtoshiya/hooks`, built into a binary that Git ignores. It takes
+- The package guard, commit attribution guard, Python module hint, and
+  context budget hooks are one Go program in `plugins/ramtoshiya/hooks`,
+  built into each plugin's `hooks` directory as a binary that Git ignores. It takes
   exactly two modules, `mvdan.cc/sh/v3` and `github.com/BurntSushi/toml`, at
   exact versions. A new module or version follows the exact-pin and three-day
   release-age rules in Standalone CLIs.

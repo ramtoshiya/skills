@@ -201,8 +201,9 @@ class AgentSyncTests(unittest.TestCase):
         return operation, operation.process(apply=apply)
 
     def use_hook_plugin(self, source):
+        for output in sync.hook_binary.OUTPUTS:
+            (self.root / output).parent.mkdir(parents=True, exist_ok=True)
         hooks = self.root / "plugins/ramtoshiya/hooks"
-        hooks.mkdir(parents=True, exist_ok=True)
         (hooks / "main.go").write_text(source)
         (self.root / ".gitignore").write_text("/plugins/*/hooks/ramtoshiya-hooks\n/plugins/*/hooks/.ramtoshiya-hooks.*\n")
         self.set_entries([{"name": "example", "source": "./plugins/ramtoshiya"}])

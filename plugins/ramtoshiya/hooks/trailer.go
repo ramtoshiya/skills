@@ -43,11 +43,7 @@ func runTrailer(p payload) (Output, error) {
 	if err != nil || !ok {
 		return Output{}, err
 	}
-	found := trailerReason(call.Script, call.Dir)
-	if found == "" {
-		return Output{}, nil
-	}
-	return Output{Deny: found}, nil
+	return deny(trailerReason(call.Script, call.Dir)), nil
 }
 
 func trailerReason(command, dir string) string {
@@ -99,11 +95,7 @@ func checkSize(name string, size, soft int64) bool {
 	if !within {
 		limit = fmt.Sprintf("the hard limit of %d bytes, so it was not checked", int64(hardLimit))
 	}
-	state := os.Getenv("XDG_STATE_HOME")
-	if state == "" {
-		state = filepath.Join(homeDir(), ".local/state")
-	}
-	dir := filepath.Join(state, "ramtoshiya")
+	dir := stateDir()
 	if os.MkdirAll(dir, 0o755) == nil {
 		if log, err := os.OpenFile(filepath.Join(dir, "size-warnings.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
 			fmt.Fprintf(log, "%s warning: %s is %d bytes, over %s\n", time.Now().UTC().Format("2006-01-02T15:04:05.000Z"), name, size, limit)
@@ -119,6 +111,14 @@ func homeDir() string {
 	}
 	home, _ := os.UserHomeDir()
 	return home
+}
+
+func stateDir() string {
+	state := os.Getenv("XDG_STATE_HOME")
+	if state == "" {
+		state = joinPath(homeDir(), ".local/state")
+	}
+	return joinPath(state, "ramtoshiya")
 }
 
 func expandUser(path string) string {

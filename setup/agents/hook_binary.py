@@ -10,7 +10,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = "plugins/ramtoshiya/hooks"
-OUTPUTS = ("plugins/ramtoshiya/hooks/ramtoshiya-hooks",)
+OUTPUTS = ("plugins/ramtoshiya/hooks/ramtoshiya-hooks", "plugins/ramtoshiya-cc/hooks/ramtoshiya-hooks")
 
 
 class BuildError(RuntimeError):

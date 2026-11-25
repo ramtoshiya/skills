@@ -63,8 +63,10 @@ install them without applying the machine setup. Loading the
 checkout puts installed tools on mise's activated `PATH` but declares no
 environment variables.
 
-The shell hooks are a Go program in `plugins/ramtoshiya/hooks`. The build
-writes it to `plugins/ramtoshiya/hooks/ramtoshiya-hooks`, which Git ignores.
+The hooks that run on every tool call are a Go program in
+`plugins/ramtoshiya/hooks`. The build writes it to
+`plugins/ramtoshiya/hooks/ramtoshiya-hooks` and
+`plugins/ramtoshiya-cc/hooks/ramtoshiya-hooks`, which Git ignores.
 `agents:sync` builds it before it installs any plugin, and it installs
 nothing when the build fails.
 `agents:status` builds into a temporary directory and reports drift when the

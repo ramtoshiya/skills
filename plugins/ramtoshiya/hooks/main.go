@@ -18,7 +18,9 @@ type hook struct {
 
 var hooks = map[string]hook{
 	"commit-trailer": {runTrailer, Output{}},
-	"guard":          {runGuard, Output{Deny: couldNotVerify}},
+	"context-budget": {runBudget, Output{}},
+	"guard":          {runGuard, deny(couldNotVerify)},
+	"module-hint":    {runModuleHint, Output{}},
 }
 
 func runGuard(p payload) (Output, error) {
@@ -32,8 +34,8 @@ func runGuard(p payload) (Output, error) {
 			return Output{}, err
 		}
 	}
-	deny, err := guard.Check(call.Script, shell.State{Dir: shell.NewDir(shell.Absolute(dir)), Env: shell.EnvFrom(os.Environ())})
-	return Output{Deny: deny}, err
+	reason, err := guard.Check(call.Script, shell.State{Dir: shell.NewDir(shell.Absolute(dir)), Env: shell.EnvFrom(os.Environ())})
+	return deny(reason), err
 }
 
 func dispatch(h hook, in io.Reader) (out Output) {
