@@ -24,6 +24,7 @@ import level  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 IGNORED = {".git", "__pycache__", ".DS_Store", ".in_use"}
+STATE_PREFIX = "claude:"
 PREFERENCES_BEGIN = b"<!-- BEGIN ramtoshiya:preferences -->"
 PREFERENCES_END = b"<!-- END ramtoshiya:preferences -->"
 PREFERENCES_HINT = re.compile(rb"ramtoshiya:preferences|<!--\s*(?:BEGIN|END)\s+ramtoshiya\b", re.IGNORECASE)
@@ -41,52 +42,6 @@ def run(*args):
     if result.returncode:
         raise Conflict(f"{args[0]} failed: {(result.stderr or result.stdout).strip()}")
     return result.stdout
-
-
-class CodexAppServer:
-    def __enter__(self):
-        self.process = subprocess.Popen(["codex", "app-server"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                        stderr=subprocess.DEVNULL, text=True)
-        self.requests = 0
-        self.call("initialize", {"clientInfo": {"name": "ramtoshiya-agents-sync", "version": "1"}})
-        self.send({"method": "initialized"})
-        return self
-
-    def __exit__(self, *_):
-        self.process.stdin.close()
-        try:
-            self.process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            self.process.kill()
-            self.process.wait()
-        self.process.stdout.close()
-
-    def send(self, message):
-        self.process.stdin.write(json.dumps(message) + "\n")
-        self.process.stdin.flush()
-
-    def call(self, method, params):
-        self.requests += 1
-        self.send({"id": self.requests, "method": method, "params": params})
-        for line in self.process.stdout:
-            message = json.loads(line)
-            if message.get("id") != self.requests:
-                continue
-            if "error" in message:
-                raise Conflict(f"codex app-server {method} failed: {message['error'].get('message')}")
-            return message["result"]
-        raise Conflict(f"codex app-server exited during {method}")
-
-    def plugin_hooks(self, plugin_id, cwd):
-        data = self.call("hooks/list", {"cwds": [str(cwd)]})["data"]
-        return [hook for entry in data for hook in entry["hooks"] if hook.get("pluginId") == plugin_id]
-
-    def trust(self, hooks):
-        approvals = {hook["key"]: {"trusted_hash": hook["currentHash"]} for hook in hooks}
-        self.call("config/batchWrite", {
-            "edits": [{"keyPath": "hooks.state", "value": approvals, "mergeStrategy": "upsert"}],
-            "reloadUserConfig": True,
-        })
 
 
 def read_json(path, default=None):
@@ -498,10 +453,7 @@ class Sync:
         root = root.resolve()
         self.root = root
         home = Path.home()
-        self.homes = {
-            "claude": Path(os.environ.get("CLAUDE_CONFIG_DIR", home / ".claude")),
-            "codex": Path(os.environ.get("CODEX_HOME", home / ".codex")),
-        }
+        self.claude_home = Path(os.environ.get("CLAUDE_CONFIG_DIR", home / ".claude"))
         self.state_dir = Path(os.environ.get("XDG_STATE_HOME", home / ".local/state")) / "ramtoshiya-agents"
         self.state_path = self.state_dir / "state.json"
         self.settings_only = settings_only
@@ -510,7 +462,6 @@ class Sync:
             if self.state.get("version") != 1:
                 raise Conflict("Unsupported ownership state version")
             self.marketplace = read_json(root / ".claude-plugin/marketplace.json")
-            self.policy = read_json(root / "setup/agents/hosts.json")
             self.sources = Sources(root, self.state_dir)
         self.results = []
 
@@ -521,40 +472,27 @@ class Sync:
         if read_json(self.state_path) != self.state:
             write_json(self.state_path, self.state)
 
-    def owned(self, host, name):
-        return self.state["packages"].get(f"{host}:{name}")
+    def owned(self, name):
+        return self.state["packages"].get(STATE_PREFIX + name)
 
-    def remember(self, host, name, path, package, **extra):
-        self.state["packages"][f"{host}:{name}"] = {
+    def remember(self, name, path, package, **extra):
+        self.state["packages"][STATE_PREFIX + name] = {
             "path": str(path), "fingerprint": fingerprint(files(path)), "pin": package.ref,
             **extra,
         }
         self.save()
 
-    def check_owned(self, host, name, path):
-        previous = self.owned(host, name)
+    def check_owned(self, name, path):
+        previous = self.owned(name)
         if previous and (previous["path"] != str(path) or previous["fingerprint"] != fingerprint(files(path))):
             raise Conflict(f"Locally changed managed installation: {path}")
         return previous
 
-    def native_files(self, entry, path, expected):
-        actual = files(path)
-        # Codex synthesizes a manifest for marketplace skill collections.
-        manifest = ".codex-plugin/plugin.json"
-        if manifest not in expected and manifest in actual:
-            data = read_json(path / manifest)
-            if data.get("name") != entry["name"] or data.get("skills") != entry.get("skills"):
-                raise Conflict(f"Unexpected generated manifest in {path}")
-            if any(key in data for key in ["hooks", "mcpServers", "apps", "commands", "agents"]):
-                raise Conflict(f"Unexpected capabilities in {path / manifest}")
-            del actual[manifest]
-        return actual
-
-    def adopt_native(self, host, entry, path, package, installed_ref, fetch):
+    def adopt_native(self, entry, path, package, installed_ref, fetch):
         expected = package.expected
-        if self.native_files(entry, path, expected) == expected:
+        if files(path) == expected:
             return
-        previous = self.check_owned(host, entry["name"], path)
+        previous = self.check_owned(entry["name"], path)
         if previous:
             return
         refs = [package.ref]
@@ -570,127 +508,79 @@ class Sync:
                 expected = old.expected
             except Conflict:
                 continue
-            if self.native_files(entry, path, expected) == expected:
+            if files(path) == expected:
                 return
         raise Conflict(f"Unrecognized or modified installation: {path}. Preserve local edits before syncing")
 
-    def marketplace_setup(self, host, apply):
-        if host == "claude":
-            marketplaces = json.loads(run(host, "plugin", "marketplace", "list", "--json"))
-            existing = next((row for row in marketplaces if row["name"] == self.marketplace["name"]), None)
-            location = existing.get("path") or existing.get("installLocation") if existing else None
-        else:
-            marketplaces = json.loads(run(host, "plugin", "marketplace", "list", "--json"))["marketplaces"]
-            existing = next((row for row in marketplaces if row["name"] == self.marketplace["name"]), None)
-            location = existing.get("root") if existing else None
+    def marketplace_setup(self, apply):
+        marketplaces = json.loads(run("claude", "plugin", "marketplace", "list", "--json"))
+        existing = next((row for row in marketplaces if row["name"] == self.marketplace["name"]), None)
+        location = existing.get("path") or existing.get("installLocation") if existing else None
         if existing and Path(location).resolve() != self.root:
             raise Conflict(f"Marketplace {self.marketplace['name']} is not this checkout: {location}")
         if not existing:
             if not apply:
                 raise Conflict("Local marketplace is missing, run agents:sync")
-            run(host, "plugin", "marketplace", "add", str(self.root))
-        if host == "claude":
-            self.inventory = json.loads(run(host, "plugin", "list", "--json"))
-        else:
-            self.inventory = json.loads(run(host, "plugin", "list", "--json", "--marketplace", self.marketplace["name"]))["installed"]
+            run("claude", "plugin", "marketplace", "add", str(self.root))
+        self.inventory = json.loads(run("claude", "plugin", "list", "--json"))
 
-    def installed(self, host, entry):
+    def installed(self, entry):
         selector = entry["name"] + "@" + self.marketplace["name"]
-        if host == "claude":
-            records = [row for row in self.inventory if row["id"] == selector and row["scope"] == "user"]
-            if not records:
-                return None, False, None
-            row = records[0]
-            path = Path(row.get("readFromFolder") or row["installPath"])
-            data = read_json(self.homes[host] / "plugins/installed_plugins.json", {}).get("plugins", {})
-            metadata = next((x for x in data.get(selector, []) if x.get("scope") == "user"), {})
-            return path, row["enabled"], metadata.get("gitCommitSha")
-        row = next((row for row in self.inventory if row["pluginId"] == selector and row.get("installed")), None)
-        if not row:
+        records = [row for row in self.inventory if row["id"] == selector and row["scope"] == "user"]
+        if not records:
             return None, False, None
-        path = self.homes[host] / "plugins/cache" / self.marketplace["name"] / entry["name"] / row["version"]
-        return path, row["enabled"], None
+        row = records[0]
+        path = Path(row.get("readFromFolder") or row["installPath"])
+        data = read_json(self.claude_home / "plugins/installed_plugins.json", {}).get("plugins", {})
+        metadata = next((x for x in data.get(selector, []) if x.get("scope") == "user"), {})
+        return path, row["enabled"], metadata.get("gitCommitSha")
 
-    def native(self, host, entry, package, apply):
+    def native(self, entry, package, apply):
         name = entry["name"]
         selector = name + "@" + self.marketplace["name"]
-        path, enabled, ref = self.installed(host, entry)
+        path, enabled, ref = self.installed(entry)
         expected = package.expected
-        matches = path is not None and path.is_dir() and self.native_files(entry, path, expected) == expected
+        matches = path is not None and path.is_dir() and files(path) == expected
         if path and path.exists() and path.resolve() != package.root.resolve():
-            self.adopt_native(host, entry, path, package, ref, apply)
+            self.adopt_native(entry, path, package, ref, apply)
         if not apply:
             if not (matches and enabled):
                 return "drift", "missing, disabled, or outdated plugin"
-            untrusted = self.codex_hooks_left_untrusted(host, selector, path, approve=False)
-            if untrusted:
-                return "drift", f"Codex has not trusted hooks {untrusted}, run agents:sync"
             return "ok", package.ref[:12]
         changed = not matches or not enabled
         if not matches:
-            if host == "claude":
-                command = "update" if path else "install"
-                run(host, "plugin", command, selector, "--scope", "user")
-            else:
-                run(host, "plugin", "add", selector)
-            self.marketplace_setup(host, False)
-            path, enabled, _ = self.installed(host, entry)
+            run("claude", "plugin", "update" if path else "install", selector, "--scope", "user")
+            self.marketplace_setup(False)
+            path, enabled, _ = self.installed(entry)
         if not enabled:
-            if host == "claude":
-                run(host, "plugin", "enable", selector, "--scope", "user")
-            elif matches:
-                run(host, "plugin", "add", selector)
+            run("claude", "plugin", "enable", selector, "--scope", "user")
         if changed:
-            self.marketplace_setup(host, False)
-            path, enabled, _ = self.installed(host, entry)
-        if not path or not path.is_dir() or self.native_files(entry, path, expected) != expected or not enabled:
+            self.marketplace_setup(False)
+            path, enabled, _ = self.installed(entry)
+        if not path or not path.is_dir() or files(path) != expected or not enabled:
             raise Conflict(f"Native installer did not reconcile {selector}. Close active sessions and retry, do not edit caches")
-        self.remember(host, name, path, package)
-        untrusted = self.codex_hooks_left_untrusted(host, selector, path, approve=True)
-        if untrusted:
-            raise Conflict(f"Codex still does not trust hooks {untrusted} of {selector} after approval")
+        self.remember(name, path, package)
         return "updated" if changed else "ok", "restart the agent" if changed else package.ref[:12]
 
-    def codex_hooks_left_untrusted(self, host, selector, path, approve):
-        declared = read_json(path / "hooks/hooks.json", {}).get("hooks") if host == "codex" else None
-        if not declared:
-            return []
-        with CodexAppServer() as server:
-            hooks = server.plugin_hooks(selector, self.root)
-            if not hooks:
-                raise Conflict(f"Codex lists none of the hooks in {path / 'hooks/hooks.json'}")
-            untrusted = [hook for hook in hooks if hook["trustStatus"] in {"untrusted", "modified"}]
-            if untrusted and approve:
-                server.trust(untrusted)
-                untrusted = [hook for hook in server.plugin_hooks(selector, self.root)
-                             if hook["trustStatus"] in {"untrusted", "modified"}]
-            return [hook["key"] for hook in untrusted]
+    def managed_names(self):
+        return [key.removeprefix(STATE_PREFIX) for key in self.state["packages"] if key.startswith(STATE_PREFIX)]
 
-    def retire(self, host, names, apply, selected=None):
-        retiring = {
-            key for key in self.state["packages"]
-            if key.split(":", 1)[0] == host and key.split(":", 1)[1] not in names
-            and (selected is None or key.split(":", 1)[1] in selected)
-        }
-        for key, previous in list(self.state["packages"].items()):
-            if key not in retiring:
+    def retire(self, names, apply, selected=None):
+        for name in self.managed_names():
+            if name in names or (selected is not None and name not in selected):
                 continue
-            _, name = key.split(":", 1)
+            previous = self.owned(name)
             try:
-                path = Path(previous["path"])
-                self.check_owned(host, name, path)
+                self.check_owned(name, Path(previous["path"]))
                 if not apply:
-                    self.record(host, name, "drift", "no longer declared for this host")
+                    self.record("claude", name, "drift", "no longer declared in the marketplace")
                     continue
-                if host == "claude":
-                    run(host, "plugin", "uninstall", name + "@" + self.marketplace["name"], "--scope", "user", "--keep-data")
-                else:
-                    run(host, "plugin", "remove", name + "@" + self.marketplace["name"])
-                del self.state["packages"][key]
+                run("claude", "plugin", "uninstall", name + "@" + self.marketplace["name"], "--scope", "user", "--keep-data")
+                del self.state["packages"][STATE_PREFIX + name]
                 self.save()
-                self.record(host, name, "updated", "retired managed registration, source checkouts retained")
+                self.record("claude", name, "updated", "retired managed registration, source checkouts retained")
             except ERRORS as error:
-                self.record(host, name, "conflict", str(error))
+                self.record("claude", name, "conflict", str(error))
 
     def build_hooks(self, apply):
         try:
@@ -704,11 +594,11 @@ class Sync:
         except (hook_binary.BuildError, OSError, subprocess.SubprocessError) as error:
             return "conflict", str(error)
 
-    def process(self, hosts, apply=False, selected=None):
+    def process(self, apply=False, selected=None):
         if selected is not None:
             selected = set(selected)
             known = {entry["name"] for entry in self.marketplace["plugins"]}
-            known.update(key.split(":", 1)[1] for key in self.state["packages"])
+            known.update(self.managed_names())
             if selected - known:
                 raise Conflict(f"Unknown plugins: {', '.join(sorted(selected - known))}")
         chosen = [entry for entry in self.marketplace["plugins"] if selected is None or entry["name"] in selected]
@@ -718,33 +608,28 @@ class Sync:
             self.record("build", "ramtoshiya-hooks", status, detail)
             if apply and status == "conflict":
                 return self.results
-        for host in hosts:
-            if not shutil.which(host):
-                self.record(host, "host", "absent", "executable not on PATH")
-                continue
+        if not shutil.which("claude"):
+            self.record("claude", "host", "absent", "executable not on PATH")
+            return self.results
+        try:
+            self.marketplace_setup(apply)
+        except ERRORS as error:
+            self.record("claude", "marketplace", "conflict", str(error))
+            return self.results
+        names = set()
+        for entry in chosen:
+            name = entry["name"]
+            if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", name):
+                raise Conflict(f"Invalid plugin name: {name}")
+            names.add(name)
             try:
-                self.marketplace_setup(host, apply)
+                package = self.sources.package(entry, fetch=apply)
+                package.check()
+                status, detail = self.native(entry, package, apply)
+                self.record("claude", name, status, detail)
             except ERRORS as error:
-                self.record(host, "marketplace", "conflict", str(error))
-                continue
-            names = set()
-            for entry in self.marketplace["plugins"]:
-                name = entry["name"]
-                if selected is not None and name not in selected:
-                    continue
-                if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", name):
-                    raise Conflict(f"Invalid plugin name: {name}")
-                if host not in self.policy["plugins"].get(name, self.policy["hosts"]):
-                    continue
-                names.add(name)
-                try:
-                    package = self.sources.package(entry, fetch=apply)
-                    package.check()
-                    status, detail = self.native(host, entry, package, apply)
-                    self.record(host, name, status, detail)
-                except ERRORS as error:
-                    self.record(host, name, "conflict", str(error))
-            self.retire(host, names, apply, selected)
+                self.record("claude", name, "conflict", str(error))
+        self.retire(names, apply, selected)
         return self.results
 
     @contextmanager
@@ -763,7 +648,6 @@ class Sync:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["status", "sync"])
-    parser.add_argument("--host", action="append", choices=["claude", "codex"])
     parser.add_argument("--plugin", action="append", help="check or sync only this plugin (repeatable)")
     parser.add_argument("--settings-only", action="store_true",
                         help="check or sync registered Claude settings and instructions only")
@@ -771,16 +655,13 @@ def main():
     args = parser.parse_args()
     if args.settings_only and args.plugin:
         parser.error("--settings-only cannot be combined with --plugin")
-    if args.settings_only and args.host and "claude" not in args.host:
-        parser.error("--settings-only requires --host claude, or omit --host")
     try:
         sync = Sync(settings_only=args.settings_only)
-        hosts = args.host or (["claude"] if args.settings_only else sync.policy["hosts"])
 
         def process(apply=False):
             if not args.settings_only:
-                sync.process(hosts, apply=apply, selected=args.plugin)
-            if args.plugin is None and "claude" in hosts:
+                sync.process(apply=apply, selected=args.plugin)
+            if args.plugin is None:
                 ClaudeSettings(sync.root, sync.record).process(apply=apply)
             return sync.results
 

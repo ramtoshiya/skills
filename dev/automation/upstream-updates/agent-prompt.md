@@ -48,7 +48,7 @@ the next run does not report it again.
 - Judge other new behavior case by case against the skill's purpose. This
   covers network calls, broader automatic triggering, new hooks, and new tools
   or runtimes. A hook you keep runs without anyone approving it, because
-  `main:sync` records Codex's trust for every hook of an installed entry. Read
+  `main:sync` installs every entry into Claude Code. Read
   each added or changed hook and the script it runs before you push. The existing customizations are earlier decisions of this kind.
   `test-audit` narrows when it triggers. `ouroboros-interview` leaves out the
   upstream root plugin, its server, and update checks.
@@ -95,8 +95,7 @@ the next run does not report it again.
    reports no conflict, because an upstream edit can undo a customization's
    intent without a conflict.
 4. If the shipped folder changed and has a plugin manifest with a `version`,
-   raise the version. Keep it the same in `.claude-plugin/plugin.json` and
-   `.codex-plugin/plugin.json`.
+   raise the version in `.claude-plugin/plugin.json`.
 5. Run the fork's checks from [Fork notes](#fork-notes). Fix failures that the
    merge caused.
 6. Commit. The merge message lists what you took, what you refused and why,
@@ -194,9 +193,6 @@ tried. The next daily check starts a new run for it.
    uncommitted changes or another operation in progress, leave that checkout
    alone. Wait 10 minutes, run `mise run main:sync` and `mise run main:status`
    again, and repeat up to 6 times. If it still fails, report its output.
-7. `main:sync` trusts the hooks of each installed entry in Codex, and
-   `mise run main:status` reports a hook Codex does not trust as drift.
-   Handle that drift like any other failure in step 6.
 
 ## Newsletter {:#newsletter}
 

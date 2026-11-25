@@ -64,18 +64,17 @@ commits, first in `pstack-mode`, then the pin here.
 
 ## Install
 
-To keep all installed supported hosts on the marketplace's approved pins, use
+To keep Claude Code on the marketplace's approved pins, use
 `mise run agents:status` and `mise run agents:sync` from a local checkout.
 [Agent plugins](agent-pack.md) describes the managed installation, including
 conflict handling. The commands below install individual
-entries in Claude Code and Codex without enrolling them in that workflow.
+entries without enrolling them in that workflow.
 
-Claude Code and Codex read the marketplace. After adding it as described in
-[Agent plugins](agent-pack.md), install each entry by name:
+After adding the marketplace as described in [Agent plugins](agent-pack.md),
+install each entry by name:
 
 ```sh
 claude plugin install mattpocock-productivity@ramtoshiya --scope user
-codex plugin add mattpocock-productivity@ramtoshiya
 ```
 
 A loose copy of the same skill makes it load twice, as described in
@@ -111,20 +110,16 @@ repository, commit the changes in the fork, and point the entry at the fork's
 commit. A whole upstream plugin that needs no changes belongs in its own
 marketplace, not here.
 
-Claude Code and Codex behaved like this in tests with Codex CLI
-0.158.0-alpha.2.1. Recheck when an entry does not load as expected:
+Claude Code behaved like this in tests. Recheck when an entry does not load
+as expected:
 
-- `path` must be a folder that contains skill folders. A path to a single skill
-  folder with `"skills": ["./"]` loads in Claude Code and loads nothing in
-  Codex.
+- `path` must be a folder that contains skill folders.
 - If the source folder has its own `plugin.json`, that file decides which
   skills load. The entry's `skills` list cannot narrow it: Claude Code adds the
   list to it. Choosing fewer skills needs a fork with an edited `plugin.json`.
-- Codex refuses an entry whose `name` differs from the `name` in the source's
-  `plugin.json`.
 - A `git-subdir` install copies only `path`. A `LICENSE` at the repository
   root is not in the installed copy unless the folder has its own.
-- Both agents install the whole `path` folder and load only the listed skills.
+- Claude Code installs the whole `path` folder and loads only the listed skills.
 
 ## Automatic updates
 
@@ -168,8 +163,8 @@ keeps the intent of each fork change unless upstream made the change
 unnecessary or conflicts with it, and records why in the fork's commit. It
 always refuses telemetry and judges other new behavior, such as network calls,
 broader triggering, or hooks, against the skill's purpose. A hook it keeps
-runs in Codex without a person's approval, because `main:sync` trusts the
-hooks it installs. It does not add new
+runs in Claude Code without a person's approval, because `main:sync` installs
+it. It does not add new
 upstream skills. It runs the fork's checks, pins the merge, runs this
 repository's checks, and pushes to `origin/main`, which installs the update
 through `main:sync`. Its final reply in the thread is an HTML summary of the
@@ -208,25 +203,16 @@ yourself.
    not enough: an upstream change can still undo the intent of a fork change.
    Each fork commit message should say why the change exists, so a later merge
    can tell a customization from an accident.
-3. If the fork's plugin manifests have a `version`, bump it when releasing
-   changed plugin contents. Keep the version consistent across the agent
-   manifests. Claude Code and Codex label an install with this
+3. If the fork's `.claude-plugin/plugin.json` has a `version`, bump it when
+   releasing changed plugin contents. Claude Code labels an install with this
    version, not the marketplace's commit SHA.
 4. Change `sha` in the entry, and `path` if upstream moved the folder. That
    commit is the release. Run
    `node dev/automation/upstream-updates/updates.mjs verify`.
 5. Push the change to `origin/main`. For managed installations, `main:sync`
-   then runs `mise run agents:sync`, which also trusts the entry's hooks in
-   Codex. Reload or restart each changed host. For manual installations,
-   reinstall where needed:
-   - Claude Code: `claude plugin marketplace update ramtoshiya`, then
-     `claude plugin update <entry>@ramtoshiya` and reload or restart.
-   - Codex: finish active turns and close sessions using the plugin. For a
-     Git-backed marketplace, run `codex plugin marketplace upgrade ramtoshiya`.
-     For a local marketplace, update its checkout instead. Then run
-     `codex plugin add <entry>@ramtoshiya`. Start a fresh process and trust the entry's
-     hooks in `/hooks`. [Agent plugins](agent-pack.md) covers the runtime
-     lifecycle, including shared-server considerations.
+   then runs `mise run agents:sync`. Reload or restart Claude Code. For a
+   manual installation, run `claude plugin marketplace update ramtoshiya`, then
+   `claude plugin update <entry>@ramtoshiya` and reload or restart.
 6. Check that the installed manifest version and `hooks/hooks.json` match the
    selected commit. A displayed version alone does not prove that the installed
    files or an active runtime are current. Reusing a manifest version can keep

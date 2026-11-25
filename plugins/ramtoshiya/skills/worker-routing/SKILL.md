@@ -23,14 +23,12 @@ It sits in `scripts/` next to this file:
 ```
 
 - Worker families are `sonnet`, `opus`, and `fable` on `claude-code`, and `terra`
-  and `sol` on `claudex` and `codex`. In BB, GPT workers run on `claudex`, because
-  the user keeps the `codex` provider disabled there. Always pass the provider.
+  and `sol` on `claudex`. Always pass the provider.
 - Pass the output as it is. Never type a model ID yourself or copy one from memory,
   an earlier brief, or a catalog listing. For Claude it prints the family alias,
   which resolves to the family's newest model.
 - Exit 1 with empty output means the provider offers no model of that family, such
-  as Terra on `claudex`. Report that role as blocked. In BB, `bb nest spawn` fails
-  with HTTP 409 on a disabled `codex` provider. Exit 2 means the catalog
+  as Terra on `claudex`. Report that role as blocked. Exit 2 means the catalog
   could not be read. Report that and do not guess an ID.
 
 ## Choose the row {:#models}
@@ -111,8 +109,7 @@ side is the default. Each batch of new work goes to the side with the most room,
 work does not pile onto one side until it runs out. The `claude` side runs the
 table's Claude rows on `claude-code`. The `codex` side is the GPT quota pool, the
 Codex account. In BB it runs the GPT column on `claudex`, whose proxy signs in with
-that same account, so the side's weekly reading covers those workers. A host that
-runs its own agents on Codex, such as Codex's `spawn_agent`, uses `codex`. The `opus`
+that same account, so the side's weekly reading covers those workers. The `opus`
 rows and your own judgement stay on Claude.
 
 Before you start a batch of new workers, read the quota and pipe it into

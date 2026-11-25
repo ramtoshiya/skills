@@ -4,8 +4,8 @@
 # Usage: newest-model <family> [<provider>]
 #   haiku | sonnet | opus | fable   provider claude-code (default): prints the family alias,
 #                                   which Claude Code resolves to the family's newest model
-#   luna | terra | sol | astra      provider codex (default) or claudex: prints the newest
-#                                   gpt-<version>-<family> ID in that provider's catalog
+#   luna | terra | sol | astra      provider claudex (default): prints the newest
+#                                   gpt-<version>-<family> ID in the claudex catalog
 #
 # Exit 0: the model is on stdout.
 # Exit 1: the provider's catalog lists no model of that family. Stdout is empty.
@@ -14,7 +14,7 @@
 set -u
 
 usage() {
-  echo "usage: newest-model <haiku|sonnet|opus|fable|luna|terra|sol|astra> [claude-code|codex|claudex]" >&2
+  echo "usage: newest-model <haiku|sonnet|opus|fable|luna|terra|sol|astra> [claude-code|claudex]" >&2
   exit 2
 }
 
@@ -31,30 +31,18 @@ case $family in
     echo "$family"
     exit 0
     ;;
-  luna | terra | sol | astra) provider=${2:-codex} ;;
+  luna | terra | sol | astra) [ "${2:-claudex}" = claudex ] || usage ;;
   *) usage ;;
 esac
 
-case $provider in
-  codex)
-    catalog=${CODEX_HOME:-$HOME/.codex}/models_cache.json
-    ids=$(jq -r '.models[] | select(.visibility == "list") | .slug' "$catalog") || {
-      echo "newest-model: cannot read the Codex catalog $catalog. Start Codex once to refresh it." >&2
-      exit 2
-    }
-    ;;
-  claudex)
-    ids=$(bb provider models claudex --json | jq -r '.[].id') || {
-      echo "newest-model: cannot read the claudex catalog with bb provider models claudex." >&2
-      exit 2
-    }
-    ;;
-  *) usage ;;
-esac
+ids=$(bb provider models claudex --json | jq -r '.[].id') || {
+  echo "newest-model: cannot read the claudex catalog with bb provider models claudex." >&2
+  exit 2
+}
 
 newest=$(printf '%s\n' "$ids" | grep -E "^gpt-[0-9]+(\.[0-9]+)?-$family\$" | sort -V | tail -n 1)
 if [ -z "$newest" ]; then
-  echo "newest-model: the $provider catalog lists no $family model." >&2
+  echo "newest-model: the claudex catalog lists no $family model." >&2
   exit 1
 fi
 echo "$newest"

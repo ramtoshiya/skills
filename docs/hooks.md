@@ -1,8 +1,7 @@
 # Hooks
 
-The plugins add six hooks. Three come with `ramtoshiya` and run in Claude
-Code and Codex. Three come with `ramtoshiya-cc` and run only in
-Claude Code. The `ramtoshiya` plugin also ships a Git hygiene check that is not
+The plugins add six Claude Code hooks, three in `ramtoshiya` and three in
+`ramtoshiya-cc`. The `ramtoshiya` plugin also ships a Git hygiene check that is not
 registered, so no agent runs it.
 
 | Hook | Runs | Plugin |
@@ -14,10 +13,10 @@ registered, so no agent runs it.
 | Hermes memory snapshot | When a session starts, is cleared, or compacts | `ramtoshiya-cc` |
 | Hermes skill usage | After each Skill tool call | `ramtoshiya-cc` |
 
-Claude Code and Codex run the hooks through `hooks/hooks.json`. The package and
+Claude Code runs the hooks through `hooks/hooks.json`. The package and
 Python guard and the commit attribution guard are the `guard` and
 `commit-trailer` subcommands of one Go program,
-`plugins/ramtoshiya/hooks/ramtoshiya-hooks`, which the hosts run directly. It is
+`plugins/ramtoshiya/hooks/ramtoshiya-hooks`, which Claude Code runs directly. It is
 built from the Go source in that directory, and Git does not track it.
 [Machine setup](setup.md) describes the build. A running session keeps the
 hook commands it read when it started, so `global-package-guard.py` and
@@ -150,8 +149,8 @@ substitution in an unquoted heredoc is. A command both parsers reject, or
 wrappers nested more than four deep, is denied as one the guard could not
 verify. A denial reaches the agent as the hook's reason.
 
-When the guard cannot run, Claude Code and Codex apply their own rules for a
-failing hook process.
+When the guard cannot run, Claude Code applies its own rules for a failing
+hook process.
 
 ## Python module hint
 
@@ -165,18 +164,17 @@ notes that the package name can differ (`pyyaml` provides `yaml`), and points
 to `--offline` for versions already in uv's cache. The package and Python
 guard still checks the rerun.
 
-Claude Code and Codex receive the hint as added context for the `Bash` tool
+Claude Code receives the hint as added context for the `Bash` tool
 call. The hint never blocks a command, and any error adds nothing. Output that only mentions the error, for
 example a log being read, also gets the hint.
 
 ## Git hygiene check
 
 `plugins/ramtoshiya/hooks/git-hygiene-guard.py` is not registered in
-`plugins/ramtoshiya/hooks/hooks.json`, so Claude Code and Codex do not run it.
+`plugins/ramtoshiya/hooks/hooks.json`, so Claude Code does not run it.
 It is off to see whether agents leave uncommitted work behind without it. To
 turn it on, add this entry under `"hooks"` in that file, then follow the update
-steps in [Agent plugins](agent-pack.md). `mise run agents:sync` trusts the new
-`Stop` hook in Codex.
+steps in [Agent plugins](agent-pack.md).
 
 ```json
 "Stop": [
@@ -210,7 +208,7 @@ once, lists up to 80 changed paths, and tells the agent to:
 The second stop in the same prompt is allowed, so an instruction to leave work
 uncommitted still wins.
 
-Claude Code and Codex run it on the `Stop` event. It blocks with
+Claude Code runs it on the `Stop` event. It blocks with
 `{"decision":"block","reason":...}` and treats `stop_hook_active` as the retry.
 Any error allows the stop, for example no repository, a Git command that times
 out, or hook input it cannot read.
@@ -221,13 +219,13 @@ Limits:
   listed too. The instructions tell the agent to leave them alone.
 - Only the repository at the working directory is checked. Changes made in
   another repository, for example with `git -C`, are not.
-- If another `Stop` hook blocks while the tree is clean, Claude Code and Codex
-  mark the continuation with `stop_hook_active`, and changes made during it are
+- If another `Stop` hook blocks while the tree is clean, Claude Code marks the
+  continuation with `stop_hook_active`, and changes made during it are
   not checked when it stops.
 
 ## Commit attribution guard
 
-The `commit-trailer` subcommand blocks shell commands in Claude Code and Codex
+The `commit-trailer` subcommand blocks shell commands in Claude Code
 that write commit, tag, or pull request text containing an AI
 attribution line: a `Co-Authored-By` trailer that names Claude, Anthropic,
 Codex, OpenAI, Copilot, or Cursor, a "Generated with Claude Code" footer, or a

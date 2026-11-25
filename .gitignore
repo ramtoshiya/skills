@@ -1,5 +1,4 @@
 /.claude/
-/.codex/
 .credentials.json
 auth.json
 .env

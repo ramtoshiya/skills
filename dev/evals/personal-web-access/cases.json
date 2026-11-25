@@ -2,7 +2,7 @@
   "rule": "setup/agents/preferences.md#personal-web-access",
   "setup": [
     "Install the shared preferences with the sync commands in docs/setup.md, then run run.mjs with a new output directory outside any repository.",
-    "Each case runs as a planning request in a fresh session. The runner gives Claude Code no tools and Codex a read-only sandbox, so no case starts a server or changes Tailscale configuration.",
+    "Each case runs as a planning request in a fresh session. The runner gives Claude Code no tools, so no case starts a server or changes Tailscale configuration.",
     "Grade each reply against the case's assertions by reading it. Run the same cases with the previous preferences when you need a baseline.",
     "Delete the output directory after recording results. Do not commit replies, addresses, device names, or session ids."
   ],

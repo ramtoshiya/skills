@@ -15,7 +15,7 @@ const AUTOMATION = {
   script: 'exec node dev/automation/upstream-updates/updates.mjs check',
   timeout: '10m',
 };
-const MANIFESTS = ['.claude-plugin/plugin.json', '.codex-plugin/plugin.json'];
+const MANIFEST = '.claude-plugin/plugin.json';
 const ROUTING = join(ROOT, 'plugins/ramtoshiya/skills/worker-routing/scripts');
 const BB = process.env.BB_CLI || 'bb';
 
@@ -217,20 +217,15 @@ export function verifyEntry(dir, entry, previous) {
   if (!skills.length && !git(dir, 'ls-tree', '-r', '--name-only', entry.sha, '--', entry.path).split('\n').some(file => file.endsWith('/SKILL.md'))) {
     errors.push(`${entry.name}: no SKILL.md under ${entry.path} at ${entry.sha}`);
   }
-  const versions = sha => MANIFESTS.map(manifest => {
-    const result = at(sha, posix.join(entry.path, manifest));
+  const version = sha => {
+    const result = at(sha, posix.join(entry.path, MANIFEST));
     return result.status === 0 ? JSON.parse(result.stdout).version : undefined;
-  });
-  const current = versions(entry.sha);
-  if (new Set(current.filter(Boolean)).size > 1) errors.push(`${entry.name}: manifest versions differ: ${current.join(', ')}`);
-  if (previous && previous.repo === entry.repo && previous.sha !== entry.sha
-    && git(dir, 'rev-parse', `${previous.sha}:${previous.path}`) !== git(dir, 'rev-parse', `${entry.sha}:${entry.path}`)) {
-    const before = versions(previous.sha);
-    MANIFESTS.forEach((manifest, index) => {
-      if (current[index] !== undefined && current[index] === before[index]) {
-        errors.push(`${entry.name}: ${entry.path} changed but ${manifest} keeps version ${current[index]}`);
-      }
-    });
+  };
+  const current = version(entry.sha);
+  if (current !== undefined && previous && previous.repo === entry.repo && previous.sha !== entry.sha
+    && git(dir, 'rev-parse', `${previous.sha}:${previous.path}`) !== git(dir, 'rev-parse', `${entry.sha}:${entry.path}`)
+    && current === version(previous.sha)) {
+    errors.push(`${entry.name}: ${entry.path} changed but ${MANIFEST} keeps version ${current}`);
   }
   return errors;
 }

@@ -8,8 +8,7 @@ MISSING = re.compile(r"ModuleNotFoundError: No module named '([A-Za-z0-9_]+)")
 
 
 def hint(tool_response):
-    text = tool_response if isinstance(tool_response, str) else json.dumps(tool_response, ensure_ascii=False)
-    modules = sorted(set(MISSING.findall(text)))
+    modules = sorted(set(MISSING.findall(json.dumps(tool_response, ensure_ascii=False))))
     if not modules:
         return None
     names = ", ".join(f"`{module}`" for module in modules)

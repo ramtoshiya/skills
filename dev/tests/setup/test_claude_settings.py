@@ -33,25 +33,19 @@ class ClaudeSettingsTests(unittest.TestCase):
             shutil.copyfile(terminal, self.root / "setup/agents" / terminal.name)
         self.source = self.root / "setup/agents/preferences.md"
         self.source.write_text(f"Private instruction {SECRET}\n")
-        self.write(self.root / "setup/agents/hosts.json", {
-            "hosts": ["claude", "codex"], "plugins": {"example": []},
-        })
         self.write(self.root / ".claude-plugin/marketplace.json", {
             "name": "test-market", "plugins": [{"name": "example", "source": "plugins/example"}],
         })
         self.bin = self.base / "bin"
         self.bin.mkdir()
-        for host in ("claude", "codex"):
-            command = self.bin / host
-            command.write_text("#!/bin/sh\nexit 99\n")
-            command.chmod(0o755)
+        (self.bin / "claude").write_text("#!/bin/sh\nexit 99\n")
+        (self.bin / "claude").chmod(0o755)
         self.env = os.environ.copy()
         self.env.update({
             "HOME": str(self.home), "XDG_CONFIG_HOME": str(self.base / "config"),
             "XDG_STATE_HOME": str(self.base / "state"), "PATH": str(self.bin),
         })
         self.env.pop("CLAUDE_CONFIG_DIR", None)
-        self.env.pop("CODEX_HOME", None)
         self.registry = self.base / "config/ramtoshiya/claude-profiles.json"
         self.default = self.home / ".claude/settings.json"
         self.alternate = self.home / ".claude_worker/settings.json"
@@ -72,7 +66,7 @@ class ClaudeSettingsTests(unittest.TestCase):
         return result
 
     def settings(self, command, *args):
-        return self.run_cli(command, "--host", "claude", "--settings-only", *args)
+        return self.run_cli(command, "--settings-only", *args)
 
     def test_required_interaction_rules_reach_every_profile_and_repair_drift(self):
         self.register({"worker": {"configDir": "~/.claude_worker", "overrides": {
@@ -295,7 +289,6 @@ class ClaudeSettingsTests(unittest.TestCase):
     def test_mise_has_one_claude_profile_writer(self):
         config = tomllib.loads((ROOT / "mise.toml").read_text())
         dotfiles = config["dotfiles"]
-        self.assertEqual(dotfiles["~/.codex/AGENTS.md"]["source"], "setup/agents/preferences.md")
         self.assertFalse(any(path == "~/.claude/CLAUDE.md" or path.startswith("~/.claude/settings.json/")
                              or path == "~/.claude/settings.json" for path in dotfiles))
 
@@ -476,25 +469,20 @@ class ClaudeSettingsTests(unittest.TestCase):
         self.registry.parent.mkdir(parents=True, exist_ok=True)
         self.registry.write_text("invalid registry")
         log = self.base / "host-calls"
-        for host in ("claude", "codex"):
-            marketplaces = ([{"name": "test-market", "path": str(self.root)}] if host == "claude"
-                            else {"marketplaces": [{"name": "test-market", "root": str(self.root)}]})
-            inventory = [] if host == "claude" else {"installed": []}
-            script = (
-                "#!/bin/sh\n"
-                f"printf '%s\\n' {shlex.quote(host)} >> {shlex.quote(str(log))}\n"
-                'case "$*" in\n'
-                f"  'plugin marketplace list --json') printf '%s\\n' {shlex.quote(json.dumps(marketplaces))} ;;\n"
-                f"  'plugin list --json'|'plugin list --json --marketplace test-market') printf '%s\\n' {shlex.quote(json.dumps(inventory))} ;;\n"
-                "  *) exit 99 ;;\nesac\n"
-            )
-            (self.bin / host).write_text(script)
+        marketplaces = [{"name": "test-market", "path": str(self.root)}]
+        (self.bin / "claude").write_text(
+            "#!/bin/sh\n"
+            f"printf '%s\\n' \"$*\" >> {shlex.quote(str(log))}\n"
+            'case "$*" in\n'
+            f"  'plugin marketplace list --json') printf '%s\\n' {shlex.quote(json.dumps(marketplaces))} ;;\n"
+            "  'plugin list --json') printf '%s\\n' '[]' ;;\n"
+            "  *) exit 99 ;;\nesac\n"
+        )
         for command in ("status", "sync"):
-            for args in (("--host", "claude", "--plugin", "example"), ("--host", "codex")):
-                result = self.run_cli(command, *args, "--json")
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertEqual(json.loads(result.stdout), [])
+            result = self.run_cli(command, "--plugin", "example", "--json")
+            self.assertEqual([row["component"] for row in json.loads(result.stdout)], ["example"])
         log.unlink()
+        self.write(self.root / ".claude-plugin/marketplace.json", {"name": "test-market", "plugins": []})
         self.register({})
         ownership = self.base / "state/ramtoshiya-agents/state.json"
         ownership.parent.mkdir(parents=True, exist_ok=True)
@@ -503,15 +491,14 @@ class ClaudeSettingsTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertFalse(log.exists())
         ownership.unlink()
-        result = self.run_cli("status", "--host", "claude", "--json")
+        result = self.run_cli("status", "--json")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual({row["component"] for row in json.loads(result.stdout)}, {
             "settings:default", "instructions:default",
         })
-        for args in (("--settings-only", "--plugin", "example"), ("--settings-only", "--host", "codex")):
-            result = self.run_cli("status", *args)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("--settings-only", result.stderr)
+        result = self.run_cli("status", "--settings-only", "--plugin", "example")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--settings-only", result.stderr)
 
 
 if __name__ == "__main__":

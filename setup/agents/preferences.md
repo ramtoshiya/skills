@@ -345,8 +345,8 @@ repository's check is not such a device when each run works in its own
 worktree or copy. Take `check:<repository>` only for a check that needs
 something one run can hold at a time, such as a fixed port. When a check times
 out under other agents' load, wait on readiness or bound CPU time instead of
-queueing checks. Pass your session id as `--owner`: `$CLAUDE_CODE_SESSION_ID` or
-`$CODEX_THREAD_ID`. `takeaturn --help` has the rest.
+queueing checks. Pass your session id, `$CLAUDE_CODE_SESSION_ID`, as `--owner`.
+`takeaturn --help` has the rest.
 
 ## Privileged commands {:#privileged-commands}
 

@@ -322,11 +322,10 @@ class GlobalPackageGuardTests(unittest.TestCase):
             "cat <<'EOF'\npkill -f x -U 501\nEOF",
         ])
 
-    def test_process_denial_reaches_both_agents(self):
-        for tool, field in [("Bash", "command"), ("exec_command", "cmd")]:
-            output = self.hook({"tool_name": tool, "tool_input": {field: "pkill -f load.ts -U 501"}})
-            self.assertEqual(output["permissionDecision"], "deny")
-            self.assertIn(PROCESS, output["permissionDecisionReason"])
+    def test_process_denial_reaches_the_agent(self):
+        output = self.hook({"tool_name": "Bash", "tool_input": {"command": "pkill -f load.ts -U 501"}})
+        self.assertEqual(output["permissionDecision"], "deny")
+        self.assertIn(PROCESS, output["permissionDecisionReason"])
 
     def test_valid_shell_is_checked_not_refused(self):
         commands = [
@@ -375,9 +374,9 @@ class GlobalPackageGuardTests(unittest.TestCase):
             self.check(f"echo $(touch {marker})")
             self.assertFalse(marker.exists())
 
-    def test_denial_wire_format_for_both_shell_inputs(self):
-        for tool, field in [("Bash", "command"), ("Monitor", "command"), ("exec_command", "cmd")]:
-            output = self.hook({"tool_name": tool, "tool_input": {field: "hf download publisher/model"}})
+    def test_denial_wire_format_for_both_shell_tools(self):
+        for tool in ["Bash", "Monitor"]:
+            output = self.hook({"tool_name": tool, "tool_input": {"command": "hf download publisher/model"}})
             self.assertEqual(output["hookEventName"], "PreToolUse")
             self.assertEqual(output["permissionDecision"], "deny")
 
@@ -386,8 +385,8 @@ class GlobalPackageGuardTests(unittest.TestCase):
         self.assertIsNone(self.hook(payload))
 
     def test_allow_does_not_override_normal_permissions(self):
-        for tool, field in [("Bash", "command"), ("Monitor", "command"), ("exec_command", "cmd")]:
-            payload = {"tool_name": tool, "tool_input": {field: "hf download publisher/model --revision " + "a" * 40}}
+        for tool in ["Bash", "Monitor"]:
+            payload = {"tool_name": tool, "tool_input": {"command": "hf download publisher/model --revision " + "a" * 40}}
             self.assertIsNone(self.hook(payload))
 
     def test_policy_denials_and_cwd_in_native_payload(self):
@@ -395,16 +394,6 @@ class GlobalPackageGuardTests(unittest.TestCase):
         for command in ["pip list", "npx example", "uv sync"]:
             payload = {"tool_name": "Bash", "cwd": str(self.cwd), "tool_input": {"command": command}}
             self.assertEqual(self.hook(payload, self.environment)["permissionDecision"], "deny")
-
-    def test_codex_workdir_selects_project_policy(self):
-        (self.cwd / "uv.toml").write_text('exclude-newer = "1 day"\n')
-        other = self.home / "other"
-        other.mkdir()
-        def run(workdir, cwd):
-            payload = {"tool_name": "exec_command", "cwd": str(cwd), "tool_input": {"cmd": "uv sync", "workdir": str(workdir)}}
-            return self.hook(payload, self.environment)
-        self.assertIn(WEAKER, run(self.cwd, other)["permissionDecisionReason"])
-        self.assertIsNone(run(other, self.cwd))
 
 
 if __name__ == "__main__":

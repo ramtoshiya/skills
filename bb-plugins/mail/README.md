@@ -13,7 +13,7 @@ from other agents. It does three things:
 bb mail send thr_abc --message "main moved to 3d34cff. Rebase before you push."
 bb mail send thr_abc --wake --message "Stop: the schema changed. Read docs/schema.md."
 bb mail send --where parent=thr_lead --where role=reviewer --message "Review the new diff."
-bb mail who --where project=proj_web provider=codex
+bb mail who --where project=proj_web provider=claudex
 bb mail tag add thr_abc role=reviewer
 ```
 
@@ -74,7 +74,7 @@ or put several terms in one value separated by spaces.
 | `parent=<thread>` | Every descendant of the thread. It follows nest's logical parent where nest placed a worker under another thread |
 | `env=<id>` | Threads in the environment |
 | `branch=<name>` | Threads whose environment is on the branch |
-| `provider=<id>` | Threads on the provider, such as `codex` |
+| `provider=<id>` | Threads on the provider, such as `claudex` |
 | `status=<status>` | Threads in that status, such as `idle` or `active` |
 | `<key>=<value>` or `<word>` | Threads with that tag |
 

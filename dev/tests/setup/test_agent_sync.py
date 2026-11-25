@@ -35,18 +35,16 @@ class AgentSyncTests(unittest.TestCase):
         self.root = self.home / "repository"
         (self.root / ".claude-plugin").mkdir(parents=True)
         (self.root / "setup/agents").mkdir(parents=True)
-        self.policy = self.root / "setup/agents/hosts.json"
-        sync.write_json(self.policy, {"hosts": ["claude", "codex"], "plugins": {}})
         self.marketplace = self.root / ".claude-plugin/marketplace.json"
         commands = self.home / "bin"
         commands.mkdir()
-        self.refuse_host_commands_without_fake_cli(commands)
+        (commands / "claude").write_text("#!/bin/sh\nexit 99\n")
+        (commands / "claude").chmod(0o755)
         self.environment = patch.dict(os.environ, {
             "PATH": str(commands) + os.pathsep + os.environ["PATH"],
             "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
             "HOME": str(self.home), "XDG_STATE_HOME": str(self.home / "state"),
             "CLAUDE_CONFIG_DIR": str(self.home / ".claude"),
-            "CODEX_HOME": str(self.home / ".codex"),
         })
         self.environment.start()
         self.addCleanup(self.environment.stop)
@@ -63,11 +61,6 @@ class AgentSyncTests(unittest.TestCase):
         git(self.root, "init", "-q")
         commit(self.root, "Approve source")
 
-    def refuse_host_commands_without_fake_cli(self, commands):
-        for host in ("claude", "codex"):
-            (commands / host).write_text("#!/bin/sh\nexit 99\n")
-            (commands / host).chmod(0o755)
-
     def set_entries(self, entries):
         sync.write_json(self.marketplace, {"name": "example", "plugins": entries})
 
@@ -78,46 +71,38 @@ class AgentSyncTests(unittest.TestCase):
         git(target, "checkout", "--detach", "-q", revision)
         return target / "plugins/example"
 
-    def cache(self, host):
-        return self.home / f".{host}/plugins/cache/example/example/local"
+    def cache(self):
+        return self.home / ".claude/plugins/cache/example/example/local"
 
-    def deploy(self, host, source):
-        cache = shlex.quote(str(self.cache(host)))
-        return f"rm -rf {cache} && mkdir -p {shlex.quote(str(self.cache(host).parent))} && cp -R {shlex.quote(str(source))} {cache}"
+    def deploy(self, source):
+        cache = shlex.quote(str(self.cache()))
+        return f"rm -rf {cache} && mkdir -p {shlex.quote(str(self.cache().parent))} && cp -R {shlex.quote(str(source))} {cache}"
 
-    def fake_cli(self, host, commands=None):
-        if host == "claude":
-            marketplaces = [{"name": "example", "path": str(self.root)}]
-            listing = "plugin list --json"
-            present = [{"id": "example@example", "scope": "user", "installPath": str(self.cache(host)), "enabled": True}]
-            absent = []
-        else:
-            marketplaces = {"marketplaces": [{"name": "example", "root": str(self.root)}]}
-            listing = "plugin list --json --marketplace example"
-            present = {"installed": [{"pluginId": "example@example", "installed": True, "enabled": True, "version": "local"}]}
-            absent = {"installed": []}
+    def fake_cli(self, commands=None):
+        marketplaces = [{"name": "example", "path": str(self.root)}]
+        present = [{"id": "example@example", "scope": "user", "installPath": str(self.cache()), "enabled": True}]
         cases = "".join(f"  {shlex.quote(call)}) {snippet} ;;\n" for call, snippet in (commands or {}).items())
         script = (
             "#!/bin/sh\n"
-            f"printf '%s\\n' \"$*\" >> {shlex.quote(str(self.home / (host + '.log')))}\n"
+            f"printf '%s\\n' \"$*\" >> {shlex.quote(str(self.home / 'claude.log'))}\n"
             'case "$*" in\n'
             f"  'plugin marketplace list --json') printf '%s\\n' {shlex.quote(json.dumps(marketplaces))} ;;\n"
-            f"  '{listing}') if [ -d {shlex.quote(str(self.cache(host)))} ]; then printf '%s\\n' {shlex.quote(json.dumps(present))}; "
-            f"else printf '%s\\n' {shlex.quote(json.dumps(absent))}; fi ;;\n"
+            f"  'plugin list --json') if [ -d {shlex.quote(str(self.cache()))} ]; then printf '%s\\n' {shlex.quote(json.dumps(present))}; "
+            "else printf '%s\\n' '[]'; fi ;;\n"
             f"{cases}"
             "  *) exit 98 ;;\n"
             "esac\n"
         )
-        (self.home / "bin" / host).write_text(script)
+        (self.home / "bin/claude").write_text(script)
 
-    def changes(self, host):
-        log = self.home / f"{host}.log"
+    def changes(self):
+        log = self.home / "claude.log"
         calls = log.read_text().splitlines() if log.exists() else []
-        return [call for call in calls if not call.startswith(("plugin marketplace list", "plugin list", "plugins list"))]
+        return [call for call in calls if not call.startswith(("plugin marketplace list", "plugin list"))]
 
-    def execute(self, apply, host="claude"):
+    def execute(self, apply):
         operation = sync.Sync(self.root)
-        return operation, operation.process([host], apply=apply)
+        return operation, operation.process(apply=apply)
 
     def use_hook_plugin(self, source):
         hooks = self.root / "plugins/ramtoshiya/hooks"
@@ -137,7 +122,7 @@ class AgentSyncTests(unittest.TestCase):
         return hooks
 
     def test_sync_installs_repeats_without_writes_and_updates_after_a_pin_change(self):
-        self.fake_cli("claude", {"plugin install example@example --scope user": self.deploy("claude", self.source)})
+        self.fake_cli({"plugin install example@example --scope user": self.deploy(self.source)})
         operation, rows = self.execute(True)
         self.assertEqual(rows[0]["status"], "updated")
         state_before = operation.state_path.read_bytes(), operation.state_path.stat().st_mtime_ns
@@ -149,12 +134,12 @@ class AgentSyncTests(unittest.TestCase):
         new = self.install_source(revision)
         self.entry["source"]["sha"] = revision
         self.set_entries([self.entry])
-        self.fake_cli("claude", {"plugin update example@example --scope user": self.deploy("claude", new)})
+        self.fake_cli({"plugin update example@example --scope user": self.deploy(new)})
         _, rows = self.execute(True)
         self.assertEqual(rows[0]["status"], "updated")
-        self.assertEqual((self.cache("claude") / "skills/writing/SKILL.md").read_text(), "updated skill\n")
+        self.assertEqual((self.cache() / "skills/writing/SKILL.md").read_text(), "updated skill\n")
         self.assertEqual(sync.read_json(operation.state_path)["packages"]["claude:example"]["pin"], revision)
-        self.assertEqual(self.changes("claude"), [
+        self.assertEqual(self.changes(), [
             "plugin install example@example --scope user", "plugin update example@example --scope user",
         ])
 
@@ -168,82 +153,81 @@ class AgentSyncTests(unittest.TestCase):
         second = {"name": "other", "source": {**self.entry["source"], "path": "plugins/other"}}
         self.set_entries([self.entry, second])
         example = sync.Sync(self.root).sources.package(self.entry)
-        self.fake_cli("claude", {
-            "plugin install example@example --scope user": self.deploy("claude", example.root),
+        self.fake_cli({
+            "plugin install example@example --scope user": self.deploy(example.root),
             "plugin uninstall example@example --scope user --keep-data": "",
         })
-        rows = sync.Sync(self.root).process(["claude"])
+        rows = sync.Sync(self.root).process()
         self.assertEqual([row["component"] for row in rows], ["example", "other"])
-        rows = sync.Sync(self.root).process(["claude"], apply=True, selected=["example"])
+        rows = sync.Sync(self.root).process(apply=True, selected=["example"])
         self.assertEqual([(row["component"], row["status"]) for row in rows], [("example", "updated")])
-        self.assertEqual(self.changes("claude"), ["plugin install example@example --scope user"])
+        self.assertEqual(self.changes(), ["plugin install example@example --scope user"])
         operation = sync.Sync(self.root)
         package = operation.sources.package(second)
         installed = self.home / "installed-other"
         shutil.copytree(package.root, installed)
-        operation.remember("claude", "other", installed, package)
+        operation.remember("other", installed, package)
         self.set_entries([])
-        rows = sync.Sync(self.root).process(["claude"], selected=["example"])
+        rows = sync.Sync(self.root).process(selected=["example"])
         self.assertEqual([(row["component"], row["status"]) for row in rows], [("example", "drift")])
         operation = sync.Sync(self.root)
-        rows = operation.process(["claude"], apply=True, selected=["example"])
+        rows = operation.process(apply=True, selected=["example"])
         self.assertEqual([(row["component"], row["status"]) for row in rows], [("example", "updated")])
-        self.assertEqual(self.changes("claude")[1:], ["plugin uninstall example@example --scope user --keep-data"])
+        self.assertEqual(self.changes()[1:], ["plugin uninstall example@example --scope user --keep-data"])
         self.assertEqual(set(sync.read_json(operation.state_path)["packages"]), {"claude:other"})
         with self.assertRaisesRegex(sync.Conflict, "Unknown plugins"):
-            sync.Sync(self.root).process(["claude"], apply=True, selected=["typo"])
+            sync.Sync(self.root).process(apply=True, selected=["typo"])
 
     def test_status_is_offline_and_does_not_create_state(self):
-        self.fake_cli("claude")
-        self.fake_cli("codex")
+        self.fake_cli()
         operation = sync.Sync(self.root)
-        rows = operation.process(["claude", "codex"])
-        self.assertEqual([(row["host"], row["status"]) for row in rows], [("claude", "drift"), ("codex", "drift")])
+        rows = operation.process()
+        self.assertEqual([(row["host"], row["status"]) for row in rows], [("claude", "drift")])
         shutil.rmtree(self.home / "state/ramtoshiya-agents/sources")
-        rows = sync.Sync(self.root).process(["claude"])
+        rows = sync.Sync(self.root).process()
         self.assertEqual(rows[0]["status"], "conflict")
         self.assertIn("not cached", rows[0]["detail"])
-        self.assertEqual(self.changes("claude") + self.changes("codex"), [])
+        self.assertEqual(self.changes(), [])
         self.assertFalse(operation.state_path.exists())
 
     def test_modified_pinned_source_is_not_installed_or_overwritten(self):
         (self.source / "skills/writing/SKILL.md").write_text("local customization\n")
-        self.fake_cli("claude")
+        self.fake_cli()
         _, rows = self.execute(True)
         self.assertEqual(rows[0]["status"], "conflict")
         self.assertIn("Modified source", rows[0]["detail"])
-        self.assertEqual(self.changes("claude"), [])
+        self.assertEqual(self.changes(), [])
         self.assertEqual((self.source / "skills/writing/SKILL.md").read_text(), "local customization\n")
 
     def test_installation_from_an_earlier_approved_pin_is_updated(self):
-        shutil.copytree(self.source, self.cache("claude"))
+        shutil.copytree(self.source, self.cache())
         (self.upstream / "plugins/example/skills/writing/SKILL.md").write_text("updated skill\n")
         revision = commit(self.upstream, "Update")
         new = self.install_source(revision)
         self.entry["source"]["sha"] = revision
         self.set_entries([self.entry])
         commit(self.root, "Update pin")
-        self.fake_cli("claude", {"plugin update example@example --scope user": self.deploy("claude", new)})
+        self.fake_cli({"plugin update example@example --scope user": self.deploy(new)})
         _, rows = self.execute(True)
         self.assertEqual(rows[0]["status"], "updated")
-        self.assertEqual(self.changes("claude"), ["plugin update example@example --scope user"])
-        self.assertEqual((self.cache("claude") / "skills/writing/SKILL.md").read_text(), "updated skill\n")
+        self.assertEqual(self.changes(), ["plugin update example@example --scope user"])
+        self.assertEqual((self.cache() / "skills/writing/SKILL.md").read_text(), "updated skill\n")
 
     def test_committed_but_unapproved_customization_is_not_adopted(self):
         (self.upstream / "plugins/example/skills/writing/SKILL.md").write_text("committed local customization\n")
         custom = self.install_source(commit(self.upstream, "Customize"))
-        shutil.copytree(custom, self.cache("claude"))
-        self.fake_cli("claude")
+        shutil.copytree(custom, self.cache())
+        self.fake_cli()
         _, rows = self.execute(True)
         self.assertEqual(rows[0]["status"], "conflict")
         self.assertIn("Unrecognized or modified installation", rows[0]["detail"])
-        self.assertEqual(self.changes("claude"), [])
-        self.assertEqual((self.cache("claude") / "skills/writing/SKILL.md").read_text(), "committed local customization\n")
+        self.assertEqual(self.changes(), [])
+        self.assertEqual((self.cache() / "skills/writing/SKILL.md").read_text(), "committed local customization\n")
 
     def test_locally_changed_installation_is_neither_updated_nor_retired(self):
-        self.fake_cli("claude", {"plugin install example@example --scope user": self.deploy("claude", self.source)})
+        self.fake_cli({"plugin install example@example --scope user": self.deploy(self.source)})
         self.execute(True)
-        edited = self.cache("claude") / "skills/writing/SKILL.md"
+        edited = self.cache() / "skills/writing/SKILL.md"
         edited.write_text("local edit\n")
         for declared in (True, False):
             with self.subTest(declared=declared):
@@ -251,42 +235,38 @@ class AgentSyncTests(unittest.TestCase):
                 operation, rows = self.execute(True)
                 self.assertEqual(rows[0]["status"], "conflict")
                 self.assertIn("Locally changed", rows[0]["detail"])
-                self.assertEqual(self.changes("claude"), ["plugin install example@example --scope user"])
+                self.assertEqual(self.changes(), ["plugin install example@example --scope user"])
                 self.assertEqual(edited.read_text(), "local edit\n")
                 self.assertIn("claude:example", sync.read_json(operation.state_path)["packages"])
 
     def test_retiring_a_package_unregisters_it_and_forgets_its_record(self):
-        for host, install, retire in (
-            ("claude", "plugin install example@example --scope user", "plugin uninstall example@example --scope user --keep-data"),
-            ("codex", "plugin add example@example", "plugin remove example@example"),
-        ):
-            with self.subTest(host=host):
-                self.set_entries([self.entry])
-                self.fake_cli(host, {install: self.deploy(host, self.source), retire: ""})
-                self.execute(True, host)
-                self.set_entries([])
-                operation, rows = self.execute(True, host)
-                self.assertEqual([row["status"] for row in rows], ["updated"])
-                self.assertEqual(self.changes(host), [install, retire])
-                self.assertNotIn(f"{host}:example", sync.read_json(operation.state_path)["packages"])
-                self.assertTrue((self.source / "skills/writing/SKILL.md").is_file())
+        install = "plugin install example@example --scope user"
+        retire = "plugin uninstall example@example --scope user --keep-data"
+        self.fake_cli({install: self.deploy(self.source), retire: ""})
+        self.execute(True)
+        self.set_entries([])
+        operation, rows = self.execute(True)
+        self.assertEqual([row["status"] for row in rows], ["updated"])
+        self.assertEqual(self.changes(), [install, retire])
+        self.assertNotIn("claude:example", sync.read_json(operation.state_path)["packages"])
+        self.assertTrue((self.source / "skills/writing/SKILL.md").is_file())
 
     def test_native_install_does_not_enable_an_already_enabled_plugin(self):
-        self.fake_cli("claude", {
-            "plugin install example@example --scope user": self.deploy("claude", self.source),
+        self.fake_cli({
+            "plugin install example@example --scope user": self.deploy(self.source),
             "plugin enable example@example --scope user": ":",
         })
         operation, rows = self.execute(True)
         self.assertEqual(rows[0]["status"], "updated")
         _, rows = self.execute(True)
         self.assertEqual(rows[0]["status"], "ok")
-        self.assertEqual(self.changes("claude"), ["plugin install example@example --scope user"])
-        self.assertEqual((self.cache("claude") / "skills/writing/SKILL.md").read_text(), "original skill\n")
+        self.assertEqual(self.changes(), ["plugin install example@example --scope user"])
+        self.assertEqual((self.cache() / "skills/writing/SKILL.md").read_text(), "original skill\n")
         self.assertEqual(sync.read_json(operation.state_path)["packages"]["claude:example"]["pin"], self.first)
 
     def test_installer_success_is_not_accepted_when_cached_contents_remain_stale(self):
-        self.fake_cli("codex", {"plugin add example@example": self.deploy("codex", self.source)})
-        operation, rows = self.execute(True, "codex")
+        self.fake_cli({"plugin install example@example --scope user": self.deploy(self.source)})
+        operation, rows = self.execute(True)
         self.assertEqual(rows[0]["status"], "updated")
         state_before = operation.state_path.read_bytes()
         (self.upstream / "plugins/example/skills/writing/SKILL.md").write_text("updated skill\n")
@@ -294,83 +274,19 @@ class AgentSyncTests(unittest.TestCase):
         self.install_source(revision)
         self.entry["source"]["sha"] = revision
         self.set_entries([self.entry])
-        self.fake_cli("codex", {"plugin add example@example": ":"})
-        operation, rows = self.execute(True, "codex")
+        self.fake_cli({"plugin update example@example --scope user": ":"})
+        operation, rows = self.execute(True)
         self.assertEqual(rows[0]["status"], "conflict")
         self.assertIn("Native installer did not reconcile", rows[0]["detail"])
-        self.assertEqual(self.changes("codex"), ["plugin add example@example", "plugin add example@example"])
-        self.assertEqual((self.cache("codex") / "skills/writing/SKILL.md").read_text(), "original skill\n")
+        self.assertEqual(self.changes(), [
+            "plugin install example@example --scope user", "plugin update example@example --scope user",
+        ])
+        self.assertEqual((self.cache() / "skills/writing/SKILL.md").read_text(), "original skill\n")
         self.assertEqual(operation.state_path.read_bytes(), state_before)
 
-    def fake_app_server(self, current_hash):
-        script = self.home / "app-server.py"
-        script.write_text(
-            "import json, sys\n"
-            "from pathlib import Path\n"
-            "state, current = Path(sys.argv[1]), sys.argv[2]\n"
-            "key = 'example@example:hooks/hooks.json:pre_tool_use:0:0'\n"
-            "for line in sys.stdin:\n"
-            "    message = json.loads(line)\n"
-            "    if 'id' not in message:\n"
-            "        continue\n"
-            "    trusted = json.loads(state.read_text()) if state.exists() else {}\n"
-            "    result = {}\n"
-            "    if message['method'] == 'hooks/list':\n"
-            "        status = 'trusted' if trusted.get(key) == current else ('modified' if key in trusted else 'untrusted')\n"
-            "        hooks = [{'key': key, 'pluginId': 'example@example', 'currentHash': current, 'trustStatus': status}]\n"
-            "        result = {'data': [{'cwd': '/', 'errors': [], 'warnings': [], 'hooks': hooks if current else []}]}\n"
-            "    elif message['method'] == 'config/batchWrite':\n"
-            "        for edit in message['params']['edits']:\n"
-            "            trusted.update({k: v['trusted_hash'] for k, v in edit['value'].items()})\n"
-            "        state.write_text(json.dumps(trusted))\n"
-            "    print(json.dumps({'id': message['id'], 'result': result}), flush=True)\n"
-        )
-        return " ".join(shlex.quote(part) for part in [sys.executable, str(script), str(self.home / "trust.json"), current_hash])
-
-    def test_codex_sync_trusts_the_hooks_it_installs_and_status_reports_untrusted_hooks(self):
-        (self.upstream / "plugins/example/hooks").mkdir()
-        (self.upstream / "plugins/example/hooks/hooks.json").write_text(
-            '{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "true"}]}]}}\n')
-        revision = commit(self.upstream, "Add hooks")
-        source = self.install_source(revision)
-        self.entry["source"]["sha"] = revision
-        self.set_entries([self.entry])
-        key = "example@example:hooks/hooks.json:pre_tool_use:0:0"
-        self.fake_cli("codex", {"plugin add example@example": self.deploy("codex", source),
-                                "app-server": self.fake_app_server("sha256:a/sha256:b")})
-        _, rows = self.execute(True, "codex")
-        self.assertEqual(rows[0]["status"], "updated")
-        self.assertEqual(sync.read_json(self.home / "trust.json"), {key: "sha256:a/sha256:b"})
-        _, rows = self.execute(False, "codex")
-        self.assertEqual(rows[0]["status"], "ok")
-
-        self.fake_cli("codex", {"app-server": self.fake_app_server("sha256:a/sha256:c")})
-        _, rows = self.execute(False, "codex")
-        self.assertEqual((rows[0]["status"], rows[0]["detail"]), ("drift", f"Codex has not trusted hooks ['{key}'], run agents:sync"))
-        _, rows = self.execute(True, "codex")
-        self.assertEqual(rows[0]["status"], "ok")
-        self.assertEqual(sync.read_json(self.home / "trust.json"), {key: "sha256:a/sha256:c"})
-
-        self.fake_cli("codex", {"app-server": self.fake_app_server("")})
-        _, rows = self.execute(False, "codex")
-        self.assertEqual(rows[0]["status"], "conflict")
-        self.assertIn("Codex lists none of the hooks in", rows[0]["detail"])
-
-    def test_generated_codex_manifest_cannot_add_unapproved_capabilities(self):
-        manifest = self.cache("codex") / ".codex-plugin/plugin.json"
-        injected = json.dumps({"name": "example", "skills": None, "hooks": "./injected.json"})
-        install = (f"{self.deploy('codex', self.source)} && mkdir -p {shlex.quote(str(manifest.parent))} "
-                   f"&& printf '%s\\n' {shlex.quote(injected)} > {shlex.quote(str(manifest))}")
-        self.fake_cli("codex", {"plugin add example@example": install})
-        operation, rows = self.execute(True, "codex")
-        self.assertEqual(rows[0]["status"], "conflict")
-        self.assertIn("Unexpected capabilities", rows[0]["detail"])
-        self.assertEqual(self.changes("codex"), ["plugin add example@example"])
-        self.assertNotIn("codex:example", sync.read_json(operation.state_path, {"packages": {}})["packages"])
-
     def test_symlinked_state_file_is_not_replaced_or_written_through(self):
-        shutil.copytree(self.source, self.cache("claude"))
-        self.fake_cli("claude")
+        shutil.copytree(self.source, self.cache())
+        self.fake_cli()
         target = self.home / "dotfiles/state.json"
         sync.write_json(target, {"version": 1, "packages": {}})
         state = sync.Sync(self.root).state_path
@@ -393,41 +309,42 @@ class AgentSyncTests(unittest.TestCase):
 
     def test_sync_builds_the_hook_binary_before_installing_and_status_compares_it_with_its_source(self):
         hooks = self.use_hook_plugin("package main // v1\n")
-        installed = self.cache("codex")
+        installed = self.cache()
         shutil.copytree(self.root / "plugins/ramtoshiya", installed)
-        self.fake_cli("codex", {"plugin add example@example": self.deploy("codex", self.root / "plugins/ramtoshiya")})
+        update = "plugin update example@example --scope user"
+        self.fake_cli({update: self.deploy(self.root / "plugins/ramtoshiya")})
         steps = [
-            (False, [("build", "drift"), ("codex", "ok")]),
-            (True, [("build", "updated"), ("codex", "updated")]),
-            (True, [("build", "ok"), ("codex", "ok")]),
+            (False, [("build", "drift"), ("claude", "ok")]),
+            (True, [("build", "updated"), ("claude", "updated")]),
+            (True, [("build", "ok"), ("claude", "ok")]),
         ]
         for apply, expected in steps:
-            _, rows = self.execute(apply, "codex")
+            _, rows = self.execute(apply)
             self.assertEqual([(row["host"], row["status"]) for row in rows], expected)
         self.assertEqual((installed / "hooks/ramtoshiya-hooks").read_text(), "package main // v1\n")
 
         (hooks / "main.go").write_text("package main // v2\n")
         commit(self.root, "Change the hook")
-        _, rows = self.execute(False, "codex")
-        self.assertEqual([(row["host"], row["status"]) for row in rows], [("build", "drift"), ("codex", "drift")])
+        _, rows = self.execute(False)
+        self.assertEqual([(row["host"], row["status"]) for row in rows], [("build", "drift"), ("claude", "drift")])
         self.assertEqual(sorted(path.name for path in hooks.iterdir()), ["main.go", "ramtoshiya-hooks"])
-        _, rows = self.execute(True, "codex")
-        self.assertEqual([(row["host"], row["status"]) for row in rows], [("build", "updated"), ("codex", "updated")])
+        _, rows = self.execute(True)
+        self.assertEqual([(row["host"], row["status"]) for row in rows], [("build", "updated"), ("claude", "updated")])
         self.assertEqual((installed / "hooks/ramtoshiya-hooks").read_text(), "package main // v2\n")
-        self.assertEqual(self.changes("codex"), ["plugin add example@example", "plugin add example@example"])
+        self.assertEqual(self.changes(), [update, update])
 
     def test_failed_hook_build_stops_sync_before_any_install(self):
         self.use_hook_plugin("package main // broken\n")
-        self.fake_cli("codex", {"plugin add example@example": self.deploy("codex", self.root / "plugins/ramtoshiya")})
-        operation, rows = self.execute(True, "codex")
+        self.fake_cli({"plugin install example@example --scope user": self.deploy(self.root / "plugins/ramtoshiya")})
+        operation, rows = self.execute(True)
         self.assertEqual([(row["host"], row["status"]) for row in rows], [("build", "conflict")])
         self.assertIn("main.go: syntax error", rows[0]["detail"])
-        self.assertEqual(self.changes("codex"), [])
+        self.assertEqual(self.changes(), [])
         self.assertFalse(operation.state_path.exists())
 
     def test_git_source_checks_include_untracked_files_and_symlinks(self):
         (self.source / "unexpected").symlink_to(self.home / "private")
-        self.fake_cli("claude")
+        self.fake_cli()
         _, rows = self.execute(True)
         self.assertEqual(rows[0]["status"], "conflict")
         self.assertIn("unexpected", rows[0]["detail"])

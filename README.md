@@ -10,7 +10,7 @@ preferences, so fork the repository and edit it before you run it.
 
 | Part | What it does | Docs |
 | --- | --- | --- |
-| `ramtoshiya` plugin | Skills for Claude Code and Codex, plus a hook that blocks global package installs, unpinned one-shot package runs, and pip installs into a system Python | [Agent plugins](docs/agent-pack.md), [Hooks](docs/hooks.md) |
+| `ramtoshiya` plugin | Skills for Claude Code, plus a hook that blocks global package installs, unpinned one-shot package runs, and pip installs into a system Python | [Agent plugins](docs/agent-pack.md), [Hooks](docs/hooks.md) |
 | `ramtoshiya-cc` plugin | Claude Code only: a skill for claude.ai/design projects, a context budget hook for the shared `self-compact` skill, and a hook that blocks AI attribution lines in commits and pull requests | [Agent plugins](docs/agent-pack.md) |
 | Third-party skills | Skills from other repositories, listed in this repository's marketplace and pinned to exact commits | [Third-party skills](docs/upstream-skills.md) |
 | Machine setup | A `mise.toml` that installs a few Homebrew packages and writes shell, Git, package manager, and agent settings | [Machine setup](docs/setup.md) |
@@ -47,19 +47,11 @@ claude plugin install ramtoshiya@ramtoshiya --scope user
 claude plugin install ramtoshiya-cc@ramtoshiya --scope user
 ```
 
-Codex (then trust the plugin's hooks in `/hooks`, which
-`mise run agents:sync` does for you):
-
-```sh
-codex plugin marketplace add ramtoshiya/skills
-codex plugin add ramtoshiya@ramtoshiya
-```
-
 ## Keep installed agents synchronized
 
 From a local checkout, `mise run agents:status` compares installed packages with
 the repository's pins and checks registered Claude profiles' common settings
-and instructions. `mise run agents:sync` reconciles Claude Code and Codex
+and instructions. `mise run agents:sync` reconciles Claude Code
 without replacing unrelated settings or instruction text outside
 its managed block. It installs all applicable marketplace entries and stops on
 local package modifications. After `mise run main:sync` runs once in the
@@ -77,8 +69,8 @@ every file the setup changes and the settings it applies.
 ## Repository layout
 
 ```text
-.claude-plugin/marketplace.json   Claude Code and Codex marketplace
-plugins/                          Skills and hooks for supported hosts
+.claude-plugin/marketplace.json   Claude Code marketplace
+plugins/                          Skills and hooks for Claude Code
 tools/                            Independently installed commands and their tests
 bb-plugins/                       Plugins for the bb app, installed separately
 setup/                            Machine configuration copied or merged by mise

@@ -19,15 +19,14 @@ def failed_import(module):
 
 
 class PythonModuleHintTests(unittest.TestCase):
-    def test_missing_module_in_claude_and_codex_output_points_at_uv(self):
+    def test_missing_module_in_bash_output_points_at_uv(self):
         stderr = failed_import("ramtoshiya_missing_module")
-        for response in ({"stdout": "", "stderr": stderr, "interrupted": False}, stderr):
-            with self.subTest(response=type(response).__name__):
-                output = run_hook(json.dumps({"tool_name": "Bash", "tool_response": response}))
-                self.assertEqual(output["hookEventName"], "PostToolUse")
-                context = output["additionalContext"]
-                self.assertIn("`ramtoshiya_missing_module`", context)
-                self.assertIn("uv run --with PACKAGE==VERSION python", context)
+        response = {"stdout": "", "stderr": stderr, "interrupted": False}
+        output = run_hook(json.dumps({"tool_name": "Bash", "tool_response": response}))
+        self.assertEqual(output["hookEventName"], "PostToolUse")
+        context = output["additionalContext"]
+        self.assertIn("`ramtoshiya_missing_module`", context)
+        self.assertIn("uv run --with PACKAGE==VERSION python", context)
 
     def test_other_output_and_unreadable_input_add_nothing(self):
         for payload in (json.dumps({"tool_name": "Bash", "tool_response": {"stdout": "ok"}}),

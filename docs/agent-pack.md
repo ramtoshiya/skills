@@ -1,8 +1,8 @@
 # Agent plugins
 
-This repository has two plugins. `ramtoshiya` works in Claude Code and Codex.
-`ramtoshiya-cc` works only in Claude Code. Both agents install them from the
-marketplace file `.claude-plugin/marketplace.json`, which also lists the
+This repository has two Claude Code plugins, `ramtoshiya` and `ramtoshiya-cc`.
+Claude Code installs them from the marketplace file
+`.claude-plugin/marketplace.json`, which also lists the
 [third-party skills](upstream-skills.md).
 
 ## What the plugins contain
@@ -78,8 +78,7 @@ The `worker-routing` skill is the one policy for choosing a worker's model.
   <family> [<provider>]`. For Claude families it prints the family alias, such
   as `opus`, which Claude Code resolves to the family's newest model. For the
   GPT families Luna, Terra, and Sol it prints the newest
-  `gpt-<version>-<family>` ID in the Codex catalog
-  (`~/.codex/models_cache.json`) or, with `claudex`, in bb's claudex catalog.
+  `gpt-<version>-<family>` ID in bb's claudex catalog.
   It prints nothing and exits 1 when that catalog has no model of the family.
   In bb, the [newest-model-guard](../bb-plugins/newest-model-guard/README.md)
   plugin rejects an agent-started thread whose model is older than one the
@@ -90,8 +89,8 @@ The `worker-routing` skill is the one policy for choosing a worker's model.
   GPT worker is handed off to a new Claude thread in the same environment.
   For anything else the agent proposes urgency to you instead of switching.
 - In bb, Sonnet-level workers run on Claude or on GPT Terra models through
-  `claudex`, whichever weekly quota has more room. The Codex provider stays
-  disabled in bb, and `claudex` draws on the same Codex account. No side is the default, so
+  `claudex`, whichever weekly quota has more room. `claudex` draws on the
+  Codex account's GPT quota. No side is the default, so
   work does not pile onto one quota until it runs out. Opus-level work stays
   on Claude, except that a Terra worker whose task outgrew it reruns on GPT
   Sol through the same provider.
@@ -267,13 +266,12 @@ A project's own config file can set them too. The
 
 The Go program compiles in two modules pinned to exact versions,
 `mvdan.cc/sh/v3` and `github.com/BurntSushi/toml`. The plugins have no other
-third-party dependencies. Tested with Claude Code 2.1.301 and Codex CLI 0.162.1.
+third-party dependencies. Tested with Claude Code 2.1.301.
 
 ## Install
 
-Install the agents themselves from their own instructions:
-[Claude Code](https://code.claude.com/docs/en/setup) and
-[Codex CLI](https://github.com/openai/codex).
+Install [Claude Code](https://code.claude.com/docs/en/setup) from its own
+instructions.
 
 Git does not track the hook binary, so install from a local clone where it is
 built. A marketplace added straight from GitHub has no binary, and its guard
@@ -286,7 +284,7 @@ mise install --locked
 mise run hooks:build
 ```
 
-Then, from the clone, for Claude Code:
+Then, from the clone:
 
 ```sh
 claude plugin marketplace add "$PWD"
@@ -294,24 +292,8 @@ claude plugin install ramtoshiya@ramtoshiya --scope user
 claude plugin install ramtoshiya-cc@ramtoshiya --scope user
 ```
 
-For Codex:
-
-```sh
-codex plugin marketplace add "$PWD"
-codex plugin add ramtoshiya@ramtoshiya
-```
-
 Claude Code loads the plugins from the clone, so edits apply after a reload.
-Codex installs a copy, binary included.
-
-Codex runs a plugin hook only after the hook is trusted. Installing or
-enabling the plugin does not trust it. `mise run agents:sync` trusts the hooks
-of the plugins it installs, as Synchronize a local checkout describes below.
-After a manual install, trust the `ramtoshiya` `PreToolUse` and `PostToolUse` hooks in Codex's
-`/hooks`. Codex can see `ramtoshiya-cc` in the marketplace, but it does not
-work there, so do not install it.
-
-Restart the agent after installing, or run `/reload-plugins` in Claude Code.
+Restart Claude Code after installing, or run `/reload-plugins`.
 
 ## Synchronize a local checkout
 
@@ -327,14 +309,12 @@ Once `mise run main:sync` has run in the checkout, a Git hook runs `sync`
 after every change to `main`, as [Machine setup](setup.md) describes.
 `status` makes no configuration changes or source downloads. Native inventory
 commands may refresh their own metadata caches. The task exits nonzero for
-missing packages, outdated contents, settings drift, or conflicts. `sync`
-reconciles packages for supported agent executables on `PATH`, skipping agents
-that are not installed. Use `--host claude` or `--host codex` to restrict
-either task. Repeat `--plugin NAME` to limit installation and
+missing packages, outdated contents, settings drift, or conflicts. Both tasks
+report Claude Code as absent when `claude` is not on `PATH`. Repeat `--plugin NAME` to limit installation and
 retirement to named packages, leaving other managed registrations and user
 settings alone. Unknown names are errors. `--json` prints the results as JSON.
 
-When Claude is selected without `--plugin`, both tasks also check or apply
+Without `--plugin`, both tasks also check or apply
 common user settings and instructions across the local Claude profile
 registry. Each profile reports both results. Use the shared `~/.claude`
 configuration for hosted sessions that should use the same preferences and
@@ -350,20 +330,11 @@ have different Claude merge rules. [Machine setup](setup.md) owns the profile
 format, managed instruction block, common interaction rules, terminal
 defaults, and runtime checks.
 
-The marketplace supplies the exact third-party pins. `setup/agents/hosts.json`
-selects the hosts for each entry:
+The marketplace supplies the exact third-party pins, and the tasks install
+every entry. Adding an entry therefore declares an installation, not just a
+marketplace listing, when using these tasks.
 
-| Entry | Hosts |
-| --- | --- |
-| `ramtoshiya` | Claude Code, Codex |
-| `ramtoshiya-cc` | Claude Code |
-| `open-pencil`, `mattpocock-productivity`, `fcakyon-test-audit`, `ouroboros-interview`, `pstack-mode` | Claude Code, Codex |
-
-An entry missing from the policy applies to every host.
-Adding an entry therefore declares an installation, not just a marketplace
-listing, when using these tasks.
-
-Claude Code and Codex use their native plugin commands and a marketplace
+The tasks use Claude Code's native plugin commands and a marketplace
 registered from this checkout. An existing marketplace registered elsewhere is
 reported as a conflict rather than retargeted. Claude's `readFromFolder`, when
 present, is its effective installation, even if an older cache still exists.
@@ -382,29 +353,21 @@ the files. Preserve the customization in a fork or resolve it manually
 before retrying. After adoption, local changes to a managed installation also
 produce a conflict.
 
-Removing a declared package retires only its recorded registrations. Claude and
-Codex use their uninstall commands, with Claude persistent data retained.
-Downloaded source checkouts are retained.
+Removing a declared package retires only its recorded registrations with
+`claude plugin uninstall`, keeping the plugin's persistent data. Downloaded
+source checkouts are retained.
 
-After installing a Codex plugin that has hooks, sync trusts those hooks the
-way Codex's `/hooks` screen does. It reads each hook's current hash with the
-`hooks/list` request of `codex app-server` and records it under `hooks.state`
-in `~/.codex/config.toml` with `config/batchWrite`. Codex then keeps the
-approval until the hook or the plugin's files change, and the next sync after
-such a change trusts them again. Status reports a hook Codex does not trust as
-drift. Every installed hook therefore runs without a person approving it, so
-review a hook before its plugin's pin reaches `main`.
+Claude Code runs an installed plugin's hooks without a person approving them,
+so review a hook before its plugin's pin reaches `main`.
 
 Sync does not upgrade upstream pins, install agent executables or skill CLIs,
-apply other dotfiles, or restart running sessions. Restart Claude Code and
-Codex after changes.
-Finish active Codex turns before installation and coordinate any shared-server
-restart as described below. The status table verifies installed files and
+apply other dotfiles, or restart running sessions. Restart Claude Code after
+changes. The status table verifies installed files and
 configuration, not what an existing session has loaded.
 
 ## Check that it works
 
-In each agent, ask it to run these commands:
+In Claude Code, ask the agent to run these commands:
 
 1. `git status` runs normally.
 2. `pip --version` is blocked with a message that points to uv or a virtual
@@ -425,28 +388,10 @@ or where it sends requests.
 ## Update
 
 The plugins have no `version` field, so Claude Code treats each commit of the
-marketplace repository as a new version.
-
-| Agent | Update command |
-| --- | --- |
-| Claude Code | Update the clone, run `mise run hooks:build`, and restart |
-| Codex | `mise run agents:sync` from a local checkout, or the source refresh, installation, and restart steps below. After a manual install, trust changed hooks again in `/hooks` |
-
-Refreshing Codex's installed plugin does not reload active sessions. Use a fresh
-process to load the changed skills. If a session reports a missing plugin file
-after an update, restart that session rather than repairing the cache.
-
-1. Update the clone and run `mise run hooks:build` in it.
-2. Run `codex plugin add ramtoshiya@ramtoshiya` to install from that source.
-3. Start a fresh Codex process, trust changed hooks in `/hooks`, and run the
-   checks above. Installing files alone does not verify that an existing
-   session has loaded them.
-
-If clients use a shared app-server daemon, a new terminal may reconnect to the
-same server. Check `codex app-server daemon version` before considering
-`codex app-server daemon restart`. Coordinate a restart with other clients
-because it can interrupt their work. A fresh run with `codex --no-daemon` can
-help distinguish shared-server state from the installed files.
+marketplace repository as a new version. Update the clone, run
+`mise run hooks:build`, and restart Claude Code. If a session reports a missing
+plugin file after an update, restart that session rather than repairing the
+cache.
 
 Do not repair a missing plugin version with cache edits or links to another
 version. Use the install and runtime lifecycle above. For versioned third-party
@@ -455,17 +400,17 @@ plugins, also follow [Third-party skills](upstream-skills.md).
 ## How the files fit together
 
 ```text
-.claude-plugin/marketplace.json            Marketplace read by Claude Code and Codex
-plugins/ramtoshiya/.claude-plugin/plugin.json  Plugin manifest, read by Claude Code and Codex
+.claude-plugin/marketplace.json            Marketplace read by Claude Code
+plugins/ramtoshiya/.claude-plugin/plugin.json  Plugin manifest
 plugins/ramtoshiya/skills/                     Skills
 plugins/ramtoshiya/hooks/*.go, guard/, shell/  Go source of the package and commit attribution guards
 plugins/ramtoshiya/hooks/ramtoshiya-hooks      The guards' binary, built from that source and ignored by Git
 plugins/ramtoshiya/hooks/python-module-hint.py     uv hint after a failed import
 plugins/ramtoshiya/hooks/git-hygiene-guard.py      Stop check, not registered
-plugins/ramtoshiya/hooks/hooks.json            Hook registration for Claude Code and Codex
-plugins/ramtoshiya-cc/                         Claude Code-only skills and hooks
+plugins/ramtoshiya/hooks/hooks.json            Hook registration
+plugins/ramtoshiya-cc/                         Skills and hooks of the `ramtoshiya-cc` plugin
 plugins/ramtoshiya-cc/hermes-learning/         Hermes learning command, hooks, and review prompt
 ```
 
 The rules live only in the Go program and the hook scripts. `hooks.json`
-registers them for Claude Code and Codex.
+registers them for Claude Code.

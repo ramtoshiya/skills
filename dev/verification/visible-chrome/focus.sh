@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 case "${1-}" in virtual|fallback) mode=$1 ;; *) echo 'Usage: focus.sh virtual|fallback' >&2; exit 2 ;; esac
-owner=${CODEX_THREAD_ID:-${CLAUDE_CODE_SESSION_ID:-${HERMES_SESSION_ID:-}}}
+owner=${CLAUDE_CODE_SESSION_ID:-}
 : "${owner:?Set the session ID used for the desktop lease}"
 takeaturn check desktop --owner "$owner" >/dev/null
 root=$(git rev-parse --show-toplevel)

@@ -20,10 +20,7 @@ func decode(data []byte) (payload, error) {
 	return p, nil
 }
 
-var shellTools = map[string]bool{
-	"Bash": true, "Monitor": true, "Shell": true, "shell": true,
-	"exec_command": true, "functions.exec_command": true, "terminal": true,
-}
+var shellTools = map[string]bool{"Bash": true, "Monitor": true}
 
 type ShellCall struct {
 	Script string
@@ -42,18 +39,12 @@ func shellCall(p payload) (call ShellCall, ok bool, err error) {
 			return ShellCall{}, false, errors.New("tool_input is not an object")
 		}
 	}
-	raw, present := input["command"]
-	if !present {
-		raw, present = input["cmd"]
-	}
-	if present {
+	if raw, present := input["command"]; present {
 		if err := json.Unmarshal(raw, &call.Script); err != nil || string(raw) == "null" {
 			return ShellCall{}, false, errors.New("command must be a string")
 		}
 	}
-	if call.Dir, err = truthyString(input["workdir"]); err == nil && call.Dir == "" {
-		call.Dir, err = truthyString(p["cwd"])
-	}
+	call.Dir, err = truthyString(p["cwd"])
 	return call, true, err
 }
 

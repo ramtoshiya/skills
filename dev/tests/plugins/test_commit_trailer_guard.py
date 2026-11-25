@@ -90,9 +90,6 @@ class CommitTrailerGuardTests(unittest.TestCase):
         self.assertEqual(output["hookEventName"], "PreToolUse")
         self.assertEqual(output["permissionDecision"], "deny")
         self.assertIn("Co-Authored-By", output["permissionDecisionReason"])
-        codex = json.loads(self.run_hook(json.dumps({
-            "tool_name": "exec_command", "tool_input": {"cmd": f"git commit -m 'x\n\n{TRAILER}'"}})))
-        self.assertEqual(codex["hookSpecificOutput"]["permissionDecision"], "deny")
         monitor = self.run_hook(json.dumps({
             "tool_name": "Monitor", "tool_input": {"command": f"git commit -m 'x\n\n{TRAILER}'"}}))
         self.assertIn("deny", monitor)

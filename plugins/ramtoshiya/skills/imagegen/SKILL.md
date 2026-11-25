@@ -5,8 +5,7 @@ description: >-
   transparent cutouts) with OpenAI GPT Image 2.5 or xAI Grok Imagine through a bundled script that calls an
   OpenAI-compatible Images API. Use when the user asks to create, draw, render, restyle, or edit an image, or
   when a task needs a new bitmap asset. Do not use for diagrams, icons, or logos that belong in SVG,
-  HTML/CSS, or canvas, or to extend an existing vector asset set. In Codex, the built-in imagegen skill
-  needs no setup, so use this one only when the user asks for it or for a model it covers.
+  HTML/CSS, or canvas, or to extend an existing vector asset set.
 metadata:
   short-description: Generate and edit images with GPT Image 2.5 or Grok Imagine
 ---
