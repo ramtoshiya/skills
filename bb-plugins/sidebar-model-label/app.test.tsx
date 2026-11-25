@@ -15,7 +15,7 @@ function sidebarThread(id: string, providerId: string): PluginSidebarThread {
 const threads = [
   sidebarThread("thr_opus", "claude-code"),
   sidebarThread("thr_unknown", "claude-code"),
-  sidebarThread("thr_codex", "codex"),
+  sidebarThread("thr_claudex", "claudex"),
 ];
 
 function renderRows() {
@@ -89,10 +89,10 @@ async function start(models: Record<string, string | null>) {
 
 describe("sidebar model label", () => {
   it("labels each rendered row with its model and leaves unknown rows bare", async () => {
-    await start({ thr_opus: "claude-opus-5-5", thr_codex: "gpt-6.1-sol" });
+    await start({ thr_opus: "claude-opus-5-5", thr_claudex: "gpt-6.1-sol" });
 
     await vi.waitFor(() => expect(labelOf("thr_opus")).toBe("Opus 5.5"));
-    await vi.waitFor(() => expect(labelOf("thr_codex")).toBe("gpt-6.1-sol"));
+    await vi.waitFor(() => expect(labelOf("thr_claudex")).toBe("gpt-6.1-sol"));
     expect(labelOf("thr_unknown")).toBeNull();
   });
 

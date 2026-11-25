@@ -154,7 +154,7 @@ A bb update can change any of these:
   a send time that is not in the future.
 - bb's 4,000-character quote limit for child replies.
 - The `commandExecution` items in thread events, with `command`, `exitCode`,
-  and `aggregatedOutput`, which Claude Code and Codex threads both produce.
+  and `aggregatedOutput`, which Claude Code and claudex threads both produce.
 - The command text `bb thread wait <child>`, and the self-compact helper's
   `bb-compact.mjs run` without `--no-resume`. A launch counts only with exit
   code 0, which Claude Code records when it starts the helper in the

@@ -29,7 +29,7 @@ const thread = () => makeThreadResponse({
 });
 const catalogs = {
   "claude-code": ["test-model", "claude-opus-5-5"],
-  codex: ["gpt-6-luna", "gpt-6.2-sol", "shared-model"],
+  claudex: ["gpt-6-luna", "gpt-6.2-sol", "shared-model"],
   other: ["shared-model"],
 };
 const environment = { type: "host", hostId: "host-1", workspace: { type: "personal" } };
@@ -101,7 +101,7 @@ test("Run draft on the draft's provider changes the queued message in place and 
 test("Run draft on another provider starts a copy of the draft there and deletes the draft", async (t) => {
   const content = [{ type: "text", text: "Fix the flaky test", mentions: [] }, { type: "image", url: "https://example.test/a.png" }];
   const harness = await setup(t, { messages: [{ ...draft(), content, permissionMode: "full" }] });
-  const execution = { providerId: "codex", model: "gpt-6-luna", reasoningLevel: "low" };
+  const execution = { providerId: "claudex", model: "gpt-6-luna", reasoningLevel: "low" };
   assert.deepEqual(await harness.behavior.callRpc("runDraft", { ...target, execution }), { kind: "replaced", threadId: "new-thread" });
   assert.deepEqual(harness.inspection.sdk.callsTo("threads.getPluginMetadata"), [[{ threadId: "draft-thread", pluginId: "held-drafts" }]]);
   assert.deepEqual(harness.inspection.sdk.callsTo("threads.spawn"), [[{
@@ -112,7 +112,7 @@ test("Run draft on another provider starts a copy of the draft there and deletes
     parentThreadId: "parent-thread",
     parentNotifications: "stuck",
     sectionId: "section",
-    providerId: "codex",
+    providerId: "claudex",
     model: "gpt-6-luna",
     reasoningLevel: "low",
     permissionMode: "full",
@@ -130,7 +130,7 @@ test("plain Run draft moves a draft whose model only another provider offers to 
   const [[spawned]] = harness.inspection.sdk.callsTo("threads.spawn");
   assert.deepEqual(
     { providerId: spawned.providerId, model: spawned.model, reasoningLevel: spawned.reasoningLevel, serviceTier: spawned.serviceTier },
-    { providerId: "codex", model: "gpt-6.2-sol", reasoningLevel: "xhigh", serviceTier: "fast" },
+    { providerId: "claudex", model: "gpt-6.2-sol", reasoningLevel: "xhigh", serviceTier: "fast" },
   );
   assert.deepEqual(harness.inspection.sdk.callsTo("threads.delete"), [[{ threadId: "draft-thread", childThreadsConfirmed: false }]]);
   assert.equal(harness.inspection.sdk.callsTo("threads.queuedMessages.send").length, 0);
@@ -152,8 +152,8 @@ test("the chooser starts on a provider that offers the draft's model", async (t)
   const levels = { reasoningLevel: "high", serviceTier: "default" };
   for (const [model, expected] of [
     ["test-model", { providerId: "claude-code", model: "test-model" }],
-    ["gpt-6.2-sol", { providerId: "codex", model: "gpt-6.2-sol" }],
-    ["shared-model", { providerId: "codex", model: "shared-model" }],
+    ["gpt-6.2-sol", { providerId: "claudex", model: "gpt-6.2-sol" }],
+    ["shared-model", { providerId: "claudex", model: "shared-model" }],
     ["retired-model", { providerId: "claude-code", model: "test-model" }],
   ]) {
     await t.test(model, async (t) => {
@@ -171,7 +171,7 @@ test("the chooser starts on a provider that offers the draft's model", async (t)
 test("a draft without a recorded environment is not moved to another provider", async (t) => {
   const harness = await setup(t, { metadata: {} });
   await assert.rejects(
-    harness.behavior.callRpc("runDraft", { ...target, execution: { providerId: "codex", model: "gpt-6-luna" } }),
+    harness.behavior.callRpc("runDraft", { ...target, execution: { providerId: "claudex", model: "gpt-6-luna" } }),
     /no recorded environment/,
   );
   for (const call of ["threads.queuedMessages.send", "threads.spawn", "threads.delete"]) {
@@ -182,7 +182,7 @@ test("a draft without a recorded environment is not moved to another provider", 
 test("a failed start on the other provider leaves the draft in place", async (t) => {
   const harness = await setup(t, { spawn: async () => { throw new Error("Provider unavailable"); } });
   await assert.rejects(
-    harness.behavior.callRpc("runDraft", { ...target, execution: { providerId: "codex", model: "gpt-6-luna" } }),
+    harness.behavior.callRpc("runDraft", { ...target, execution: { providerId: "claudex", model: "gpt-6-luna" } }),
     /Provider unavailable/,
   );
   assert.equal(harness.inspection.sdk.callsTo("threads.delete").length, 0);
@@ -192,7 +192,7 @@ test("a failed start on the other provider leaves the draft in place", async (t)
 test("a draft that cannot be deleted after its copy started is reported with the new thread", async (t) => {
   const harness = await setup(t, { remove: async () => { throw new Error("Thread is busy"); } });
   assert.deepEqual(
-    await harness.behavior.callRpc("runDraft", { ...target, execution: { providerId: "codex", model: "gpt-6-luna" } }),
+    await harness.behavior.callRpc("runDraft", { ...target, execution: { providerId: "claudex", model: "gpt-6-luna" } }),
     { kind: "replaced-draft-kept", threadId: "new-thread", reason: "Thread is busy" },
   );
 });

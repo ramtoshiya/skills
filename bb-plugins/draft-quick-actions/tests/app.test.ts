@@ -142,7 +142,7 @@ function renderChooser(t, registration, { runDraft = async () => ({ kind: "sent"
       subscribe: () => () => {},
       threads: { queue: { list: async () => [draft()] } },
     },
-    providers: { status: "ready", providers: [{ id: "codex", displayName: "Codex" }] },
+    providers: { status: "ready", providers: [{ id: "claudex", displayName: "Claudex" }] },
     rpc: {
       runDraft: async (input) => { calls.push(input); return runDraft(input); },
       chooserStart: async (input) => { assert.deepEqual(input, target); return chooserStart(input); },
@@ -174,13 +174,13 @@ test("the chooser starts where the server finds the draft's model and says the d
   const { slot, open } = renderChooser(t, actions.get("run-draft-on"), {
     chooserStart: async () => ({
       providerId: "claude-code",
-      execution: { providerId: "codex", model: "gpt-6-luna", reasoningLevel: "medium", serviceTier: "default" },
+      execution: { providerId: "claudex", model: "gpt-6-luna", reasoningLevel: "medium", serviceTier: "default" },
     }),
   });
   const dialog = await open();
-  assert.equal(slot.getByLabelText("Provider ID").value, "codex");
+  assert.equal(slot.getByLabelText("Provider ID").value, "claudex");
   assert.equal(slot.getByLabelText("Model").value, "gpt-6-luna");
-  assert.match(dialog.textContent, /new Codex thread.*deletes this draft/);
+  assert.match(dialog.textContent, /new Claudex thread.*deletes this draft/);
   await act(async () => slot.getByRole("button", { name: "Cancel" }).click());
 });
 
@@ -199,14 +199,14 @@ test("Run sends the picked model and opens the new thread when the draft moves t
   });
   const dialog = await open();
   assert.doesNotMatch(dialog.textContent, /deletes this draft/);
-  fireEvent.change(slot.getByLabelText("Provider ID"), { target: { value: "codex" } });
+  fireEvent.change(slot.getByLabelText("Provider ID"), { target: { value: "claudex" } });
   fireEvent.change(slot.getByLabelText("Model"), { target: { value: "gpt-6-luna" } });
   await act(async () => slot.getByRole("button", { name: "Apply execution selection" }).click());
-  assert.match(dialog.textContent, /new Codex thread.*deletes this draft/);
+  assert.match(dialog.textContent, /new Claudex thread.*deletes this draft/);
   await act(async () => slot.getByRole("button", { name: "Run" }).click());
   assert.deepEqual(calls, [{
     ...target,
-    execution: { providerId: "codex", model: "gpt-6-luna", reasoningLevel: "medium", serviceTier: "default" },
+    execution: { providerId: "claudex", model: "gpt-6-luna", reasoningLevel: "medium", serviceTier: "default" },
   }]);
   assert.deepEqual(slot.inspection.navigateCalls, [{ method: "toThread", threadId: "new-thread" }]);
   assert.equal(slot.queryByRole("dialog"), null);

@@ -9,11 +9,11 @@ type Sent = { threadId: string; senderThreadId?: string; inbox: boolean; text: s
 const THREADS = {
   ROOT: { projectId: "proj_a", parentThreadId: null, providerId: "claude-code", status: "idle" },
   LEAD: { projectId: "proj_a", parentThreadId: "ROOT", providerId: "claude-code", status: "active" },
-  WORKER: { projectId: "proj_a", parentThreadId: "LEAD", providerId: "codex", status: "idle" },
-  RELAY: { projectId: "proj_a", parentThreadId: "LEAD", providerId: "codex", status: "idle" },
-  DRAFT: { projectId: "proj_a", parentThreadId: "LEAD", providerId: "codex", status: "pending" },
-  GONE: { projectId: "proj_a", parentThreadId: "LEAD", providerId: "codex", status: "idle", archived: true },
-  OTHER: { projectId: "proj_b", parentThreadId: null, providerId: "codex", status: "idle" },
+  WORKER: { projectId: "proj_a", parentThreadId: "LEAD", providerId: "claudex", status: "idle" },
+  RELAY: { projectId: "proj_a", parentThreadId: "LEAD", providerId: "claudex", status: "idle" },
+  DRAFT: { projectId: "proj_a", parentThreadId: "LEAD", providerId: "claudex", status: "pending" },
+  GONE: { projectId: "proj_a", parentThreadId: "LEAD", providerId: "claudex", status: "idle", archived: true },
+  OTHER: { projectId: "proj_b", parentThreadId: null, providerId: "claudex", status: "idle" },
 } as const;
 type Id = keyof typeof THREADS;
 
@@ -258,8 +258,8 @@ describe("bb mail send", () => {
 
   it.each([
     [["parent=WORKER"], ["RELAY"]],
-    [["provider=codex"], ["OTHER", "RELAY", "WORKER"]],
-    [["provider=codex project=proj_a"], ["RELAY", "WORKER"]],
+    [["provider=claudex"], ["OTHER", "RELAY", "WORKER"]],
+    [["provider=claudex project=proj_a"], ["RELAY", "WORKER"]],
     [["project=proj_a", "role=reviewer"], ["WORKER"]],
     [["role=reviewer"], ["OTHER", "WORKER"]],
     [["urgent"], ["OTHER"]],
