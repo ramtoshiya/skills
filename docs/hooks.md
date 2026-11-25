@@ -165,8 +165,9 @@ hook process.
 
 ## Python module hint
 
-The `module-hint` subcommand reads a shell command's output after it runs. When the output contains `ModuleNotFoundError: No module
-named '<module>'`, it tells the agent to rerun the command as
+The `module-hint` subcommand reads a shell command's output after it runs,
+whether the command succeeded or failed. When the output contains
+`ModuleNotFoundError: No module named '<module>'`, it tells the agent to rerun the command as
 `uv run --with PACKAGE==VERSION python SCRIPT ARGS`. Agents otherwise tend to
 report a script as unrunnable when the system Python lacks one of its
 packages, even though uv can supply the package. The hint names the module,
@@ -175,7 +176,10 @@ to `--offline` for versions already in uv's cache. The package and Python
 guard still checks the rerun.
 
 Claude Code receives the hint as added context for the `Bash` tool
-call. The hint never blocks a command, and any error adds nothing. Output that only mentions the error, for
+call. It reports a failed command through `PostToolUseFailure` instead of
+`PostToolUse`, so `hooks.json` registers the hint for both events. Codex runs
+`PostToolUse` after failed commands too and skips the event it does not know.
+The hint never blocks a command, and any error adds nothing. Output that only mentions the error, for
 example a log being read, also gets the hint.
 
 ## Git hygiene check
