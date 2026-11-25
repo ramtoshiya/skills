@@ -143,7 +143,7 @@ visible.
 
 | Install target | Installed by | Kept level by `main:sync` |
 | --- | --- | --- |
-| Claude Code plugin packages, Claude settings and instructions | `agents:sync` | Yes |
+| Claude Code plugin packages, Claude settings and instructions, Codex's copies of plugins it installed from this checkout | `agents:sync` | Yes |
 | Dotfile entries in `mise.toml` | `mise dotfiles apply` | Yes |
 | Bootstrap packages in `mise.toml` | `mise bootstrap` | No |
 | bb plugins under `bb-plugins/` | `bb plugin install` | Yes, when installed from the shared checkout |
