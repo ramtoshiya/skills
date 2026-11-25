@@ -8,25 +8,25 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const VERSION = '0.1.0';
-// The size at which the kernel killed WindowServer, known for macOS 27.2.1 only.
-const PORT_LIMIT = 305_834;
+const PORT_LIMIT = { ports: 305_834, measuredOn: '27.2.1' };
 const DEFAULT_THRESHOLD = 200_000;
 const PROJECTION_ALERT_HOURS = 24;
 const ALERT_REPEAT_HOURS = 6;
 const RATE_WINDOW_HOURS = 6;
-// Apps opening at login add thousands of ports within minutes, which a shorter span would project as exhaustion.
-const MIN_RATE_SPAN_HOURS = 1;
+const LOGIN_BURST_DILUTION_HOURS = 1;
 const LOGIN_SETTLE_MINUTES = 30;
 const CHECK_INTERVAL_SECONDS = 600;
 const STALE_MINUTES = 30;
-// Two weeks of checks.
-const HISTORY_KEEP = 2016;
-const HISTORY_SLACK = 144;
+const CHECKS_PER_DAY = 24 * 3600 / CHECK_INTERVAL_SECONDS;
+const HISTORY_KEEP = 14 * CHECKS_PER_DAY;
+const HISTORY_TRIM_BATCH = CHECKS_PER_DAY;
 const PROBE_COUNT = { default: 20, min: 10, max: 60 };
 const PROBE_MAX_ROUNDS = 3;
 const PROBE_MAX_LAUNCHES = 60;
 const PROBE_SETTLE_SECONDS = 10;
 const LABEL = 'com.ramtoshiya.windowserver-ports';
+const BB_LAUNCHER_DIR = join(homedir(), '.bb/bin');
+const AGENT_PATH = [BB_LAUNCHER_DIR, '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'];
 
 const USAGE = `Usage: windowserver-ports <command>
 
@@ -97,7 +97,7 @@ function record(reading) {
   mkdirSync(stateDir, { recursive: true });
   appendFileSync(historyFile, `${JSON.stringify(reading)}\n`);
   const history = readHistory();
-  if (history.length <= HISTORY_KEEP + HISTORY_SLACK) return history;
+  if (history.length <= HISTORY_KEEP + HISTORY_TRIM_BATCH) return history;
   const kept = history.slice(-HISTORY_KEEP);
   writeAtomically(historyFile, kept.map(item => `${JSON.stringify(item)}\n`).join(''));
   return kept;
@@ -109,13 +109,13 @@ function growthOf(history, now) {
   if (!window.length) return null;
   const oldest = window.reduce((a, b) => (a.at <= b.at ? a : b));
   const spanHours = hoursBetween(oldest.at, now.at);
-  if (spanHours < MIN_RATE_SPAN_HOURS) return null;
+  if (spanHours < LOGIN_BURST_DILUTION_HOURS) return null;
   return { perHour: (now.ports - oldest.ports) / spanHours, spanHours };
 }
 
 function assess(history, now, threshold) {
   const growth = growthOf(history, now);
-  const hoursToLimit = growth && growth.perHour > 0 ? Math.max(0, PORT_LIMIT - now.ports) / growth.perHour : null;
+  const hoursToLimit = growth && growth.perHour > 0 ? Math.max(0, PORT_LIMIT.ports - now.ports) / growth.perHour : null;
   const reasons = [];
   if (now.ports >= threshold) reasons.push('threshold');
   if (hoursToLimit !== null && hoursToLimit <= PROJECTION_ALERT_HOURS) reasons.push('projection');
@@ -128,7 +128,7 @@ function assess(history, now, threshold) {
 }
 
 const grouped = number => Math.round(number).toLocaleString('en-US');
-const percent = ports => `${(100 * ports / PORT_LIMIT).toFixed(1)}%`;
+const percent = ports => `${(100 * ports / PORT_LIMIT.ports).toFixed(1)}%`;
 
 function monitorState(history) {
   const installed = existsSync(agentFile);
@@ -146,7 +146,7 @@ function status({ json }) {
     level: reasons.length ? 'warning' : 'ok',
     reasons,
     ports: now.ports,
-    limit: PORT_LIMIT,
+    limit: PORT_LIMIT.ports,
     threshold: DEFAULT_THRESHOLD,
     os: now.os,
     windowServer: { pid: now.pid, startedAt: now.startedAt },
@@ -157,10 +157,11 @@ function status({ json }) {
   if (json) return console.log(JSON.stringify(report, null, 2));
   const lines = [
     `WindowServer pid ${now.pid}, running since ${new Date(now.startedAt).toLocaleString()}, macOS ${now.os}`,
-    `Ports: ${grouped(now.ports)} of ${grouped(PORT_LIMIT)} (${percent(now.ports)}, limit measured on macOS 27.2.1)`,
+    `Ports: ${grouped(now.ports)} of ${grouped(PORT_LIMIT.ports)} `
+      + `(${percent(now.ports)}, limit measured on macOS ${PORT_LIMIT.measuredOn})`,
     growth
       ? `Growth: ${growth.perHour >= 0 ? '+' : ''}${grouped(growth.perHour)}/hour over the last ${growth.spanHours.toFixed(1)} hours`
-      : `Growth: unknown, needs ${MIN_RATE_SPAN_HOURS} hour of readings for this WindowServer`,
+      : `Growth: unknown, needs ${LOGIN_BURST_DILUTION_HOURS} hour of readings for this WindowServer`,
     projection
       ? `Projected limit: in ${grouped(projection.hoursToLimit)} hours, ${new Date(projection.at).toLocaleString()}`
       : `Projected limit: ${growth ? 'none, the count is not growing' : 'unknown'}`,
@@ -196,7 +197,7 @@ function alertMessage(now, { projection }) {
     ? `About ${grouped(projection.hoursToLimit)} h left at the current rate. ` : '';
   return {
     title: `WindowServer ports at ${percent(now.ports)} of the limit`,
-    body: `${grouped(now.ports)} of ${grouped(PORT_LIMIT)}. ${left}Log out or restart before it fills.`,
+    body: `${grouped(now.ports)} of ${grouped(PORT_LIMIT.ports)}. ${left}Log out or restart before it fills.`,
   };
 }
 
@@ -232,12 +233,12 @@ const PROBE_SUMMARY = {
 };
 
 async function probeAfterUpdate(now, state, settle) {
-  if (state.os === now.os) return;
-  if (state.os === undefined) return writeCheckState(Object.assign(state, { os: now.os }));
-  if (hoursBetween(now.startedAt, now.at) * 60 < LOGIN_SETTLE_MINUTES) return;
   const previous = state.os;
-  // Saved before probing so that a failure cannot make every later check launch the clients again.
+  if (previous === now.os) return;
+  const loginSettled = hoursBetween(now.startedAt, now.at) * 60 >= LOGIN_SETTLE_MINUTES;
+  if (previous !== undefined && !loginSettled) return;
   writeCheckState(Object.assign(state, { os: now.os }));
+  if (previous === undefined) return;
   let title;
   let body;
   const rounds = [];
@@ -286,7 +287,6 @@ async function probe(count, settle, onRound = () => {}) {
     await sleep(settle * 1000);
     const idleEnd = sample();
     for (let launch = 0; launch < count; launch += 1) run(probeClient, []);
-    // The count overshoots right after the clients exit and needs a few seconds to settle.
     await sleep(settle * 1000);
     const drift = idleEnd - idleStart;
     const growth = sample() - idleEnd;
@@ -345,9 +345,7 @@ const xmlString = text => `<string>${escapeXml(text)}</string>`;
 
 function agentPlist() {
   const log = join(stateDir, 'check.log');
-  // launchd starts with a minimal PATH. ~/.bb/bin holds a bb command that needs no node on PATH.
-  const path = [join(homedir(), '.bb/bin'), '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'];
-  const environment = { PATH: path.join(':') };
+  const environment = { PATH: AGENT_PATH.join(':') };
   if (process.env.XDG_STATE_HOME) environment.XDG_STATE_HOME = process.env.XDG_STATE_HOME;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -370,27 +368,24 @@ function agentPlist() {
 const launchDomain = () => `gui/${process.getuid()}`;
 const agentLoaded = () => spawnSync('launchctl', ['print', `${launchDomain()}/${LABEL}`]).status === 0;
 
-async function unloadAgent() {
-  if (!agentLoaded()) return;
-  run('launchctl', ['bootout', `${launchDomain()}/${LABEL}`]);
-  // bootout returns before the job is gone, and bootstrap fails while it remains.
-  for (let attempt = 0; attempt < 50 && agentLoaded(); attempt += 1) await sleep(100);
+function unloadAgent() {
+  if (agentLoaded()) run('launchctl', ['bootout', `${launchDomain()}/${LABEL}`]);
 }
 
-async function installAgent() {
+function installAgent() {
   if (!existsSync(probeClient)) {
     throw new Error('run tools/windowserver-ports/install.sh first, then `windowserver-ports install`');
   }
   mkdirSync(stateDir, { recursive: true });
   mkdirSync(dirname(agentFile), { recursive: true });
-  await unloadAgent();
+  unloadAgent();
   writeFileSync(agentFile, agentPlist());
   run('launchctl', ['bootstrap', launchDomain(), agentFile]);
   console.log(`Loaded ${agentFile}\nIt runs \`check\` every ${CHECK_INTERVAL_SECONDS} seconds with ${process.execPath}`);
 }
 
-async function uninstallAgent() {
-  await unloadAgent();
+function uninstallAgent() {
+  unloadAgent();
   rmSync(agentFile, { force: true });
   console.log(`Removed the LaunchAgent ${LABEL}. The history stays in ${stateDir}`);
 }
