@@ -55,23 +55,55 @@ func walkScript(script string, st *State, visit func(Call) error, depth int) err
 	if depth > 4 {
 		return nestingDenial
 	}
-	file, err := parse(script)
+	file, src, err := parse(script)
 	if err != nil {
-		return err
+		return Denial("The package/Python guard could not parse this command (" + err.Error() + "). Rewrite it in plain bash syntax so the guard can check it.")
 	}
-	w := &walker{src: script, visit: visit, depth: depth}
+	w := &walker{src: src, visit: visit, depth: depth}
 	return w.stmts(file.Stmts, st)
 }
 
-func parse(script string) (*syntax.File, error) {
-	file, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(script), "")
+func parse(script string) (*syntax.File, string, error) {
+	file, src, err := parseAs(syntax.LangBash, script)
 	if err == nil {
-		return file, nil
+		return file, src, nil
 	}
-	if file, zshErr := syntax.NewParser(syntax.Variant(syntax.LangZsh)).Parse(strings.NewReader(script), ""); zshErr == nil {
-		return file, nil
+	if file, src, zshErr := parseAs(syntax.LangZsh, script); zshErr == nil {
+		return file, src, nil
 	}
-	return nil, err
+	return nil, "", err
+}
+
+func parseAs(lang syntax.LangVariant, script string) (*syntax.File, string, error) {
+	var first error
+	for src := script; ; {
+		file, err := syntax.NewParser(syntax.Variant(lang)).Parse(strings.NewReader(src), "")
+		var parseErr syntax.ParseError
+		if !errors.As(err, &parseErr) {
+			return file, src, err
+		}
+		if first == nil {
+			first = err
+		}
+		var ok bool
+		if src, ok = repair(src, parseErr); !ok {
+			return nil, script, first
+		}
+	}
+}
+
+func repair(src string, err syntax.ParseError) (string, bool) {
+	at := int(err.Pos.Offset())
+	switch err.Text {
+	case "`;` can only immediately follow a statement":
+		return src[:at] + src[at+1:], true
+	case "`&&` must be followed by a statement", "`||` must be followed by a statement":
+		return src[:at] + src[at+2:], true
+	}
+	if open := strings.LastIndex(src[:min(at+2, len(src))], "(("); open >= 0 {
+		return src[:open+1] + " " + src[open+1:], true
+	}
+	return "", false
 }
 
 type walker struct {

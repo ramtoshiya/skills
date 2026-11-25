@@ -145,9 +145,18 @@ substitutions, function bodies, conditions, loops, and `sh -c` and similar
 wrappers. A `cd` or a variable assignment counts only inside its own subshell,
 substitution, or function body. Quoted text is data. Heredoc bodies are data
 too, so a script fed to `bash` on standard input is not checked, but a command
-substitution in an unquoted heredoc is. A command both parsers reject, or
-wrappers nested more than four deep, is denied as one the guard could not
-verify. A denial reaches the agent as the hook's reason.
+substitution in an unquoted heredoc is.
+
+The parsers are stricter than the shells in two places, so the guard edits the
+command where parsing stopped and parses it again. zsh runs an empty command
+after `;`, `&`, `&&`, or `||`, as in `server &; echo $!` or a command that ends
+in `&&`, so the guard drops that separator. Bash and zsh read
+`((cd dir && make) | tee log)` as nested subshells when it is not arithmetic,
+so the guard splits the `((`. These edits only remove separators or add a
+space, so every command in the text is still checked. A command that neither
+parser accepts after these edits is denied with the parser's error and a
+request to rewrite it in plain Bash syntax. Wrappers nested more than four deep
+are denied as well. A denial reaches the agent as the hook's reason.
 
 When the guard cannot run, Claude Code applies its own rules for a failing
 hook process.
