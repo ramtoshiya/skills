@@ -268,6 +268,8 @@ CLI_TOOLS = (
     Tool("excalidraw-web-export", ".local/bin/excalidraw-web-export", copies(".local/share/excalidraw-web-export", [
         "export.mjs", "size-limit.mjs", "package.json", "package-lock.json", ".npmrc"])),
     Tool("sidecar", ".local/bin/sidecar", copies(".local/share/sidecar/0.1.0", ["sidecar.m"])),
+    Tool("windowserver-ports", ".local/bin/windowserver-ports", copies(".local/share/windowserver-ports", [
+        "windowserver-ports.mjs", "probe-client.m"])),
     Tool("worktreeinclude", ".local/bin/worktreeinclude", (("worktreeinclude.mjs", ".local/bin/worktreeinclude"),)),
 )
 

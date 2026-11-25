@@ -170,8 +170,11 @@ or `~/.local/bin` differs from the shared checkout, and `main:status` reports
 that CLI as drift. A CLI whose command is not installed is left alone, because
 installing it is your choice. `CLI_TOOLS` in `setup/agents/level.py` lists the
 copies to compare, and a test checks that list against each `install.sh`. The
-`sidecar` installer also copies `sidecar.m` next to the binary it compiles, so
-the check has a file to compare. The `claudex-native` plugin caches the model
+`sidecar` and `windowserver-ports` installers also copy the source of each
+binary they compile next to it, so the check has a file to compare. Reinstalling
+`windowserver-ports` keeps its paths, so a loaded
+[monitor](../tools/windowserver-ports/README.md) runs the new copy at its next
+check. The `claudex-native` plugin caches the model
 list that `claudex` reports. A change to `tools/claudex/claudex.cjs` therefore
 rebuilds that plugin even when its own folder is unchanged, under the same
 postponement rule.

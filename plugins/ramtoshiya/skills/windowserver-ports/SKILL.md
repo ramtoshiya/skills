@@ -39,6 +39,24 @@ A loop that starts such a process once a second adds at least 3,600 names an
 hour. A test suite that starts a few hundred helpers adds a few hundred names
 per run.
 
+## Host monitor {:#host-monitor}
+
+To see how close this Mac is, run `windowserver-ports status --json`. Look the
+command up on `PATH`. If it is missing, name it and its install step,
+`sh tools/windowserver-ports/install.sh` from a clone of the repository that
+ships this skill, and stop. Never install, update, or build it yourself.
+
+- `level` is `warning` when the count is at least `threshold` or is projected to
+  reach `limit` within 24 hours. `reasons` says which. Tell the user, because
+  only logout or reboot clears the names, and do not start a loop that adds
+  more.
+- `growth` and `projection` are `null` until the history holds an hour of
+  readings for the running WindowServer. `projection` is also `null` while the
+  count is not growing. A `null` is not proof of safety.
+- `monitor.installed` says whether a LaunchAgent records readings and notifies
+  the user. `monitor.stale` says that it stopped.
+- `windowserver-ports clients --last 1h` counts new connections by client.
+
 ## Rules for code that starts processes {:#rules}
 
 1. A process that only reads or writes files starts unable to connect. Either
@@ -72,21 +90,27 @@ sudo lsmp -p "$pid" | grep DEAD_NAME
 ```
 
 Without root, `top -l 1 -pid "$pid" -stats pid,command,ports` gives the total
-port count, which also moves with ports WindowServer frees. Use it for trends,
-not for a single change.
+port count. It includes the dead names, and it also moves with live ports that
+come and go. On a quiet 27.2.1 desktop it moved by 2 or less within seconds, and
+20 connecting processes added about 20. Compare it with an idle interval of the
+same length, and wait a few seconds after the processes exit, because the count
+first overshoots.
 
 Per-process attribution comes from WindowServer's unified log. Each connection
-logs a line with `New connection 0x` and the client's process:
+logs a line with `New conn 0x` and the client's PID. A process that registers as
+an app also logs `Process creation:` with its name. Call `/usr/bin/log`,
+because zsh has a `log` builtin that takes its place:
 
 ```sh
-log show --start "<start>" --end "<end>" \
-  --predicate 'process == "WindowServer" AND eventMessage CONTAINS "New connection"'
+/usr/bin/log show --start "<start>" --end "<end>" \
+  --predicate 'process == "WindowServer" AND (eventMessage CONTAINS "New conn 0x" OR eventMessage CONTAINS "Process creation:")'
 ```
 
 ## Check after an update {:#after-update}
 
-After a macOS update, start a tiny program that connects (for example one that
-creates `NSApplication.shared` and exits) 10 times, and count dead names before
-and after. 10 more names means the defect remains. 0 means Apple fixed it.
+After a macOS update, `windowserver-ports probe` checks without root, and the
+installed monitor runs it once by itself. By hand, start a tiny program that
+connects (for example one that creates `NSApplication.shared` and exits) 10
+times, and count dead names before and after. 10 more names means the defect remains. 0 means Apple fixed it.
 Then the deny rules cost little to keep, but long-lived processes are no
 longer required.

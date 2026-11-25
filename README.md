@@ -25,6 +25,7 @@ preferences, so fork the repository and edit it before you run it.
 | `claudex-native` bb plugin | Adds a Claudex provider using a locally generated, hash-verified bb bridge | [README](bb-plugins/claudex-native/README.md) |
 | `thread-titles` bb plugin | Writes English bb thread titles with Apple's on-device language model | [README](bb-plugins/thread-titles/README.md) |
 | `sidecar` | A macOS command that connects an iPad as a Sidecar display, and an iPad shortcut that runs it over SSH | [README](tools/sidecar/README.md) |
+| `windowserver-ports` | A macOS monitor that notifies you before WindowServer runs out of Mach ports and logs you out | [README](tools/windowserver-ports/README.md) |
 | `claudex` | Runs Claude Code with GPT models discovered from a [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) server | [README](tools/claudex/README.md) |
 | `worktreeinclude` | Copies selected ignored files into new Git worktrees through an explicitly installed repository hook | [README](tools/worktreeinclude/README.md) |
 | `excalidraw-board` | Proof-of-concept command for reading and editing shared Excalidraw rooms | [README](tools/excalidraw-board/README.md) |
