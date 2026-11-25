@@ -42,12 +42,20 @@ wake each other without end. Send progress to your parent with `bb mail send`
 
 ## Waiting for commands and results {:#waiting}
 
-bb reports each turn end of a worker to its parent as a completion, and a
-background task that finishes starts a new turn. When you can wait for a
-command, test run, review, or child result, wait in the foreground and keep the
-turn open instead of backgrounding it and ending the turn. Report a tool
-timeout or failure as it is. If a turn must end before a scheduled resume and
-has nothing to report, reply with only `[no-op]`.
+bb starts a new turn in your thread when a worker you started ends a turn, and
+when a background task finishes. So do not wait for a worker with
+`bb thread wait` or a polling loop. Do the work that does not need its result,
+then end your turn. Every worker you start with `bb nest spawn` reports to you,
+even a relay worker whose parent notifications bb shows as off. Use
+`bb thread wait` only for a thread that will not report to you, such as one you
+did not start, or one you spawned with parent notifications `stuck` or `off`.
+
+bb also reports each of your turn ends to your parent as a completion. So wait
+for a command or test run in the foreground when it fits your shell tool's
+timeout, instead of backgrounding it and ending the turn. Report a tool timeout
+or failure as it is. When you end a turn only to wait and you are another
+thread's worker, reply with exactly `[no-op]`. Otherwise reply with one line
+that names what you are waiting for.
 
 `bb thread output <child>` prints only the child's last reply. A reply that is
 only `[no-op]`, or empty, is not the child's result, because the child may have

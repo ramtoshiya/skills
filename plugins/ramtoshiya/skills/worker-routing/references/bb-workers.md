@@ -51,19 +51,11 @@ After it finishes, run `git status` to confirm that the checkout did not change.
 
 ## Wait for workers {:#wait}
 
-Every parent waits for a worker in the foreground and keeps its turn open, whether it is a top-level
-session or a bb child. Do other work first when there is some. When the next step needs the result,
-run this with a limit below your shell tool's timeout:
-
-```sh
-bb thread wait <worker-id> --timeout <limit> && bb thread output <worker-id>
-```
-
-Run it again only when it exits with code 2, which means it timed out. Do not end the turn to wait.
-For a bb child, ending a turn reports it to your own parent as your result. The `mail` bb plugin
-drops the completion message for a worker reply that this command already printed. A nest relay
-message still arrives. For a worker that the nest command placed past the depth limit, it starts
-with `[nest] Automatic report from your worker` and needs no reply.
+Do not wait for a worker with `bb thread wait`. Do the other work you have, then end your turn. The
+worker's result starts a new turn. The bb instructions' "Waiting for commands and results" section
+says what to reply when you end a turn to wait. For a worker that the nest command placed past the
+depth limit, the result arrives as a message that starts with `[nest] Automatic report from your
+worker` and needs no reply.
 
 The messages that bb and nest send quote a final reply of up to 4,000 characters. A longer reply
 arrives as one line with its first line and length, and `bb thread output <worker-id>` prints it

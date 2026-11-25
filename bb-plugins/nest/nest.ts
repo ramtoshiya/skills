@@ -94,7 +94,7 @@ export function preamble(route: Extract<Route, { kind: "relay" }>): string {
   const host = `@thread:${route.hostThreadId}`;
   return [
     `[nest] Your logical parent is ${parent}, which started you with \`bb nest spawn\`. bb allows only four thread levels, so you run under ${host}, and \`bb status\` shows that thread as your parent with notifications off.`,
-    `Every turn you end is delivered to ${parent} automatically as your result, including failures and questions. Do not send results with \`bb thread tell\`, and never message ${host}. While you wait for your own workers, keep your turn open with \`bb thread wait\`, as a child whose parent notifications are auto does. Start your own workers with \`bb nest spawn\`.`,
+    `Every turn you end is delivered to ${parent} automatically as your result, including failures and questions. Do not send results with \`bb thread tell\`, and never message ${host}. Start your own workers with \`bb nest spawn\`. To wait for them, end your turn with exactly \`${NO_OP_MARKER}\`, the one reply that is not delivered. Each of their results starts a new turn, so do not wait with \`bb thread wait\`.`,
     "",
     "Brief:",
     "",
