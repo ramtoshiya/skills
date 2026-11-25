@@ -368,6 +368,21 @@ class GlobalPackageGuardTests(unittest.TestCase):
         self.assert_allowed(commands)
         self.assert_denied(GLOBAL, [f"{command}; npm install -g example" for command in commands])
 
+    def test_shell_forms_bash_rejects_but_zsh_runs_are_checked_not_refused(self):
+        self.assert_allowed([
+            "(sleep 1 > server.log 2>&1 &; echo $! > server.pid)",
+            "; echo first", "echo built &&; echo next", "swift make.swift . &&", "(echo a ||)",
+            "time ((cd /tmp && node -e 1) && echo ok)", "((cd /tmp && ls) | wc -l)", "echo $((echo a) | cat)",
+        ])
+        self.assert_denied(GLOBAL, [
+            "(npm install -g example &; echo $! > server.pid)", "npm install -g example &&",
+            "echo built &&; npm install -g example", "time ((cd /tmp && npm install -g example) && echo ok)",
+            "echo $((npm install -g example) | cat)", "zsh -c 'npm install -g example &; echo started'",
+        ])
+
+    def test_unparseable_shell_names_the_syntax_error(self):
+        self.assert_denied("could not parse this command", ["echo 'unclosed", "if true; then echo"])
+
     def test_command_text_is_never_executed(self):
         with tempfile.TemporaryDirectory() as directory:
             marker = Path(directory) / "marker"
