@@ -18,9 +18,7 @@ import {
   type PromptSource,
   type Route,
   type ThreadLink,
-  PARENT_NOTIFICATIONS,
   waitingOutcome,
-  wakesParent,
 } from "./nest";
 
 type Sdk = BbPluginApi["sdk"];
@@ -119,10 +117,6 @@ export default function plugin(bb: BbPluginApi) {
     if (thread.originPluginId !== bb.pluginId) return;
     const metadata = parseMetadata(await bb.sdk.threads.getPluginMetadata({ threadId: thread.id }));
     if (metadata === null) return;
-    if (!wakesParent(metadata.parentNotifications, outcome)) {
-      bb.log.info(`Not relaying ${outcome.kind} from ${thread.id}: its parent notifications are ${metadata.parentNotifications}.`);
-      return;
-    }
     if (outcome.kind === "completed" && outcome.reply?.trim() === NO_OP_MARKER) {
       bb.log.info(`Not relaying ${thread.id}: its reply is the ${NO_OP_MARKER} marker.`);
       return;
@@ -202,12 +196,6 @@ export default function plugin(bb: BbPluginApi) {
             model: { type: "string", description: "Model ID" },
             "reasoning-level": { type: "string", description: "Reasoning level the model lists" },
             title: { type: "string", description: "Thread title" },
-            "parent-notifications": {
-              type: "enum",
-              values: [...PARENT_NOTIFICATIONS],
-              description:
-                "Which turn outcomes wake the caller: auto (every outcome), stuck (failed or waiting on an approval or question), or off. Defaults to auto. Applies to relay workers too",
-            },
             tag: {
               type: "string",
               repeatable: true,
@@ -246,7 +234,6 @@ export default function plugin(bb: BbPluginApi) {
             const hostId = () => (host ??= hostOf(caller));
             const brief = await readBrief(promptSource, ctx.cwd, hostId);
             const route = chooseRoute(await ancestorsUpToSpawner(caller));
-            const parentNotifications = options["parent-notifications"] ?? "auto";
             const base = {
               projectId,
               environment: await spawnEnvironment(environment, hostId),
@@ -264,7 +251,6 @@ export default function plugin(bb: BbPluginApi) {
                       ...base,
                       origin: "cli",
                       parentThreadId: route.parentThreadId,
-                      ...(options["parent-notifications"] ? { parentNotifications } : {}),
                       prompt: brief,
                     })
                   : await bb.sdk.threads.spawn({
@@ -272,8 +258,8 @@ export default function plugin(bb: BbPluginApi) {
                       parentThreadId: route.hostThreadId,
                       parentNotifications: "off",
                       lifecycleOwnerThreadId: route.logicalParentThreadId,
-                      pluginMetadata: { logicalParentThreadId: route.logicalParentThreadId, parentNotifications },
-                      prompt: `${preamble(route, parentNotifications)}${brief}`,
+                      pluginMetadata: { logicalParentThreadId: route.logicalParentThreadId },
+                      prompt: `${preamble(route)}${brief}`,
                     });
             } catch (error) {
               throw new PluginCliError(`Failed to create thread: ${error instanceof Error ? error.message : String(error)}`, {

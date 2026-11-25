@@ -81,13 +81,7 @@ export function chooseRoute(lineage: Lineage): Route {
   return { kind: "relay", hostThreadId: host.id, logicalParentThreadId: caller.id };
 }
 
-export const PARENT_NOTIFICATIONS = ["auto", "stuck", "off"] as const;
-export type ParentNotifications = (typeof PARENT_NOTIFICATIONS)[number];
-
-const metadataSchema = z.object({
-  logicalParentThreadId: z.string().min(1),
-  parentNotifications: z.enum(PARENT_NOTIFICATIONS).default("auto"),
-});
+const metadataSchema = z.object({ logicalParentThreadId: z.string().min(1) });
 export type NestMetadata = z.infer<typeof metadataSchema>;
 
 export function parseMetadata(value: unknown): NestMetadata | null {
@@ -95,16 +89,12 @@ export function parseMetadata(value: unknown): NestMetadata | null {
   return parsed.success ? parsed.data : null;
 }
 
-export function preamble(route: Extract<Route, { kind: "relay" }>, notifications: ParentNotifications): string {
+export function preamble(route: Extract<Route, { kind: "relay" }>): string {
   const parent = `@thread:${route.logicalParentThreadId}`;
   const host = `@thread:${route.hostThreadId}`;
-  const delivery =
-    notifications === "auto"
-      ? `Every turn you end is delivered to ${parent} automatically as your result, including failures and questions.`
-      : `${parent} reads each turn you end as your result.`;
   return [
     `[nest] Your logical parent is ${parent}, which started you with \`bb nest spawn\`. bb allows only four thread levels, so you run under ${host}, and \`bb status\` shows that thread as your parent with notifications off.`,
-    `${delivery} Do not send results with \`bb thread tell\`, and never message ${host}. While you wait for your own workers, keep your turn open with \`bb thread wait\`, as a child whose parent notifications are auto does. Start your own workers with \`bb nest spawn\`.`,
+    `Every turn you end is delivered to ${parent} automatically as your result, including failures and questions. Do not send results with \`bb thread tell\`, and never message ${host}. While you wait for your own workers, keep your turn open with \`bb thread wait\`, as a child whose parent notifications are auto does. Start your own workers with \`bb nest spawn\`.`,
     "",
     "Brief:",
     "",
@@ -141,10 +131,6 @@ export function waitingOutcome(interaction: { id: string; payload: unknown }): O
     interactionKind: payload.success ? payload.data.kind.replaceAll("_", " ") : null,
     questions: payload.success ? (payload.data.questions ?? []).map(({ prompt }) => prompt) : [],
   };
-}
-
-export function wakesParent(notifications: ParentNotifications, outcome: Outcome): boolean {
-  return notifications === "auto" || (notifications === "stuck" && outcome.kind !== "completed");
 }
 
 export const NO_OP_MARKER = "[no-op]";
