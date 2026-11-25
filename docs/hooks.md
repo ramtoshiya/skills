@@ -18,10 +18,7 @@ Python guard and the commit attribution guard are the `guard` and
 `commit-trailer` subcommands of one Go program,
 `plugins/ramtoshiya/hooks/ramtoshiya-hooks`, which Claude Code runs directly. It is
 built from the Go source in that directory, and Git does not track it.
-[Machine setup](setup.md) describes the build. A running session keeps the
-hook commands it read when it started, so `global-package-guard.py` and
-`ramtoshiya-cc/hooks/commit-trailer-guard.py` stay at their earlier paths and
-hand each call to the same subcommands. The other hooks are Python
+[Machine setup](setup.md) describes the build. The other hooks are Python
 scripts that use only the standard library, and each runs as:
 
 ```sh
