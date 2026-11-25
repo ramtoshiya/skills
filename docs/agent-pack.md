@@ -3,9 +3,7 @@
 This repository has two Claude Code plugins, `ramtoshiya` and `ramtoshiya-cc`.
 Claude Code installs them from the marketplace file
 `.claude-plugin/marketplace.json`, which also lists the
-[third-party skills](upstream-skills.md). Codex reads the same marketplace
-file. Install `ramtoshiya` and the third-party skills there. `ramtoshiya-cc`
-works only in Claude Code.
+[third-party skills](upstream-skills.md).
 
 ## What the plugins contain
 
@@ -269,7 +267,7 @@ A project's own config file can set them too. The
 
 The Go program compiles in two modules pinned to exact versions,
 `mvdan.cc/sh/v3` and `github.com/BurntSushi/toml`. The plugins have no other
-third-party dependencies. Tested with Claude Code 2.1.301 and Codex 0.172.0.
+third-party dependencies. Tested with Claude Code 2.1.332.
 
 ## Install
 
@@ -297,20 +295,6 @@ claude plugin install ramtoshiya-cc@ramtoshiya --scope user
 
 Claude Code loads the plugins from the clone, so edits apply after a reload.
 Restart Claude Code after installing, or run `/reload-plugins`.
-
-To use the plugins in [Codex](https://learn.chatgpt.com/docs/codex/cli) too,
-run from the clone:
-
-```sh
-codex plugin marketplace add "$PWD"
-codex plugin add ramtoshiya@ramtoshiya
-```
-
-Codex installs a copy of each plugin and does not read the clone again. It
-runs a plugin's hooks only after you approve them, and it asks again whenever
-the plugin's files change. Until then those hooks, including the package
-guard, do not run. Start Codex once and choose "Trust all and continue", or
-let the sync below do it.
 
 ## Synchronize a local checkout
 
@@ -374,23 +358,12 @@ Removing a declared package retires only its recorded registrations with
 `claude plugin uninstall`, keeping the plugin's persistent data. Downloaded
 source checkouts are retained.
 
-When `codex` is on `PATH`, the tasks also check each plugin that Codex has
-installed from this checkout's marketplace. They do not install or remove
-plugins in Codex. `sync` reinstalls a plugin with `codex plugin add` when
-Codex's copy differs from the approved source files, ignoring the
-`.codex-plugin/plugin.json` that Codex writes for a plugin without one. It
-then approves the changed hooks of every plugin whose copy matches, through
-the same `codex app-server` call that Codex's own approval prompt makes.
-Hooks of other plugins stay as they are. A Codex marketplace with this name
-registered from another location is a conflict.
-
 Claude Code runs an installed plugin's hooks without a person approving them,
-and sync approves them in Codex, so review a hook before its plugin's pin
-reaches `main`.
+so review a hook before its plugin's pin reaches `main`.
 
 Sync does not upgrade upstream pins, install agent executables or skill CLIs,
-apply other dotfiles, or restart running sessions. Restart Claude Code and
-Codex after changes. The status table verifies installed files and
+apply other dotfiles, or restart running sessions. Restart Claude Code after
+changes. The status table verifies installed files and
 configuration, not what an existing session has loaded.
 
 ## Check that it works
@@ -400,9 +373,6 @@ In Claude Code, ask the agent to run these commands:
 1. `git status` runs normally.
 2. `pip --version` is blocked with a message that points to uv or a virtual
    environment's pip.
-
-Ask the same in Codex. If Codex runs `pip --version`, its hooks are waiting
-for approval.
 
 In Claude Code, `/plugin` lists the installed plugins. Each skill should appear
 once in the agent's skill list. A loose copy of the same skill, for example in
@@ -422,8 +392,7 @@ The plugins have no `version` field, so Claude Code treats each commit of the
 marketplace repository as a new version. Update the clone, run
 `mise run hooks:build`, and restart Claude Code. If a session reports a missing
 plugin file after an update, restart that session rather than repairing the
-cache. Codex keeps its old copy until `codex plugin add` runs again and you
-approve the changed hooks. `mise run agents:sync` does both.
+cache.
 
 Do not repair a missing plugin version with cache edits or links to another
 version. Use the install and runtime lifecycle above. For versioned third-party
@@ -432,7 +401,7 @@ plugins, also follow [Third-party skills](upstream-skills.md).
 ## How the files fit together
 
 ```text
-.claude-plugin/marketplace.json            Marketplace read by Claude Code and Codex
+.claude-plugin/marketplace.json            Marketplace read by Claude Code
 plugins/ramtoshiya/.claude-plugin/plugin.json  Plugin manifest
 plugins/ramtoshiya/skills/                     Skills
 plugins/ramtoshiya/hooks/*.go, guard/, shell/  Go source of the hook program

@@ -17,7 +17,6 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-import threading
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import hook_binary  # noqa: E402
@@ -449,93 +448,6 @@ class Sources:
         return Package(entry, target / prefix, target, revision, prefix)
 
 
-@contextmanager
-def app_server():
-    with subprocess.Popen(["codex", "app-server"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                          stderr=subprocess.DEVNULL, text=True) as process:
-        deadline = threading.Timer(120, process.kill)
-        deadline.start()
-        try:
-            server = AppServer(process)
-            server.request("initialize", {"clientInfo": {"name": "agents-sync", "version": "1"}})
-            server.write({"method": "initialized"})
-            yield server
-        finally:
-            deadline.cancel()
-            process.kill()
-
-
-class AppServer:
-    def __init__(self, process):
-        self.process = process
-        self.sent = 0
-
-    def write(self, message):
-        self.process.stdin.write(json.dumps(message) + "\n")
-        self.process.stdin.flush()
-
-    def request(self, method, params):
-        self.sent += 1
-        self.write({"id": self.sent, "method": method, "params": params})
-        for line in self.process.stdout:
-            message = json.loads(line)
-            if message.get("id") == self.sent:
-                if "error" in message:
-                    raise Conflict(f"codex app-server {method} failed: {message['error'].get('message')}")
-                return message["result"]
-        raise Conflict(f"codex app-server stopped before answering {method}")
-
-
-class Codex:
-    MANIFEST = ".codex-plugin/plugin.json"
-
-    def __init__(self, root, marketplace):
-        self.root = root
-        self.marketplace = marketplace
-        self.cache = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "plugins/cache" / marketplace
-
-    def installed(self):
-        result = {}
-        for row in json.loads(run("codex", "plugin", "list", "--json", "-m", self.marketplace))["installed"]:
-            source = row["marketplaceSource"]["source"]
-            if Path(source).resolve() != self.root:
-                raise Conflict(f"Codex marketplace {self.marketplace} is not this checkout: {source}")
-            result[row["name"]] = self.cache / row["name"] / row["version"]
-        return result
-
-    def stale(self, path, package):
-        expected = package.expected
-        actual = files(path) if path.is_dir() else {}
-        if self.MANIFEST not in expected:
-            actual.pop(self.MANIFEST, None)
-        return different(actual, expected)
-
-    def install(self, name):
-        run("codex", "plugin", "add", f"{name}@{self.marketplace}")
-
-    def unapproved(self, server, names):
-        plugins = {f"{name}@{self.marketplace}" for name in names}
-        inventory = server.request("hooks/list", {"cwds": [str(self.root)]})["data"]
-        return {hook["key"]: hook["currentHash"] for entry in inventory for hook in entry["hooks"]
-                if hook.get("pluginId") in plugins and hook["trustStatus"] in {"untrusted", "modified"}}
-
-    def approve_hooks(self, names, apply):
-        with app_server() as server:
-            pending = self.unapproved(server, names)
-            if not pending:
-                return "ok", "hooks approved"
-            if not apply:
-                return "drift", f"{len(pending)} changed hooks await approval"
-            server.request("config/batchWrite", {"reloadUserConfig": True, "edits": [{
-                "keyPath": "hooks.state", "mergeStrategy": "upsert",
-                "value": {key: {"trusted_hash": current} for key, current in pending.items()},
-            }]})
-            left = self.unapproved(server, names)
-        if left:
-            raise Conflict("Codex did not record approval for " + ", ".join(sorted(left)))
-        return "updated", f"approved {len(pending)} hooks that match the checkout"
-
-
 class Sync:
     def __init__(self, root=ROOT, settings_only=False):
         root = root.resolve()
@@ -708,7 +620,6 @@ class Sync:
             except ERRORS as error:
                 self.record("source", name, "conflict", str(error))
         self.claude(packages, apply, {entry["name"] for entry in chosen}, selected)
-        self.codex(packages, apply)
         return self.results
 
     def claude(self, packages, apply, names, selected):
@@ -726,40 +637,6 @@ class Sync:
             except ERRORS as error:
                 self.record("claude", name, "conflict", str(error))
         self.retire(names, apply, selected)
-
-    def codex(self, packages, apply):
-        if not shutil.which("codex"):
-            return
-        codex = Codex(self.root, self.marketplace["name"])
-        try:
-            installed = codex.installed()
-        except ERRORS as error:
-            self.record("codex", "marketplace", "conflict", str(error))
-            return
-        current = []
-        for name, path in installed.items():
-            package = packages.get(name)
-            if package is None:
-                continue
-            try:
-                stale = codex.stale(path, package)
-                if stale and not apply:
-                    self.record("codex", name, "drift", "outdated copy: " + ", ".join(stale[:5]))
-                    continue
-                if stale:
-                    codex.install(name)
-                    if codex.stale(path, package):
-                        raise Conflict(f"codex plugin add did not refresh {path}")
-                status = ("updated", "start a new Codex session") if stale else ("ok", package.ref[:12])
-                self.record("codex", name, *status)
-                current.append(name)
-            except ERRORS as error:
-                self.record("codex", name, "conflict", str(error))
-        if current:
-            try:
-                self.record("codex", "hooks", *codex.approve_hooks(current, apply))
-            except ERRORS as error:
-                self.record("codex", "hooks", "conflict", str(error))
 
     @contextmanager
     def lock(self):

@@ -177,9 +177,7 @@ guard still checks the rerun.
 
 Claude Code receives the hint as added context for the `Bash` tool
 call. It reports a failed command through `PostToolUseFailure` instead of
-`PostToolUse`, so `hooks.json` registers the hint for both events. Codex runs
-`PostToolUse` after failed commands too and skips the event it does not know.
-The hint never blocks a command, and any error adds nothing. Output that only mentions the error, for
+`PostToolUse`, so `hooks.json` registers the hint for both events. The hint never blocks a command, and any error adds nothing. Output that only mentions the error, for
 example a log being read, also gets the hint.
 
 ## Git hygiene check

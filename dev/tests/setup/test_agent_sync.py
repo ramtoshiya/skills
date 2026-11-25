@@ -17,70 +17,6 @@ sys.modules[SPEC.name] = sync
 SPEC.loader.exec_module(sync)
 
 
-FAKE_CODEX = """
-import hashlib, json, os, shutil, sys
-from pathlib import Path
-
-home = Path(os.environ["CODEX_HOME"])
-state_path = home / "fake.json"
-state = json.loads(state_path.read_text())
-args = sys.argv[1:]
-
-
-def copy(name):
-    return home / "plugins/cache/example" / name / "local"
-
-
-def content(name):
-    root = copy(name)
-    data = sorted((str(p.relative_to(root)), p.read_bytes().hex()) for p in root.rglob("*") if p.is_file())
-    return hashlib.sha256(json.dumps(data).encode()).hexdigest()
-
-
-def hook(plugin, key, current):
-    trusted = state["trust"].get(key) == current
-    return {"key": key, "pluginId": plugin, "currentHash": current, "trustStatus": "trusted" if trusted else "modified"}
-
-
-if args[:2] == ["plugin", "list"]:
-    source = {"sourceType": "local", "source": state["marketplace"]}
-    rows = [{"name": name, "version": "local", "marketplaceSource": source} for name in state["installed"]]
-    print(json.dumps({"installed": rows, "available": []}))
-elif args[:2] == ["plugin", "add"]:
-    name = args[2].split("@")[0]
-    state["calls"].append("plugin add " + args[2])
-    if state["refresh"]:
-        shutil.rmtree(copy(name), ignore_errors=True)
-        shutil.copytree(state["sources"][name], copy(name))
-        manifest = copy(name) / ".codex-plugin/plugin.json"
-        if not manifest.exists():
-            manifest.parent.mkdir()
-            manifest.write_text(json.dumps({"name": name}))
-elif args == ["app-server"]:
-    for line in sys.stdin:
-        message = json.loads(line)
-        if "id" not in message:
-            continue
-        result = {}
-        if message["method"] == "hooks/list":
-            hooks = [hook(name + "@example", name + "@example:hooks/hooks.json:pre_tool_use:0:0",
-                          "sha256:declared/sha256:" + content(name)) for name in state["installed"]]
-            hooks.append(hook("other@elsewhere", "other@elsewhere:hooks/hooks.json:stop:0:0", "sha256:a/sha256:b"))
-            result = {"data": [{"cwd": "/", "hooks": hooks, "warnings": [], "errors": []}]}
-        elif message["method"] == "config/batchWrite":
-            for edit in message["params"]["edits"]:
-                if edit["keyPath"] == "hooks.state" and edit["mergeStrategy"] == "upsert":
-                    for key, value in edit["value"].items():
-                        state["trust"][key] = value["trusted_hash"]
-                        state["calls"].append("trust " + key)
-        state_path.write_text(json.dumps(state))
-        print(json.dumps({"id": message["id"], "result": result}), flush=True)
-else:
-    sys.exit(98)
-state_path.write_text(json.dumps(state))
-"""
-
-
 def git(path, *args):
     return subprocess.check_output(["git", "-C", str(path), *args], text=True).strip()
 
@@ -104,16 +40,11 @@ class AgentSyncTests(unittest.TestCase):
         commands.mkdir()
         (commands / "claude").write_text("#!/bin/sh\nexit 99\n")
         (commands / "claude").chmod(0o755)
-        (commands / "codex").write_text(f"#!{sys.executable}\n{FAKE_CODEX}")
-        (commands / "codex").chmod(0o755)
-        self.codex_home = self.home / ".codex"
-        self.codex_home.mkdir()
-        self.set_codex(installed=[])
         self.environment = patch.dict(os.environ, {
             "PATH": str(commands) + os.pathsep + os.environ["PATH"],
             "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
             "HOME": str(self.home), "XDG_STATE_HOME": str(self.home / "state"),
-            "CLAUDE_CONFIG_DIR": str(self.home / ".claude"), "CODEX_HOME": str(self.codex_home),
+            "CLAUDE_CONFIG_DIR": str(self.home / ".claude"),
         })
         self.environment.start()
         self.addCleanup(self.environment.stop)
@@ -132,33 +63,6 @@ class AgentSyncTests(unittest.TestCase):
 
     def set_entries(self, entries):
         sync.write_json(self.marketplace, {"name": "example", "plugins": entries})
-
-    def set_codex(self, installed, sources=None, refresh=True):
-        sync.write_json(self.codex_home / "fake.json", {
-            "marketplace": str(self.root), "installed": installed, "sources": sources or {},
-            "refresh": refresh, "trust": {}, "calls": [],
-        })
-
-    def codex_state(self):
-        return sync.read_json(self.codex_home / "fake.json")
-
-    def codex_copy(self):
-        return self.codex_home / "plugins/cache/example/example/local"
-
-    def install_stale_codex_copy(self, refresh):
-        shutil.copytree(self.source, self.codex_copy())
-        (self.upstream / "plugins/example/skills/writing/SKILL.md").write_text("updated skill\n")
-        revision = commit(self.upstream, "Update")
-        new = self.install_source(revision)
-        self.entry["source"]["sha"] = revision
-        self.set_entries([self.entry])
-        commit(self.root, "Update pin")
-        self.set_codex(installed=["example"], sources={"example": str(new)}, refresh=refresh)
-        self.fake_cli({"plugin install example@example --scope user": self.deploy(new)})
-
-    def codex_rows(self, apply):
-        _, rows = self.execute(apply)
-        return [(row["component"], row["status"]) for row in rows if row["host"] == "codex"]
 
     def install_source(self, revision):
         target = self.home / "state/ramtoshiya-agents/sources/example/skills" / revision
@@ -438,25 +342,6 @@ class AgentSyncTests(unittest.TestCase):
         self.assertIn("main.go: syntax error", rows[0]["detail"])
         self.assertEqual(self.changes(), [])
         self.assertFalse(operation.state_path.exists())
-
-    def test_sync_refreshes_a_stale_codex_copy_then_approves_only_its_hooks(self):
-        self.install_stale_codex_copy(refresh=True)
-        hook = "example@example:hooks/hooks.json:pre_tool_use:0:0"
-        self.assertEqual(self.codex_rows(False), [("example", "drift")])
-        self.assertEqual(self.codex_state()["calls"], [])
-        self.assertEqual(self.codex_rows(True), [("example", "updated"), ("hooks", "updated")])
-        self.assertEqual((self.codex_copy() / "skills/writing/SKILL.md").read_text(), "updated skill\n")
-        self.assertEqual(self.codex_state()["calls"], ["plugin add example@example", "trust " + hook])
-        self.assertEqual(list(self.codex_state()["trust"]), [hook])
-        self.assertEqual(self.codex_rows(True), [("example", "ok"), ("hooks", "ok")])
-        self.assertEqual(self.codex_state()["calls"], ["plugin add example@example", "trust " + hook])
-
-    def test_codex_hooks_stay_unapproved_when_the_installer_leaves_the_copy_stale(self):
-        self.install_stale_codex_copy(refresh=False)
-        self.assertEqual(self.codex_rows(True), [("example", "conflict")])
-        self.assertEqual(self.codex_state()["calls"], ["plugin add example@example"])
-        self.assertEqual(self.codex_state()["trust"], {})
-        self.assertEqual((self.codex_copy() / "skills/writing/SKILL.md").read_text(), "original skill\n")
 
     def test_git_source_checks_include_untracked_files_and_symlinks(self):
         (self.source / "unexpected").symlink_to(self.home / "private")
