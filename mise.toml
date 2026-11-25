@@ -80,21 +80,13 @@ description = "Reconcile managed packages across installed agents"
 run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/sync.py sync"
 
 [tasks."agents:settings:status"]
-description = "Compare registered Claude settings and Claude and Hermes instructions with this checkout"
+description = "Compare registered Claude settings and instructions with this checkout"
 run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/sync.py status --settings-only"
 
 [tasks."agents:settings:sync"]
-description = "Reconcile registered Claude settings and Claude and Hermes instructions"
+description = "Reconcile registered Claude settings and instructions"
 run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/sync.py sync --settings-only"
 
 [tasks."takeaturn:install"]
 description = "Install the takeaturn CLI at the commit pinned in setup/agents/takeaturn.py"
 run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/agents/takeaturn.py install"
-
-[tasks."hermes:operator"]
-description = "Install or update the Hermes operator profile from this checkout"
-run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/hermes/operator_profile.py"
-
-[tasks."hermes:coder"]
-description = "Install or update the Hermes coder profile and its subagent profile coder-child, which run coding turns in Claude Code"
-run = "uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' python -I setup/hermes/coder_profile.py"

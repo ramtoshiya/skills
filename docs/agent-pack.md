@@ -4,11 +4,6 @@ This repository has two plugins. `ramtoshiya` works in Claude Code and Codex.
 `ramtoshiya-cc` works only in Claude Code. Both agents install them from the
 marketplace file `.claude-plugin/marketplace.json`, which also lists the
 [third-party skills](upstream-skills.md).
-The Hermes operator profile runs in pstack mode and gets copies of the
-pstack-mode conversation workflows and principles and of the skills from every
-other entry, as [Machine setup](setup.md) describes. The profile's pstack-turn
-hook asks the operator to check matching principles on every turn. Hermes does
-not run the agent-pack hooks.
 
 ## What the plugins contain
 
@@ -179,7 +174,9 @@ what agents learn: `memories/USER.md` and `memories/MEMORY.md`, skills under
 `skills/` with their use counts in `skills/.usage.json`, and the curator that
 archives skills nobody uses. `ramtoshiya-cc` connects Claude Code sessions,
 including claudex sessions, to the profile at `~/.hermes/profiles/coder`. Set
-`HERMES_LEARNING_HOME` to use another profile directory.
+`HERMES_LEARNING_HOME` to use another profile directory. Create the profile
+once with `hermes profile create coder --no-skills --no-credentials --no-alias`.
+Only the store is used. No Hermes agent runs in it.
 
 - When a session starts, a hook adds the profile's `USER.md` and `MEMORY.md`
   to its context. The skills load as the `hermes-skills` plugin through the
@@ -339,9 +336,8 @@ after every change to `main`, as [Machine setup](setup.md) describes.
 commands may refresh their own metadata caches. The task exits nonzero for
 missing packages, outdated contents, settings drift, or conflicts. `sync`
 reconciles packages for supported agent executables on `PATH`, skipping agents
-that are not installed. Use `--host claude`, `--host codex`, or
-`--host hermes` to restrict either task. Hermes gets only the common
-instructions, as [Machine setup](setup.md) describes. Repeat `--plugin NAME` to limit installation and
+that are not installed. Use `--host claude` or `--host codex` to restrict
+either task. Repeat `--plugin NAME` to limit installation and
 retirement to named packages, leaving other managed registrations and user
 settings alone. Unknown names are errors. `--json` prints the results as JSON.
 

@@ -1,4 +1,0 @@
-name: claude-code-runtime
-kind: model-provider
-version: "0.1.0"
-description: "Runs each Hermes coding turn in Claude Code: `claude` for Claude models and `claudex` for GPT models. Background reviews run as a fork of the coding session."

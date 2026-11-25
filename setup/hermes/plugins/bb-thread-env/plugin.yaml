@@ -1,3 +1,0 @@
-name: bb-thread-env
-version: "0.1.0"
-description: "Gives the commands a Hermes session runs the BB_THREAD_ID of the bb thread that shows the session, so the bb CLI acts as that thread."

@@ -1,6 +1,0 @@
-name: skill-drafts
-version: "0.1.0"
-description: "Blocks every skill_manage call. Hands each background skill review's proposals, with the reviewer's own messages, to an analyst bb thread that decides whether to create a held draft for the user to approve."
-provides_hooks:
-  - pre_tool_call
-  - post_api_request

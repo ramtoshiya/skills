@@ -19,8 +19,6 @@ STOPS_HOOK_RERUN = "RAMTOSHIYA_LEVEL"
 HOOK_VARIABLES = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX", "GIT_COMMON_DIR",
                   "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG_PARAMETERS",
                   "GIT_CONFIG_COUNT")
-OPERATOR_PROFILE = "operator"
-CODER_PROFILE = "coder"
 BB_PLUGINS = "bb-plugins"
 TOOLS = "tools"
 # A plugin that wraps a CLI under tools/ keeps state from it, such as the model list its provider caches, so a
@@ -327,13 +325,6 @@ class Installers:
         self.python = [sys.executable, "-I"]
         self.home = Path.home()
 
-    def hermes_installed(self):
-        sources = self.home / ".hermes/profiles" / OPERATOR_PROFILE / "plugins/skill-drafts/sources.json"
-        return shutil.which("hermes") is not None and sources.is_file()
-
-    def coder_installed(self):
-        return shutil.which("hermes") is not None and (state_dir() / f"hermes-{CODER_PROFILE}.json").is_file()
-
     def run(self, command, check=False, capture=True):
         return subprocess.run(command, cwd=self.shared, env=environment(), stdin=subprocess.DEVNULL,
                               capture_output=capture, text=True, check=check)
@@ -367,33 +358,13 @@ class Installers:
                 rows.append(row("takeaturn", "cli", "conflict", (result.stderr or result.stdout).strip()))
         else:
             rows.append(row("takeaturn", "cli", "absent", "not installed and mise not on PATH"))
-        if self.hermes_installed():
-            result = self.run([*self.python, str(self.shared / "setup/hermes/operator_profile.py"), "--check"])
-            detail = (result.stdout or result.stderr).strip().splitlines()
-            rows.append(row("hermes", f"profile:{OPERATOR_PROFILE}", "ok" if result.returncode == 0 else "drift",
-                            detail[-1] if detail else ""))
-        else:
-            rows.append(row("hermes", f"profile:{OPERATOR_PROFILE}", "absent", "not installed on this machine"))
-        if self.coder_installed():
-            result = self.run([*self.python, str(self.shared / "setup/hermes/coder_profile.py"), "--check"])
-            detail = (result.stdout or result.stderr).strip().splitlines()
-            rows.append(row("hermes", f"profile:{CODER_PROFILE}", "ok" if result.returncode == 0 else "drift",
-                            detail[-1] if detail else ""))
         return rows + CliTools(self.shared, self.home).status_rows() + BbPlugins(self.shared).status_rows()
 
-    def steps(self, hermes, extra):
+    def steps(self):
         agents = ("agents:sync", [*self.python, str(self.shared / "setup/agents/sync.py"), "sync"])
         dotfiles = ("mise dotfiles", ["mise", "-C", str(self.shared), "dotfiles", "apply", "--yes"])
         takeaturn = ("takeaturn", [*self.python, str(self.shared / "setup/agents/takeaturn.py"), "install"])
-        operator = ("hermes:operator", [*self.python, str(self.shared / "setup/hermes/operator_profile.py"), *extra])
         steps = [agents, *([dotfiles, takeaturn] if shutil.which("mise") else [])]
-        if self.hermes_installed():
-            steps = [*steps, operator]
-        elif hermes:
-            preferences_for_the_new_profile_soul = [agents, operator]
-            steps = [*steps, operator, *preferences_for_the_new_profile_soul]
-        if self.coder_installed():
-            steps.append(("hermes:coder", [*self.python, str(self.shared / "setup/hermes/coder_profile.py")]))
         steps.append(("cli tools", CliTools(self.shared, self.home).sync))
         if shutil.which("bb"):
             steps.append(("bb plugins", BbPlugins(self.shared).sync))
@@ -486,14 +457,14 @@ def stop_unless_still_at_target(shared, target, previous):
                    f"Commit it, or discard it and run `mise run main:sync`")
 
 
-def sync(shared, hermes, extra):
+def sync(shared):
     with locked():
         activate_hooks(shared)
         target = level_main_and_return_target(shared)
         installers = Installers(shared)
         failed = []
         previous = None
-        for name, command in installers.steps(hermes, extra):
+        for name, command in installers.steps():
             stop_unless_still_at_target(shared, target, previous)
             print(f"main:sync: {name}", file=sys.stderr)
             if not (command() if callable(command) else installers.run(command, capture=False).returncode == 0):
@@ -509,10 +480,8 @@ def sync(shared, hermes, extra):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("command", choices=["status", "sync"])
-    parser.add_argument("--hermes", action="store_true",
-                        help="also install the Hermes operator profile when it is not installed yet")
     parser.add_argument("--json", action="store_true", help="print status rows as JSON")
-    args, extra = parser.parse_known_args()
+    args = parser.parse_args()
     try:
         shared = shared_checkout(Path(__file__).resolve().parent)
         if args.command == "status":
@@ -523,7 +492,7 @@ def main():
                 for item in rows:
                     print(f"{item['host']:8} {item['component']:25} {item['status']:9} {item['detail']}")
             return int(any(item["status"] in {"drift", "conflict"} for item in rows))
-        sync(shared, args.hermes, extra)
+        sync(shared)
         return 0
     except Rebasing:
         print("main:sync: a rebase of main is in progress. Its last step runs this again", file=sys.stderr)

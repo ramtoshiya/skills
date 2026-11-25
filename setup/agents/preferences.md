@@ -141,7 +141,7 @@ times cheaper per token.
 
 Before you start a worker, read the `ramtoshiya:worker-routing` skill and
 follow it for the model, effort, provider, and urgency. A stricter instruction
-for your role wins. For example, the Hermes operator never implements.
+for your role wins.
 
 After a compaction, before the next worker spawn or file edit, reread in full
 the mode and skill files that your brief or task named. Do not use `head` or a
@@ -345,8 +345,8 @@ repository's check is not such a device when each run works in its own
 worktree or copy. Take `check:<repository>` only for a check that needs
 something one run can hold at a time, such as a fixed port. When a check times
 out under other agents' load, wait on readiness or bound CPU time instead of
-queueing checks. Pass your session id as `--owner`: `$CLAUDE_CODE_SESSION_ID`,
-`$CODEX_THREAD_ID`, or `$HERMES_SESSION_ID`. `takeaturn --help` has the rest.
+queueing checks. Pass your session id as `--owner`: `$CLAUDE_CODE_SESSION_ID` or
+`$CODEX_THREAD_ID`. `takeaturn --help` has the rest.
 
 ## Privileged commands {:#privileged-commands}
 

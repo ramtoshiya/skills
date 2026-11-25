@@ -8,11 +8,33 @@ import sys
 import tempfile
 import unittest
 
-from test_hermes_operator import FAKE_BB, FAKE_HERMES, PSTACK_ALLOWED, commit_repo, skill, under, write_tree
-
 ROOT = Path(__file__).resolve().parents[3]
-HANDOFF = "setup/hermes/skills/operator-handoff/SKILL.md"
+PREFERENCES = "setup/agents/preferences.md"
 LEVEL = "setup/agents/level.py"
+FAKE_BB = f"""#!{sys.executable}
+import json, os, sys
+from pathlib import Path
+args = sys.argv[1:]
+with open(os.environ["CALLS"], "a") as log:
+    log.write(json.dumps({{"args": args, "stdin": None}}) + "\\n")
+home = Path(os.environ["HOME"])
+if args[:2] == ["plugin", "list"]:
+    store = home / "bb-plugins.json"
+    print(json.dumps({{"plugins": json.loads(store.read_text()) if store.exists() else []}}))
+elif args[:2] == ["plugin", "install"]:
+    store = home / "bb-plugins.json"
+    path = args[2].removeprefix("path:")
+    plugins = json.loads(store.read_text()) if store.exists() else []
+    previous = next((p for p in plugins if p["id"] == Path(path).name), {{}})
+    plugins = [p for p in plugins if p["id"] != Path(path).name]
+    store.write_text(json.dumps([*plugins, {{**previous, "id": Path(path).name, "source": "path:" + path}}]))
+elif args[:2] == ["thread", "list"]:
+    store = home / "bb-threads.json"
+    print(store.read_text() if store.exists() else "[]")
+else:
+    print(json.dumps({{"ok": False, "error": {{"code": "unknown_command", "message": "unknown command"}}}}))
+    sys.exit(1)
+"""
 FAKE_NPM = f"""#!{sys.executable}
 import json, os, sys
 with open(os.environ["CALLS"], "a") as log:
@@ -44,15 +66,28 @@ ln -sfn "$HOME/.local/share/claudex/claudex.cjs" "$HOME/.local/bin/claudex"
 """
 
 
+def git(*args, cwd):
+    env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+    return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", *args],
+                          cwd=cwd, env=env, check=True, capture_output=True, text=True).stdout.strip()
+
+
+def commit_repo(root, files):
+    root.mkdir(parents=True, exist_ok=True)
+    git("init", "-q", cwd=root)
+    for name, text in files.items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text(text)
+    git("add", "-A", cwd=root)
+    git("commit", "-q", "-m", "fixture", cwd=root)
+
+
 def uv_python_dir():
     return subprocess.run(["uv", "python", "dir"], capture_output=True, text=True, check=True).stdout.strip()
 
 
 class LevelFixture:
     """A shared checkout, its origin, and a worktree, with the installs that `level.py sync` makes."""
-
-    # Install the Hermes operator profile too, for tests that read what that install writes.
-    hermes = False
 
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
@@ -61,28 +96,21 @@ class LevelFixture:
         self.home = self.tmp / "home"
         bin_dir = self.tmp / "bin"
         bin_dir.mkdir()
-        for name, script in {"hermes": FAKE_HERMES, "bb": FAKE_BB, "npm": FAKE_NPM}.items():
+        for name, script in {"bb": FAKE_BB, "npm": FAKE_NPM}.items():
             (bin_dir / name).write_text(script)
             (bin_dir / name).chmod(0o755)
-        bundled = self.tmp / "bundled"
-        write_tree(bundled, under("autonomous-ai-agents", skill("hermes-agent")))
         tools = {str(Path(shutil.which(name)).parent) for name in ("git", "uv")}
         self.env = {
-            "HOME": str(self.home), "XDG_STATE_HOME": str(self.tmp / "state"), "FAKE_BUNDLED": str(bundled),
+            "HOME": str(self.home), "XDG_STATE_HOME": str(self.tmp / "state"),
             "PATH": os.pathsep.join([str(bin_dir), *sorted(tools), "/usr/bin", "/bin"]),
             "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
             "UV_PYTHON_INSTALL_DIR": uv_python_dir(), "UV_CACHE_DIR": str(self.tmp / "uv-cache"),
             "CALLS": str(self.tmp / "bb-calls.jsonl"),
         }
-        commit_repo(self.home / "workspaces/pstack-mode", {"plugins/pstack-mode/mode.md": "# Mode\n", **under(
-            "plugins/pstack-mode/skills", {k: v for s in PSTACK_ALLOWED for k, v in skill(s).items()})})
-        (self.home / ".hermes").mkdir(parents=True)
-        subprocess.run([str(bin_dir / "hermes"), "profile", "create", "default"], env=self.env, check=True)
-        (self.home / ".hermes/SOUL.md").write_text("Default soul.\n")
-        (self.home / "bb-provider-acp.json").write_text(json.dumps({"customAgents": "[]"}))
+        self.home.mkdir()
 
         setup_files = {str(p.relative_to(ROOT)): p.read_text() for p in (ROOT / "setup").rglob("*")
-                       if p.is_file() and p.parts[len(ROOT.parts) + 1] in {"hermes", "agents", "git-hooks"}
+                       if p.is_file() and p.parts[len(ROOT.parts) + 1] in {"agents", "git-hooks"}
                        and "__pycache__" not in p.parts}
         seed = self.tmp / "seed"
         commit_repo(seed, {
@@ -90,7 +118,7 @@ class LevelFixture:
             ".gitignore": (ROOT / ".gitignore").read_text(),
             ".claude-plugin/marketplace.json": json.dumps({"name": "fixture", "plugins": [
                 {"name": "ramtoshiya", "description": "Personal skills.", "source": "./plugins/ramtoshiya"}]}),
-            **under("plugins/ramtoshiya/skills", skill("read-x")),
+            "plugins/ramtoshiya/skills/read-x/SKILL.md": "---\nname: read-x\ndescription: read-x skill\n---\n",
         })
         (seed / "setup/git-hooks/reference-transaction").chmod(0o755)
         self.git(seed, "add", "-A")
@@ -102,9 +130,9 @@ class LevelFixture:
         self.git(self.tmp, "clone", "-q", str(self.remote), str(self.shared))
         self.worktree = self.tmp / "worktrees/thr_1/skills"
         self.git(self.shared, "worktree", "add", "-q", "-b", "task", str(self.worktree), "origin/main")
-        self.installed = self.home / ".hermes/profiles/operator/skills/operator-handoff/SKILL.md"
+        self.installed = self.home / ".claude/CLAUDE.md"
 
-        result = self.level("sync", *(["--hermes"] if self.hermes else []))
+        result = self.level("sync")
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def git(self, cwd, *args, env=None):
@@ -322,11 +350,9 @@ class LevelTests(LevelFixture, unittest.TestCase):
         self.assertIn(f"is at 0123456789ab, and the pin is {pin[:12]}", rows[("takeaturn", "cli")]["detail"])
 
 
-class HermesLevelTests(LevelFixture, unittest.TestCase):
-    hermes = True
-
+class InstallLevelTests(LevelFixture, unittest.TestCase):
     def test_push_from_a_worktree_reaches_the_shared_checkout_and_the_install(self):
-        self.commit(self.worktree, HANDOFF, "pushed from a worktree\n")
+        self.commit(self.worktree, PREFERENCES, "pushed from a worktree\n")
 
         push = self.run_git(self.worktree, "push", "-q", "origin", "HEAD:main")
 
@@ -337,7 +363,7 @@ class HermesLevelTests(LevelFixture, unittest.TestCase):
         self.assertEqual(code, 0, rows)
 
     def test_commit_on_shared_main_is_pushed_and_installed(self):
-        result = self.commit(self.shared, HANDOFF, "committed on the shared main\n")
+        result = self.commit(self.shared, PREFERENCES, "committed on the shared main\n")
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.remote_main(), self.git(self.shared, "rev-parse", "HEAD"))
@@ -347,15 +373,15 @@ class HermesLevelTests(LevelFixture, unittest.TestCase):
     def test_dirty_shared_checkout_stops_and_keeps_its_changes(self):
         before = self.git(self.shared, "rev-parse", "HEAD")
         installed = self.installed.read_text()
-        (self.shared / HANDOFF).write_text("uncommitted edit\n")
-        self.commit(self.worktree, HANDOFF, "pushed while the shared checkout is dirty\n")
+        (self.shared / PREFERENCES).write_text("uncommitted edit\n")
+        self.commit(self.worktree, PREFERENCES, "pushed while the shared checkout is dirty\n")
 
         push = self.run_git(self.worktree, "push", "-q", "origin", "HEAD:main")
 
         self.assertEqual(push.returncode, 0)
         self.assertIn("STOPPED", push.stderr)
         self.assertIn("uncommitted changes", push.stderr)
-        self.assertEqual((self.shared / HANDOFF).read_text(), "uncommitted edit\n")
+        self.assertEqual((self.shared / PREFERENCES).read_text(), "uncommitted edit\n")
         self.assertEqual(self.git(self.shared, "rev-parse", "HEAD"), before)
         self.assertEqual(self.installed.read_text(), installed)
         code, rows = self.status()
@@ -365,7 +391,7 @@ class HermesLevelTests(LevelFixture, unittest.TestCase):
     def test_diverged_shared_checkout_stops_and_keeps_both_sides(self):
         self.commit(self.shared, "local.txt", "local commit\n", env=self.without_hook())
         local = self.git(self.shared, "rev-parse", "HEAD")
-        self.commit(self.worktree, HANDOFF, "pushed after the local commit\n")
+        self.commit(self.worktree, PREFERENCES, "pushed after the local commit\n")
 
         push = self.run_git(self.worktree, "push", "-q", "origin", "HEAD:main")
 
@@ -413,30 +439,19 @@ class HermesLevelTests(LevelFixture, unittest.TestCase):
         self.assertIn("scratch.txt", rows[("checkout", "main")]["detail"])
 
         (self.shared / "scratch.txt").unlink()
-        self.commit(self.shared, HANDOFF, "pushed but not installed\n", env=self.without_hook())
+        self.commit(self.shared, PREFERENCES, "pushed but not installed\n", env=self.without_hook())
         self.git(self.shared, "push", "-q", "origin", "main", env=self.without_hook())
         code, rows = self.status()
         self.assertEqual(code, 1)
         self.assertEqual(rows[("checkout", "main")]["status"], "ok")
-        self.assertEqual(rows[("hermes", "profile:operator")]["status"], "drift")
-        self.assertIn("sources changed", rows[("hermes", "profile:operator")]["detail"])
+        self.assertEqual(rows[("claude", "instructions:default")]["status"], "drift")
 
         self.assertEqual(self.level("sync").returncode, 0)
+        self.assertEqual(self.status()[0], 0)
         (self.home / ".claude/CLAUDE.md").write_text("edited by hand\n")
         code, rows = self.status()
         self.assertEqual(code, 1)
         self.assertEqual(rows[("claude", "instructions:default")]["status"], "drift")
-
-    def test_installer_run_from_a_worktree_installs_the_shared_checkout(self):
-        self.commit(self.worktree, HANDOFF, "only in the worktree\n")
-
-        result = subprocess.run([sys.executable, "-I", str(self.worktree / "setup/hermes/operator_profile.py")],
-                                env=self.env, capture_output=True, text=True)
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("left alone", result.stdout)
-        self.assertNotIn("only in the worktree", self.installed.read_text())
-        self.assertEqual(self.status()[0], 0)
 
 
 class CliToolTableTests(unittest.TestCase):

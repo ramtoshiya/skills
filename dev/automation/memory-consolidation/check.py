@@ -25,7 +25,7 @@ NEWEST_MODEL = REPO / "plugins/ramtoshiya/skills/worker-routing/scripts/newest-m
 sys.path.insert(0, str(PLUGIN))
 from hook import learned_skills  # noqa: E402
 
-# Hermes's default limits. The coder profile does not override them.
+# Hermes's default limits. The learning store's profile does not override them.
 LIMITS = {"memory": ("MEMORY.md", 2200), "user": ("USER.md", 1375)}
 CONSOLIDATE_AT = 0.8
 TARGET = 0.6

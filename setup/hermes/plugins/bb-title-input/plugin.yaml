@@ -1,3 +1,0 @@
-name: bb-title-input
-version: "0.1.0"
-description: "Keeps bb's <system_instructions> block out of the text Hermes titles a session from, so a bb thread's session is named after the user's own message."

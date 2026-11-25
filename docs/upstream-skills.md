@@ -81,10 +81,8 @@ codex plugin add mattpocock-productivity@ramtoshiya
 A loose copy of the same skill makes it load twice, as described in
 [Agent plugins](agent-pack.md).
 
-The Hermes operator profile gets the same skill selections, without the
-hooks, from the copies `mise run agents:sync` fetches. A pin update pushed to
-`origin/main` runs both installers through `main:sync`, as
-[Machine setup](setup.md) describes.
+A pin update pushed to `origin/main` runs the installers through
+`main:sync`, as [Machine setup](setup.md) describes.
 
 ## Add an entry
 
