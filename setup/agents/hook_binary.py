@@ -1,5 +1,3 @@
-"""Build the hook binary from its Go source and report whether the checkout's copy matches it."""
-
 import argparse
 import os
 from pathlib import Path
@@ -76,7 +74,7 @@ def status(root):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=("build", "status"))
     action = parser.parse_args().action
     try:
