@@ -3,7 +3,10 @@
 This repository has two Claude Code plugins, `ramtoshiya` and `ramtoshiya-cc`.
 Claude Code installs them from the marketplace file
 `.claude-plugin/marketplace.json`, which also lists the
-[third-party skills](upstream-skills.md).
+[third-party skills](upstream-skills.md). The marketplace also lists
+`background-tools`, the Claude Code half of the
+[background-tools bb plugin](../bb-plugins/background-tools/README.md), which
+documents it.
 
 ## What the plugins contain
 

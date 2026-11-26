@@ -1,0 +1,1 @@
+{ "name": "background-tools", "description": "Lets the background-tools bb plugin move a running Bash command of a bb thread to the background" }

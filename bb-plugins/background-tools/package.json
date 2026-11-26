@@ -3,14 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Move a Claude Code thread's running tool to the background, as Ctrl+B does in the terminal.",
+  "description": "Move a Claude Code thread's running Bash command to the background, as Ctrl+B does in the terminal.",
   "engines": {
     "bb": ">=0.49",
     "bbPluginSdk": ">=0.6.132"
   },
   "bb": {
     "name": "Background tools",
-    "description": "Move a Claude Code thread's running tool to the background, as Ctrl+B does in the terminal.",
+    "description": "Move a Claude Code thread's running Bash command to the background, as Ctrl+B does in the terminal.",
     "branding": { "icon": "ArrowDownToLine" },
     "server": "./server.ts",
     "app": "./app.ts"

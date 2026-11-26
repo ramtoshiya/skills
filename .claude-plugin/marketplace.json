@@ -16,6 +16,12 @@
       "author": { "name": "ramtoshiya" }
     },
     {
+      "name": "background-tools",
+      "description": "Lets the background-tools bb plugin move a running Bash command of a bb thread to the background. Claude Code only.",
+      "source": "./bb-plugins/background-tools/claude-plugin",
+      "author": { "name": "ramtoshiya" }
+    },
+    {
       "name": "mattpocock-productivity",
       "description": "Grilling interviews and conversation handoff from Matt Pocock's skills, patched to state obvious defaults and ask actual questions.",
       "source": {
