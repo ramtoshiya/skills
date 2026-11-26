@@ -104,13 +104,17 @@ missing, as it is while BB's Claude Code setting `subagentsDisabled` is on. Read
 [BB workers](references/bb-workers.md) before your first spawn there. When no tool
 can start a worker, follow the calling workflow's fallback.
 
-Without a thread tool, every worker runs on Claude, so skip the quota. Otherwise no
-side is the default. Each batch of new work goes to the side with the most room, so
-work does not pile onto one side until it runs out. The `claude` side runs the
-table's Claude rows on `claude-code`. The `codex` side is the GPT quota pool, the
-Codex account. In BB it runs the GPT column on `claudex`, whose proxy signs in with
-that same account, so the side's weekly reading covers those workers. The `opus`
-rows and your own judgement stay on Claude.
+Without a thread tool, every worker runs on Claude, so skip the quota. The `claude`
+side runs the table's Claude rows on `claude-code`. The `codex` side is the GPT quota
+pool, the Codex account. In BB it runs the GPT column on `claudex`, whose proxy signs
+in with that same account, so the side's weekly reading covers those workers.
+
+The user keeps Opus work on Claude: the `opus` rows, Fable, and the user's own main
+threads never move to GPT. That demand is pinned to Claude and often needs more than
+Claude's weekly quota on its own, so every flexible job on Claude takes room from
+Opus later. Flexible work, a row with both columns, therefore runs on Claude only in
+room that pinned demand will leave unused at Claude's reset, and otherwise on
+`codex`.
 
 Before you start a batch of new workers, read the quota and pipe it into
 `scripts/quota-pace.py`, as [Quota lookup](references/quota-lookup.md) describes.
@@ -134,9 +138,17 @@ Start the worker on the side in `route.side`. The script decides as follows:
   After a usage-limit error, a side stays limited until its reading shows a window
   that started after the error or a lower reading on the same schedule. A flag
   with a reset time keeps the side limited until that time.
-- Among the eligible sides with a current reading and no active limit, the work
-  goes to the one with the lowest expected use at its scheduled reset: the
+- Flexible work (`--eligible claude,codex` without `--prefer`) goes to `claude`
+  when Claude's `spare` is above zero: its remaining points minus the pinned Opus
+  and Fable pace times the hours to its reset. Otherwise it goes to `codex` when
+  Codex has a reading, no active limit, and room at its reset. Available Codex reset
+  credits that can be claimed before Codex would run out count as room. When
+  neither holds, or `spare` is unknown, it falls back to the rule below.
+  [Pinned demand](references/quota-lookup.md#pinned-demand) explains the figures.
+- Otherwise, among the eligible sides with a current reading and no active limit,
+  the work goes to the one with the lowest expected use at its scheduled reset: the
   projection from its recent pace, or the current reading when its pace is unknown.
+  This rule alone decides a Claude-only or Codex-only role.
   A side without a current reading has no confirmed capacity, so it does not take
   the work. The script asks `quotio-cli` for any eligible side the piped lookup
   missed before it decides.
@@ -167,4 +179,5 @@ Quote the script's `why` in your report. If the script itself fails, report the
 specific failure once and start new work on `claude`, unless Claude has an active
 usage-limit error. Then report the role as blocked. When you compact, write each
 side's status and figures from the last report, each `--limited` flag, and which
-work is urgent into the handoff note.
+work is urgent into the handoff note. Include `claude_demand.spare` and
+`claude_demand.pinned_pace_per_hour` when the report has them.

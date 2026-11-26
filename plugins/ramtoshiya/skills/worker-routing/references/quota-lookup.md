@@ -61,6 +61,35 @@ The script reads samples from two places, and writes only the second:
   `~/.local/state/ramtoshiya/quota-samples.json`. It keeps each current reading for 8 days, without
   account names, so later runs have a pace when Quotio's history is missing.
 
+## Pinned demand {:#pinned-demand}
+
+For flexible work, `--eligible claude,codex` without `--prefer`, the report adds `claude_demand`.
+It splits Claude's demand into work pinned to Claude and flexible work, because pinned demand alone
+can use up Claude's week.
+
+- The script reads Claude Code transcripts, `~/.claude/projects/**/*.jsonl` or
+  `$CLAUDE_CONFIG_DIR/projects/**/*.jsonl`, from the last 7 days. Each assistant message carries
+  `message.model` and `message.usage`. Messages are counted once by `message.id` and `requestId`.
+  Models that do not start with `claude-opus`, `claude-fable`, `claude-sonnet`, or `claude-haiku`,
+  such as claudex's GPT models, are not Claude quota and are skipped.
+- Tokens are weighted roughly like API price: input 1, cache write 1.25, cache read 0.1, output 5,
+  times a model factor of 1 for Opus and Fable, 0.6 for Sonnet, and 0.2 for Haiku. Opus and Fable
+  messages are pinned. Sonnet and Haiku messages are flexible.
+- `units_per_point` converts weighted units to Claude weekly percent-points. The script fits it
+  over the last 7 days of Quotio's Claude Weekly history: all Claude units in the history's span
+  divided by the points used in it, counting each new window or counter drop from zero. `fit`
+  describes the data. The fit needs at least 24 hours and 10 points.
+- `pinned_pace_24h` and `pinned_pace_7d` are pinned units per hour over each span, in points.
+  `pinned_pace_per_hour` is the larger one, so a window that just reset is not read as empty.
+  Without a fit, `pinned_pace_per_hour` is the pinned share of the last 24 hours of Claude units
+  times Claude's own pace, and `note` says so. Without that pace either, it is unknown.
+- `spare` is Claude's remaining points minus `pinned_pace_per_hour` times the hours to its reset:
+  room that would otherwise expire unused at the reset.
+
+The Codex side's `credits_counted` is the number of available full Codex reset credits that can be
+claimed before Codex would run out. Each one counts as 100 points of room when the script decides
+whether Codex has room. The script only counts them. A person decides whether to redeem one.
+
 ## Reset options {:#reset-options}
 
 When an eligible side is limited or projected to run out, the report adds `reset_options` for it:

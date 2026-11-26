@@ -32,6 +32,13 @@ QUOTIO_CLI = (
     "/Applications/Quotio.app/Contents/Helpers/quotio-cli",
     "/Applications/Quotio Beta.app/Contents/Helpers/quotio-cli",
 )
+USAGE_WEIGHTS = {
+    "input_tokens": 1.0, "cache_creation_input_tokens": 1.25, "cache_read_input_tokens": 0.1, "output_tokens": 5.0,
+}
+MODEL_WEIGHTS = {"claude-opus": 1.0, "claude-fable": 1.0, "claude-sonnet": 0.6, "claude-haiku": 0.2}
+PINNED_MODELS = ("claude-opus", "claude-fable")
+MIN_FIT_POINTS = 10.0
+MIN_FIT_SPAN = timedelta(hours=24)
 OFFER_SCOPES = {
     "claude-weekly": "Claude weekly limit. The reset keeps the existing weekly schedule",
     "claude-fable": "Claude Fable models only. Does not restore the weekly limit",
@@ -57,6 +64,24 @@ class Limit:
     until: datetime | None
 
 
+@dataclass(frozen=True)
+class Use:
+    at: datetime
+    units: float
+    pinned: bool
+
+
+@dataclass
+class Demand:
+    units_per_point: float | None = None
+    fit: str | None = None
+    pinned_pace_24h: float | None = None
+    pinned_pace_7d: float | None = None
+    pinned_pace_per_hour: float | None = None
+    spare: float | None = None
+    note: str | None = None
+
+
 @dataclass
 class Side:
     status: str
@@ -68,6 +93,7 @@ class Side:
     pace_source: str | None = None
     projected_at_reset: float | None = None
     runs_out_at: str | None = None
+    credits_counted: int | None = None
     note: str | None = None
 
 
@@ -343,6 +369,128 @@ def roomiest(eligible: list[str], sides: dict[str, Side]):
     return target, f"{target} has the most room at its reset: {readings}"
 
 
+def claude_use(root: Path, since: datetime) -> list[Use]:
+    """Weighted Claude token use from Claude Code transcripts, roughly in proportion to API price."""
+    uses, seen = [], set()
+    for path in root.rglob("*.jsonl"):
+        try:
+            if path.stat().st_mtime < since.timestamp():
+                continue
+            lines = path.open("rb")
+        except OSError:
+            continue
+        with lines:
+            for line in lines:
+                if b'"assistant"' not in line or b'"usage"' not in line:
+                    continue
+                try:
+                    record = json.loads(line)
+                    if record.get("type") != "assistant":
+                        continue
+                    message = record["message"]
+                    model = message.get("model") or ""
+                    weight = next((w for prefix, w in MODEL_WEIGHTS.items() if model.startswith(prefix)), None)
+                    key = (message.get("id"), record.get("requestId"))
+                    if weight is None or key in seen:
+                        continue
+                    seen.add(key)
+                    at = parse_time(record["timestamp"])
+                    usage = message.get("usage") or {}
+                    units = weight * sum(w * (usage.get(field) or 0) for field, w in USAGE_WEIGHTS.items())
+                except (KeyError, TypeError, ValueError, AttributeError):
+                    continue
+                if at >= since:
+                    uses.append(Use(at, units, model.startswith(PINNED_MODELS)))
+    return uses
+
+
+def points_used(samples: list[Sample]) -> float:
+    """Weekly percent-points consumed across the samples, counting each new window from zero."""
+    total, peak = 0.0, None
+    for before, sample in zip([None, *samples], samples):
+        if before is None:
+            peak = sample.used
+        elif not same_window(before, sample) or sample.used < peak - ROUNDING:
+            total, peak = total + sample.used, sample.used
+        else:
+            total, peak = total + max(0.0, sample.used - peak), max(peak, sample.used)
+    return total
+
+
+def claude_demand(uses: list[Use], series: list[Sample], side: Side, now) -> Demand:
+    demand = Demand()
+    week = [s for s in series if s.at >= now - WEEK]
+    points = points_used(week)
+    if len(week) >= 2 and week[-1].at - week[0].at >= MIN_FIT_SPAN and points >= MIN_FIT_POINTS:
+        units = sum(u.units for u in uses if week[0].at <= u.at <= week[-1].at)
+        if units > 0:
+            demand.units_per_point = round(units / points)
+            hours = (week[-1].at - week[0].at).total_seconds() / 3600
+            demand.fit = f"{units / 1e6:.0f}M weighted units over {points:.0f} Claude points in {hours:.0f} hours"
+    if demand.units_per_point:
+        def pace(span: timedelta) -> float:
+            pinned = sum(u.units for u in uses if u.pinned and u.at >= now - span)
+            return pinned / demand.units_per_point / (span.total_seconds() / 3600)
+        demand.pinned_pace_24h, demand.pinned_pace_7d = round(pace(LOOKBACK), 2), round(pace(WEEK), 2)
+        demand.pinned_pace_per_hour = max(demand.pinned_pace_24h, demand.pinned_pace_7d)
+    else:
+        recent = [u for u in uses if u.at >= now - LOOKBACK]
+        total = sum(u.units for u in recent)
+        if total <= 0 or side.pace_per_hour is None:
+            demand.note = ("Too little data for pinned demand: no fit against Quotio history, and "
+                           + ("no Claude transcript use in the last 24 hours" if total <= 0 else "no Claude pace"))
+            return demand
+        share = sum(u.units for u in recent if u.pinned) / total
+        demand.pinned_pace_per_hour = round(share * side.pace_per_hour, 2)
+        demand.note = (f"Too little Quotio history to fit units per point ({points:.0f} points), so pinned pace is "
+                       f"the pinned share of the last 24 hours of tokens ({share:.0%}) times Claude's own pace")
+    if side.used is not None and side.resets_at is not None:
+        hours_left = max(0.0, (parse_time(side.resets_at) - now).total_seconds() / 3600)
+        demand.spare = round(100 - side.used - demand.pinned_pace_per_hour * hours_left, 1)
+    return demand
+
+
+def usable_codex_credits(by: datetime) -> int:
+    """Available full Codex reset credits that can still be claimed at the given time."""
+    result, _ = codex_rate_limits()
+    return sum(
+        1 for c in ((result or {}).get("rateLimitResetCredits") or {}).get("credits") or []
+        if c.get("status") == "available" and c.get("resetType") == "codexRateLimits"
+        and (not c.get("expiresAt") or parse_time(c["expiresAt"]) >= by)
+    )
+
+
+def codex_room(codex: Side, now) -> bool:
+    if codex.status == "limited" or codex.used is None:
+        return False
+    if codex.status != "runs-out":
+        return True
+    codex.credits_counted = usable_codex_credits(max(now, parse_time(codex.runs_out_at)))
+    return codex.projected_at_reset - 100 * codex.credits_counted < 100
+
+
+def route_flexible(sides: dict[str, Side], demand: Demand, now):
+    claude, codex = sides["claude"], sides["codex"]
+    if demand.spare is None:
+        target, why = roomiest(list(SIDES), sides)
+        return target, f"Claude's spare room after Opus and Fable demand is unknown. {why}"
+    if claude.status != "limited" and demand.spare > 0:
+        return "claude", (f"Claude has {demand.spare} points that Opus and Fable demand will not use "
+                          f"before its reset, so flexible work uses them")
+    pinned = (f"Opus and Fable demand at {demand.pinned_pace_per_hour} points an hour needs "
+              f"{abs(demand.spare)} points more than Claude has left before its reset")
+    if claude.status == "limited":
+        pinned = "Claude is limited"
+    if codex_room(codex, now):
+        detail = (f"reads {codex.used}%" if codex.projected_at_reset is None
+                  else f"projects {codex.projected_at_reset}%")
+        if codex.credits_counted:
+            detail += f" with {codex.credits_counted} unclaimed reset credits counted as room"
+        return "codex", f"{pinned}, so flexible work goes to codex, which {detail}"
+    target, why = roomiest(list(SIDES), sides)
+    return target, f"{pinned} and codex has no room either. {why}"
+
+
 def choose(prefer: str, eligible: list[str], sides: dict[str, Side]):
     if prefer in eligible and sides[prefer].status != "limited":
         return prefer, f"{prefer} is the urgent side and has no active usage limit"
@@ -506,12 +654,13 @@ def main(argv=None) -> int:
     path = state_path()
     state = load_state(path)
 
-    sides = {}
+    sides, series_by_side = {}, {}
     for side in SIDES:
         current = readings.get(side)
         series, account_note = pick_account(history.get(side, {}), current.weekly if current else None, now)
         if account_note:
             notes.append(account_note)
+        series_by_side[side] = series
         sources = [("quotio history", series), ("samples from earlier runs", state[side])]
         sides[side] = forecast(side, current.weekly if current else None, sources, limited.get(side), now)
         if current:
@@ -519,9 +668,18 @@ def main(argv=None) -> int:
     if readings:
         save_state(path, state, now)
 
-    target, why = (roomiest(eligible, sides) if args.prefer is None
-                   else choose(args.prefer, eligible, sides))
+    demand = None
+    if args.prefer is not None:
+        target, why = choose(args.prefer, eligible, sides)
+    elif set(eligible) == set(SIDES):
+        root = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "projects"
+        demand = claude_demand(claude_use(root, now - WEEK), series_by_side["claude"], sides["claude"], now)
+        target, why = route_flexible(sides, demand, now)
+    else:
+        target, why = roomiest(eligible, sides)
     report = {"route": {"side": target, "why": why}, "sides": {k: asdict(v) for k, v in sides.items()}}
+    if demand is not None:
+        report["claude_demand"] = asdict(demand)
     if target is None or any(sides[s].status in ("limited", "runs-out") for s in eligible):
         report["reset_options"] = reset_options(eligible, sides, readings, offers, now)
     if notes:

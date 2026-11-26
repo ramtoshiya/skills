@@ -474,5 +474,63 @@ class QuotaPaceTests(unittest.TestCase):
         self.assertEqual(report["route"]["side"], "claude")
 
 
+    def transcript(self, *messages):
+        path = self.home / ".claude/projects/project/session.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a") as file:
+            for message_id, model, hours, usage in messages:
+                file.write(json.dumps({"type": "assistant", "timestamp": iso(ago(hours)), "requestId": f"req-{message_id}",
+                                       "message": {"id": message_id, "model": model, "usage": usage}}) + "\n")
+
+    def pinned_demand_above_a_week(self):
+        # 160 points in the last week, one weekly reset bought mid-window, and 10.6M weighted units:
+        # two Opus answers of 1M output tokens (5M each), a Sonnet prompt of 1M input tokens (0.6M), a
+        # repeated Opus record, and a GPT record that is not Claude quota. No Opus use in the last 24 hours.
+        self.history("claude", ago(1), {160: 0, 100: 100, 99: 0, 1.5: 60})
+        opus = ("msg-a", "claude-opus-5-5", 120, {"output_tokens": 1_000_000})
+        self.transcript(opus, opus, ("msg-b", "claude-fable-5-2", 60, {"output_tokens": 1_000_000}),
+                        ("msg-c", "claude-sonnet-5-5", 80, {"input_tokens": 1_000_000}),
+                        ("msg-d", "gpt-6.2-sol", 70, {"output_tokens": 1_000_000}))
+
+    def test_flexible_work_takes_only_claude_room_that_pinned_demand_leaves(self):
+        self.pinned_demand_above_a_week()
+        for claude, expected in (((0, later(167)), "codex"), ((20, later(10)), "claude")):
+            with self.subTest(claude=claude):
+                report = self.run_pace(bb_usage(claude=claude, codex=(30, later(100))), "--eligible", "claude,codex")
+                demand = report["claude_demand"]
+                self.assertEqual(demand["units_per_point"], 66250)
+                self.assertEqual(demand["pinned_pace_24h"], 0)
+                self.assertAlmostEqual(demand["pinned_pace_per_hour"], 10e6 / 66250 / 168, delta=0.01)
+                self.assertEqual(demand["spare"] > 0, expected == "claude")
+                self.assertEqual(report["route"]["side"], expected)
+
+    def test_codex_reset_credits_count_as_room_only_when_claimable_before_it_runs_out(self):
+        self.pinned_demand_above_a_week()
+        self.history("codex", later(48), {23.5: 27, 0.1: 75})
+        for expires, expected in ((None, "codex"), (int(later(2).timestamp()), "claude")):
+            with self.subTest(expires=expires):
+                self.codex_log.unlink(missing_ok=True)
+                self.codex_response.write_text(json.dumps({"rateLimitResetCredits": {"availableCount": 1, "credits": [
+                    {"id": "credit-a", "resetType": "codexRateLimits", "status": "available", "expiresAt": expires},
+                ]}}))
+                report = self.run_pace(bb_usage(claude=(0, later(167)), codex=(75, later(48))),
+                                       "--eligible", "claude,codex")
+                self.assertEqual(report["sides"]["codex"]["status"], "runs-out")
+                self.assertEqual(report["sides"]["codex"]["credits_counted"], 1 if expected == "codex" else 0)
+                self.assertEqual(report["route"]["side"], expected)
+                self.assertEqual(self.codex_methods(), ["initialize", "initialized", "account/rateLimits/read"])
+
+    def test_without_a_fit_pinned_pace_is_the_pinned_token_share_of_claude_pace(self):
+        self.history("claude", later(48), {23.4: 20, 0.1: 32})
+        self.transcript(("msg-a", "claude-opus-5-5", 5, {"output_tokens": 300_000}),
+                        ("msg-b", "claude-haiku-5-5", 4, {"input_tokens": 2_500_000}))
+        report = self.run_pace(bb_usage(claude=(32, later(48)), codex=(10, later(100))), "--eligible", "claude,codex")
+        demand = report["claude_demand"]
+        self.assertIsNone(demand["units_per_point"])
+        self.assertIn("Too little Quotio history", demand["note"])
+        self.assertAlmostEqual(demand["pinned_pace_per_hour"], 0.75 * report["sides"]["claude"]["pace_per_hour"],
+                               delta=0.01)
+        self.assertEqual(report["route"]["side"], "claude")
+
 if __name__ == "__main__":
     unittest.main()
