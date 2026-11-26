@@ -376,15 +376,16 @@ record written before feedback keeps agents from undoing correct work, while
 the same record written after feedback helps little.
 
 When an agent builds or starts a web UI or development preview for your own
-use, the instructions have it listen on loopback and on the addresses
-`tailscale ip` reports, so the tool also works from your other Tailscale
-devices without a separate request. If the server cannot listen there, the
-agent keeps it on loopback and adds a tailnet-only `tailscale serve` mapping
-instead. Agents do not bind every interface, enable Funnel, or change tailnet
-access rules to make a tool reachable. Test fixtures, OAuth callbacks, credential-holding
-services, and anything you ask to keep local stay on loopback. Without a
-running Tailscale, the tool stays on loopback and the agent says that other
-devices cannot reach it. The
+use, the instructions have it listen on loopback and add a site for it to a
+[Caddy](https://caddyserver.com/) front door at `/opt/homebrew/etc/Caddyfile`.
+The front door serves your tools over HTTPS to your other devices, which reach
+the Mac through your router's WireGuard server. Its `gate` snippet admits only
+WireGuard peers and serves a certificate from your private CA. Agents do not
+bind every interface, open router ports, or widen that allowlist to make a tool
+reachable. Test fixtures, OAuth callbacks, credential-holding services, and
+anything you ask to keep local stay on loopback. Without a running Caddy front
+door, the tool stays on loopback and the agent says that other devices cannot
+reach it. The
 [personal web access cases](../dev/evals/personal-web-access/cases.json) check
 that behavior in fresh Claude Code sessions. Run them with
 `node dev/evals/personal-web-access/run.mjs <new-output-directory>` and grade

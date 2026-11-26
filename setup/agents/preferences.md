@@ -200,29 +200,33 @@ fixing it is outside the task. Report the evidence with the question.
 ## Personal web tools {:#personal-web-access}
 
 A web UI or development preview that you build or start for the user's own
-use must work on this machine and from the user's other devices on their
-Tailscale network. Set this up as part of delivering the tool, without waiting
-for a separate request.
+use must work on this machine and from the user's other devices. Those devices
+reach this Mac through the home router's WireGuard server, and a Caddy front
+door on this Mac serves the user's web tools to them over HTTPS. Set this up as
+part of delivering the tool, without waiting for a separate request.
 
-- Listen on loopback and on the addresses that `tailscale ip` reports. Do not
-  treat every address in 100.64.0.0/10 as Tailscale, because other software
-  uses that range too.
-- If the server cannot listen on those addresses, keep it on loopback and add
-  a tailnet-only `tailscale serve` mapping. Check `tailscale serve status`
-  first, never replace an existing mapping, and report the mapping you added.
-- Do not bind 0.0.0.0 or `[::]`, enable Funnel, open router or firewall ports,
-  change tailnet access rules, or add a login layer just to make a tool
-  reachable.
+- Listen on loopback only. Then add a site for the tool to the front door's
+  config, `/opt/homebrew/etc/Caddyfile`: an `https://<front address>:<port>`
+  block that imports the `gate` snippet and reverse-proxies to the loopback
+  port. Take the front address from the existing sites, and use the tool's own
+  port number when the front address has it free. Read the existing sites
+  first and never replace one. Run `caddy validate` on the file, apply it with
+  `caddy reload`, and report the site you added.
+- The `gate` snippet admits only WireGuard peers and serves the certificate of
+  the user's private CA, which their devices trust. Do not widen its
+  allowlist, bind 0.0.0.0 or `[::]`, open or forward router or firewall ports,
+  or add a login layer just to make a tool reachable.
+- Remove a site you added for a preview once the preview is no longer served.
 - Keep test fixtures, databases, local IPC, OAuth callbacks, and services that
-  hold credentials on loopback. A project's or the user's explicit binding
-  instruction, and the app's own security requirements, take precedence over
-  this default.
-- If Tailscale is not running, or the prerequisite checks above do not find
-  it, serve on loopback only and tell the user that other devices cannot reach
-  the tool.
+  hold credentials on loopback without a front-door site. A project's or the
+  user's explicit binding instruction, and the app's own security
+  requirements, take precedence over this default.
+- If the Caddyfile or the `caddy` command is missing, or Caddy is not running,
+  serve on loopback only and tell the user that other devices cannot reach the
+  tool. Do not install or start Caddy on your own.
 - Report each URL the tool serves and check the addresses it actually listens
-  on. A request from this machine to its Tailscale address shows the binding,
-  not that another device can connect, so say which of the two you checked.
+  on. A request from this machine to the front address shows the binding, not
+  that another device can connect, so say which of the two you checked.
 
 ## Checks and guards {:#guards}
 
