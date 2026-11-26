@@ -22,6 +22,7 @@ preferences, so fork the repository and edit it before you run it.
 | `sidebar-model-label` bb plugin | Shows each thread's model beside its title without adding a second row | [README](bb-plugins/sidebar-model-label/README.md) |
 | `inline-vis-copy-image` bb plugin | Makes bb Desktop's Copy Image menu item work on images inside inline visualizations | [README](bb-plugins/inline-vis-copy-image/README.md) |
 | `tilde-strikethrough` bb plugin | Strikes through chat text only between double tildes, so ranges such as `v3~6` keep their tildes | [README](bb-plugins/tilde-strikethrough/README.md) |
+| `background-tools` bb plugin | Moves a Claude Code or Claudex thread's running tool to the background, as Ctrl+B does in the terminal | [README](bb-plugins/background-tools/README.md) |
 | `claudex-native` bb plugin | Adds a Claudex provider using a locally generated, hash-verified bb bridge | [README](bb-plugins/claudex-native/README.md) |
 | `thread-titles` bb plugin | Writes English bb thread titles with Apple's on-device language model | [README](bb-plugins/thread-titles/README.md) |
 | `sidecar` | A macOS command that connects an iPad as a Sidecar display, and an iPad shortcut that runs it over SSH | [README](tools/sidecar/README.md) |
