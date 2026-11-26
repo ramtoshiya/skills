@@ -41,17 +41,34 @@ on an Agent call, and `--model` and `--reasoning-level` on `bb nest spawn`.
 Without them, an Agent subagent on another model runs at that model's saved effort,
 which may be `low`, and a BB worker runs on your own model and effort.
 
+Two questions place top-tier work:
+
+- **Oracle:** can something other than the same judgment reject a wrong result? A
+  failing test, a reproduction, a measurement, or acceptance criteria the brief
+  fixed in advance all count. A reader's opinion does not.
+- **Door:** if the result is wrong, can it be undone cheaply? A file format,
+  persisted state, a public interface, or a direction the user will build on is a
+  one-way door.
+
+Work with no oracle, or a one-way door, is judgment and stays on Claude. Without an
+oracle, a model must decide for itself where to stop and what to recommend, and a
+GPT worker without one has substituted an easier requirement for the stated one,
+stopped before a working check, or dropped a working but fragile route.
+
 | Row | On the `codex` side | Work |
 | --- | --- | --- |
 | `sonnet` `high` | `terra` `high` | The default for implementation: the brief states the behavior and acceptance criteria, the change stays inside one component, and no design decision is open. Also sorting and summarizing results against fixed criteria, and reads that need interpretation, including explanations, research, calculations, and reconciling mismatches, even when read-only. Split input over about 100K tokens across several workers |
-| `opus` `high` | Stays on Claude | Top-tier work: design questions and memos, reviews, changes across components or boundaries such as a file format or persisted state, concurrency, recovery, security, and debugging an unknown cause |
+| `opus` `high` | `sol` `high` | Top-tier work that an oracle checks, where the brief names the oracle: a review that must reproduce each finding with a failing test or command, debugging with a reproduction, changes across components with tests that pin the behavior, concurrency, recovery, and security checks |
+| `opus` `high` | Stays on Claude | Judgment: work no oracle checks, or a one-way door. Design questions and memos, choosing a file format or persisted state, verdicts on whether something can be done, deciding which review findings to fix, defer, or reject, and conclusions that go to the user |
 
-Use `fable` in place of `opus` only when the user asks for it or the work is urgent,
-as [Urgency](#urgency) describes. Under claudex these aliases select its GPT tiers,
-so the same table applies. When a piece of work fits no row, split it instead of
-picking a combination in between. Work that mixes design decisions with many
-mechanical edits becomes an `opus` `high` design unit and a `sonnet` `high`
-implementation unit.
+When you cannot name the oracle, use the judgment row. Use `fable` in place of
+`opus` only when the user asks for it or the work is urgent, as
+[Urgency](#urgency) describes. Under claudex these aliases select its GPT tiers,
+so the same table applies. When a piece of work fits no row, split it instead
+of picking a combination in between. Work that mixes a judgment with checkable
+work becomes a judgment unit on Claude and a checkable unit on the row the check
+allows, such as a design memo and its implementation, or a review that reproduces
+findings and a triage of those findings.
 
 When a worker stopped, failed, or seems to have outgrown its row, or a workflow needs
 a seat outside the Claude family, read [Retries and step-ups](references/retries.md).
@@ -109,7 +126,7 @@ side runs the table's Claude rows on `claude-code`. The `codex` side is the GPT 
 pool, the Codex account. In BB it runs the GPT column on `claudex`, whose proxy signs
 in with that same account, so the side's weekly reading covers those workers.
 
-The user keeps Opus work on Claude: the `opus` rows, Fable, and the user's own main
+The user keeps judgment on Claude: the judgment row, Fable, and the user's own main
 threads never move to GPT. That demand is pinned to Claude and often needs more than
 Claude's weekly quota on its own, so every flexible job on Claude takes room from
 Opus later. Flexible work, a row with both columns, therefore runs on Claude only in
@@ -121,8 +138,8 @@ Before you start a batch of new workers, read the quota and pipe it into
 Pass these flags:
 
 - `--eligible`: the sides the work may run on. A row with both columns may run on
-  `claude,codex`. An `opus` row, and a role the calling workflow ties to the Claude
-  family, may run on `claude` only. A seat outside the Claude family may run on
+  `claude,codex`. The judgment row, and a role the calling workflow ties to the
+  Claude family, may run on `claude` only. A seat outside the Claude family may run on
   `codex` only.
 - `--limited <side>=<time>`: once for each side that returned a usage-limit error
   in this session, with the time of the error. When the error named a limit

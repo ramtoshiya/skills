@@ -89,22 +89,22 @@ The `worker-routing` skill is the one policy for choosing a worker's model.
   work runs on Claude, and a top-tier row moves from Opus to Fable. A running
   GPT worker is handed off to a new Claude thread in the same environment.
   For anything else the agent proposes urgency to you instead of switching.
-- In bb, Sonnet-level workers run on Claude or on GPT Terra models through
-  `claudex`, whichever weekly quota has more room. `claudex` draws on the
-  Codex account's GPT quota. No side is the default, so
-  work does not pile onto one quota until it runs out. Opus-level work stays
-  on Claude, except that a Terra worker whose task outgrew it reruns on GPT
-  Sol through the same provider.
+- In bb, judgment stays on Claude: work that no test, reproduction,
+  measurement, or fixed acceptance criteria can check, and decisions that are
+  hard to undo, such as a design direction or a file format. Other work, at
+  the Sonnet or Opus level, may run on Claude or on GPT Terra or Sol models
+  through `claudex`, which draws on the Codex account's GPT quota.
 - bb reads weekly quota through its enabled Provider usage plugin's read-only
   `getUsage` RPC on the thread's machine, with a five-minute cache allowance.
   Before each batch of new workers, the skill's `quota-pace.py` reads the GPT
   side from `codex app-server`, which bb's usage lookup omits while its Codex
   provider is disabled. It reads a Claude side that lookup missed, and any side
   on other hosts that `codex app-server` does not supply, from the
-  `quotio-cli` command in [Machine setup](setup.md). It projects each side's
-  weekly use at its scheduled reset from the last 24 hours of use. New work
-  goes to the side with the lower projected use at its reset, or the lower
-  current reading when a side has no recent pace. A side with a usage limit
+  `quotio-cli` command in [Machine setup](setup.md). It estimates how much
+  of Claude's remaining week the Opus and Fable work will use, from Claude
+  Code transcripts. Work that may run on either side goes to Claude only when
+  Claude has room that this work will leave unused at its reset, and
+  otherwise to GPT. Unclaimed Codex reset credits count as GPT room. A side with a usage limit
   or without a current reading takes no work. A running worker that hits a usage limit moves the same way,
   by handoff to a new thread, without asking you first. Claude's reported 100% can be a rounded
   reading, so Claude stays eligible until a request hits a usage limit. A Codex

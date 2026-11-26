@@ -74,7 +74,9 @@ can use up Claude's week.
   such as claudex's GPT models, are not Claude quota and are skipped.
 - Tokens are weighted roughly like API price: input 1, cache write 1.25, cache read 0.1, output 5,
   times a model factor of 1 for Opus and Fable, 0.6 for Sonnet, and 0.2 for Haiku. Opus and Fable
-  messages are pinned. Sonnet and Haiku messages are flexible.
+  messages are pinned. Sonnet and Haiku messages are flexible. Transcripts do not record the row,
+  so Opus work from the oracle row that ran on Claude also counts as pinned. That overstates
+  pinned demand and sends more flexible work to `codex`, which protects judgment work.
 - `units_per_point` converts weighted units to Claude weekly percent-points. The script fits it
   over the last 7 days of Quotio's Claude Weekly history: all Claude units in the history's span
   divided by the points used in it, counting each new window or counter drop from zero. `fit`
