@@ -2,12 +2,17 @@
 name: windowserver-ports
 description: >-
   Keep macOS tools from filling WindowServer's Mach port space, which kills
-  WindowServer and logs the user out. Use when code on a Mac starts processes
-  repeatedly that may touch the display: Swift or AppKit helpers, Vision OCR,
-  Metal, tests, headless or visible Chrome, Electron, `screencapture`,
-  `osascript`, or other CLIs called in a loop. Also use when a Mac logged out
-  unexpectedly, WindowServer crashed with OS_REASON_PORT_SPACE, or someone
-  asks how many WindowServer ports are in use.
+  WindowServer and logs the user out. Every launch of a process that touches
+  the display leaves a name until logout, headless Chrome included. Use before
+  writing, changing, proposing, or reviewing anything on a Mac that starts
+  such processes repeatedly: Swift or AppKit helpers, Vision OCR, Metal, test
+  suites, headless or visible Chrome, Playwright, Vitest browser mode,
+  Storybook, Electron, `screencapture`, `osascript`, or other CLIs called in a
+  loop. That includes advice on a slow check or browser test, such as running
+  it in parallel or adding a test runner, because the skill's rules decide how
+  to do that safely. Also use when a Mac logged out unexpectedly, WindowServer
+  crashed with OS_REASON_PORT_SPACE, or someone asks how many WindowServer
+  ports are in use.
 ---
 
 # WindowServer port space {:#windowserver-ports}
@@ -76,8 +81,9 @@ ships this skill, and stop. Never install, update, or build it yourself.
    Ask for the frontmost app or the cursor through NSWorkspace or NSEvent in
    that process instead of polling `osascript`.
 4. Reuse one browser per run. Open a browser context per page instead of a new
-   Chrome. Keep Chrome's sandbox on. `--no-sandbox` would leave no name but
-   turns off Chrome's isolation.
+   Chrome, and run screens or tests in parallel as pages of that browser, not
+   as more Chrome launches. Keep Chrome's sandbox on. `--no-sandbox` would
+   leave no name but turns off Chrome's isolation.
 
 ## Measure {:#measure}
 

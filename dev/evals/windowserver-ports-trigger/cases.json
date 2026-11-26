@@ -1,0 +1,26 @@
+{
+  "skill": "plugins/ramtoshiya/skills/windowserver-ports",
+  "setup": [
+    "Run run.mjs with a new output directory outside any repository. Without --plugin-dir it tests the installed ramtoshiya plugin. With --plugin-dir it disables the installed copy and loads the given directory, so a changed description can be compared with the installed one.",
+    "Each case runs in a fresh Claude Code session in an empty directory, with only the Skill, Read, Grep and Glob tools. A case passes a run when the session calls the windowserver-ports skill and expected is true, or does not call it and expected is false.",
+    "The performance cases restate a real miss: an agent diagnosed a slow pre-commit browser check, recommended running its screens in parallel, and never loaded the skill until the user named it.",
+    "Delete the output directory after recording results."
+  ],
+  "evals": [
+    {
+      "id": "speed-up-browser-check",
+      "expected": true,
+      "request": "Our pre-commit ./check now takes about 7 minutes. Nearly all of it is the browser verification step: one headless Chrome walks every screen of our web app in sequence while 14 of 15 cores sit idle. The verification script already has a flag per screen. Diagnose what limits it and brief me on how to cut the time. Recommendations only, do not change code."
+    },
+    {
+      "id": "component-test-runner",
+      "expected": true,
+      "request": "Our per-commit checks run near-e2e browser journeys against a real server. Should we add Vitest browser mode or Storybook play functions as component tests that run on every commit? Recommendations only, do not change code."
+    },
+    {
+      "id": "typecheck-only",
+      "expected": false,
+      "request": "Our pre-commit ./check spends 2 minutes in tsc --noEmit on a large TypeScript monorepo. How do we cut that time? Recommendations only, do not change code."
+    }
+  ]
+}
