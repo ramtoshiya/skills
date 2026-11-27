@@ -26,5 +26,6 @@ capability.
 When the calling workflow needs a seat outside the Claude family, such as a cross-model judge,
 start it with the thread tool on the provider of the `codex` side. Give it the family the table's
 GPT column names for its row, or `sol` at the row's effort for an
-`opus` row. Without a thread tool, or while `quota-pace.py` reports the `codex` side limited, the
+`opus` row. Without a thread tool, while `quota-pace.py` reports the `codex` side limited or
+returns no side, or when `newest-model` finds no model of that family, the
 seat cannot run, so follow the calling workflow's fallback.

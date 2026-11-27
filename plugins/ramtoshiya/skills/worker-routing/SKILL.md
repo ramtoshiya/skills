@@ -63,8 +63,12 @@ stopped before a working check, or dropped a working but fragile route.
 
 When you cannot name the oracle, use the judgment row. Use `fable` in place of
 `opus` only when the user asks for it or the work is urgent, as
-[Urgency](#urgency) describes. Under claudex these aliases select its GPT tiers,
-so the same table applies. When a piece of work fits no row, split it instead
+[Urgency](#urgency) describes. Under claudex these aliases select the GPT models in
+its catalog, and one small model can stand behind all of them. The table applies to
+an alias there only when `newest-model` finds the row's GPT family on `claudex`:
+`terra` for `sonnet`, `sol` for `opus` and `fable`. Otherwise start that worker on
+`claude-code` with the thread tool, even from a claudex session, and without a thread
+tool report the role as blocked. When a piece of work fits no row, split it instead
 of picking a combination in between. Work that mixes a judgment with checkable
 work becomes a judgment unit on Claude and a checkable unit on the row the check
 allows, such as a design memo and its implementation, or a review that reproduces
@@ -169,7 +173,9 @@ Start the worker on the side in `route.side`. The script decides as follows:
   A side without a current reading has no confirmed capacity, so it does not take
   the work. The script asks `quotio-cli` for any eligible side the piped lookup
   missed before it decides.
-- When no eligible side has a reading or a limit, the lookup failed, and the work
+- A `no-pool` side is a Codex plan without a weekly window. It is never chosen, and
+  when no other side is eligible `route.side` is `null`.
+- When no other eligible side has a reading or a limit, the lookup failed, and the work
   goes to `claude` when it is eligible.
 - Urgent work stays on `claude` unless Claude is limited.
 

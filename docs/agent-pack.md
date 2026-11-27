@@ -109,7 +109,9 @@ The `worker-routing` skill is the one policy for choosing a worker's model.
   Code transcripts. Work that may run on either side goes to Claude only when
   Claude has room that this work will leave unused at its reset, and
   otherwise to GPT. Unclaimed Codex reset credits count as GPT room. A side with a usage limit
-  or without a current reading takes no work. A running worker that hits a usage limit moves the same way,
+  or without a current reading takes no work. A Codex plan with no weekly
+  window gives GPT no worker pool, so work stays on Claude and a role that only
+  GPT can fill is blocked. A running worker that hits a usage limit moves the same way,
   by handoff to a new thread, without asking you first. Claude's reported 100% can be a rounded
   reading, so Claude stays eligible until a request hits a usage limit. A Codex
   reading of 100% marks Codex limited. A side that hit a limit comes back when

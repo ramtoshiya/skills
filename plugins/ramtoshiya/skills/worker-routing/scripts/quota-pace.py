@@ -351,6 +351,10 @@ def forecast(side_name: str, reading: Sample | None, sources: list[tuple[str, li
 
 
 def roomiest(eligible: list[str], sides: dict[str, Side]):
+    pools = [s for s in eligible if sides[s].status != "no-pool"]
+    if eligible and not pools:
+        return None, " ".join(sides[s].note for s in eligible)
+    eligible = pools
     observed = [s for s in SIDES if s in eligible and sides[s].status != "limited" and sides[s].used is not None]
     if not any(sides[s].used is not None or sides[s].status == "limited" for s in eligible):
         target = "claude" if "claude" in eligible else eligible[0]
@@ -658,7 +662,8 @@ def main(argv=None) -> int:
         readings.update(found)
         if quotio_note:
             notes.append(quotio_note)
-    if "codex" in eligible and "codex" not in readings and (window_note := codex_window_note()):
+    window_note = codex_window_note() if "codex" in eligible and "codex" not in readings else None
+    if window_note:
         notes.append(window_note)
     history, history_note = history_samples(
         Path.home() / "Library/Application Support/quotio/accounts.history/quota.sqlite", now
@@ -679,6 +684,8 @@ def main(argv=None) -> int:
         sides[side] = forecast(side, current.weekly if current else None, sources, limited.get(side), now)
         if current:
             state[side].append(current.weekly)
+    if window_note and sides["codex"].status == "no-reading":
+        sides["codex"] = Side("no-pool", note=window_note)
     if readings:
         save_state(path, state, now)
 

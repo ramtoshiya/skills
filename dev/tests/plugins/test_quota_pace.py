@@ -402,9 +402,19 @@ class QuotaPaceTests(unittest.TestCase):
     def test_a_codex_window_that_is_not_weekly_is_not_a_reading(self):
         self.codex_limits(5, duration_mins=300)
         report = self.run_pace(bb_usage(claude=(42, later(50))), "--eligible", "claude,codex")
-        self.assertEqual(report["sides"]["codex"]["status"], "no-reading")
+        self.assertEqual(report["sides"]["codex"]["status"], "no-pool")
         self.assertIn("no weekly window, only 300-minute windows, so codex takes no workers",
                       " ".join(report["notes"]))
+        self.assertEqual(report["route"]["side"], "claude")
+
+    def test_a_codex_only_role_gets_no_side_on_a_plan_without_a_weekly_window(self):
+        self.codex_limits(5, duration_mins=43200)
+        for args in (("--eligible", "codex"), ("--eligible", "claude,codex", "--prefer", "claude",
+                                               "--limited", f"claude={iso(ago(1))}")):
+            with self.subTest(args=args):
+                report = self.run_pace("", *args)
+                self.assertIsNone(report["route"]["side"])
+                self.assertIn("so codex takes no workers", report["route"]["why"])
 
     def test_quotio_supplies_the_gpt_reading_when_app_server_has_none(self):
         self.quotio_response.write_text(json.dumps({
