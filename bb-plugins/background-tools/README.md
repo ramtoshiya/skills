@@ -64,8 +64,8 @@ run `bb thread stop <thread-id>`, then send the next message.
 
 When a session starts with `BB_THREAD_STORAGE` set, the Claude Code plugin
 empties `background-requests` in the thread's storage folder. Then it runs
-`tail -f` on that file. `tail` waits on the file through kqueue, so nothing
-checks the file on a timer.
+`tail -n +1 -f` on that file so it reads requests written before `tail` starts.
+`tail` waits on the file through kqueue, so nothing checks the file on a timer.
 
 The bb plugin appends a request id to the file and waits up to five seconds for
 `background-answer-<id>`. The Claude Code plugin reads the newest assistant

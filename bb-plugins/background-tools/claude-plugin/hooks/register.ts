@@ -27,7 +27,7 @@ async function serveRequests($: EngineInterface, storage: string) {
   const requests = `${storage}/background-requests`
   await $.fs.write(requests, '')
   let pending = ''
-  for await (const { stream, text } of $.process.spawn({ argv: ['tail', '-n', '0', '-f', requests] })) {
+  for await (const { stream, text } of $.process.spawn({ argv: ['tail', '-n', '+1', '-f', requests] })) {
     if (stream !== 'stdout') continue
     const lines = (pending + text).split('\n')
     pending = lines.pop() ?? ''

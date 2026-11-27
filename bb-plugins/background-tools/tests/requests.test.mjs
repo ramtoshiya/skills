@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
+import { register } from '../claude-plugin/hooks/register.ts';
 import { askSession } from '../requests.ts';
 
 function storage(t) {
@@ -12,23 +15,37 @@ function storage(t) {
   return dir;
 }
 
-function standInSession(t, dir, answer) {
-  const requests = join(dir, 'background-requests');
-  writeFileSync(requests, '');
-  const tail = spawn('tail', ['-n', '0', '-f', requests], { stdio: ['ignore', 'pipe', 'inherit'] });
-  t.after(() => tail.kill());
-  tail.stdout.setEncoding('utf8');
-  tail.stdout.on('data', (text) => {
-    for (const id of text.split('\n').filter(Boolean)) {
-      writeFileSync(join(dir, `background-answer-${id}`), JSON.stringify(answer));
-    }
-  });
-}
-
-test('a session that answers reports its move and leaves no answer file', async (t) => {
+test('a request written before the reader starts reports its move and leaves no answer file', async (t) => {
   const dir = storage(t);
-  standInSession(t, dir, { kind: 'moved', tools: ['Bash'] });
+  const requests = join(dir, 'background-requests');
+  const hooks = new Map();
+  const aborted = [];
+  const fileCreated = Promise.withResolvers();
+  const engine = {
+    env: { get: async () => dir },
+    fs: { write: async (path, text) => {
+      writeFileSync(path, text);
+      if (path === requests) fileCreated.resolve();
+    } },
+    process: { spawn: async function* ({ argv }) {
+      const signal = AbortSignal.timeout(3000);
+      while (!(await readFile(requests, { encoding: 'utf8', signal }))) await delay(5, null, { signal });
+      const reader = spawn(argv[0], argv.slice(1), { stdio: ['ignore', 'pipe', 'inherit'] });
+      t.after(() => reader.kill());
+      reader.stdout.setEncoding('utf8');
+      for await (const text of reader.stdout) yield { stream: 'stdout', text };
+    } },
+    session: { messages: async () => [{ role: 'assistant', toolUses: [{ tool: 'Bash' }] }] },
+    turn: { abort: async ({ turnId }) => { aborted.push(turnId); } },
+    prompt: { submit: async () => {} },
+    ui: { log: () => {} },
+  };
+  register((name, fn) => hooks.set(name, fn));
+  await hooks.get('turn.start')(engine, {}, async () => ({ turnId: 'turn' }));
+  await hooks.get('session.start')(engine, {}, async () => {});
+  await fileCreated.promise;
   assert.deepEqual(await askSession(dir), { kind: 'moved', tools: ['Bash'] });
+  assert.deepEqual(aborted, ['turn']);
   assert.deepEqual(readdirSync(dir), ['background-requests']);
 });
 
