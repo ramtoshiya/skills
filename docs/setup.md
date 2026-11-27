@@ -244,8 +244,14 @@ requests with read-only permissions. It uses a SHA-pinned mise action, an
 exact mise release, and locked tool downloads, without applying dotfiles or
 Homebrew setup. Its security step runs even if the syntax check fails.
 `.github/workflows/test.yml` runs `npm test` on macOS for pushes and pull
-requests with the same permissions, action pins, and locked tools. Run the
-same suite locally with `mise exec -- npm test`.
+requests with read-only permissions, SHA-pinned actions, and locked tools.
+The workflow installs the `background-tools` runtime dependencies before the
+root suite. On a fresh checkout, run these commands from the repository root:
+
+```sh
+(cd bb-plugins/background-tools && mise exec -- npm ci --omit=dev --ignore-scripts --no-audit)
+mise exec -- npm test
+```
 
 ## What it changes
 
