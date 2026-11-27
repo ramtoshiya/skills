@@ -399,7 +399,7 @@ class QuotaPaceTests(unittest.TestCase):
         self.assertEqual(report["sides"]["codex"]["status"], "limited")
         self.assertEqual(report["route"]["side"], "claude")
 
-    def test_a_codex_window_that_is_not_weekly_is_not_a_reading(self):
+    def test_a_codex_plan_without_a_weekly_window_has_no_worker_pool(self):
         self.codex_limits(5, duration_mins=300)
         report = self.run_pace(bb_usage(claude=(42, later(50))), "--eligible", "claude,codex")
         self.assertEqual(report["sides"]["codex"]["status"], "no-pool")

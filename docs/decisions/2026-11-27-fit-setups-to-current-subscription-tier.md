@@ -2,7 +2,7 @@
 
 ## Owner's words
 
-"Let's fit our setups to current sub tier." (2026-11-27 +09:00, bb thread thr_hwxt5yhzfa, the owner's reply after an agent reported that requests for most GPT models were being rejected)
+"Let's fit our setups to current sub tier." (2026-11-27 16:40 +09:00, bb thread thr_hwxt5yhzfa message 267, the owner's reply after an agent reported that requests for most GPT models were being rejected)
 
 ## Situation
 
@@ -10,4 +10,4 @@ A GPT subscription behind claudex had changed on purpose. Its upstream rejected 
 
 ## Scope
 
-Tool defaults, model lists and worker routing follow what the current subscriptions include, including after a later change in either direction.
+Tool defaults, model lists and worker routing follow what the current subscriptions include.
