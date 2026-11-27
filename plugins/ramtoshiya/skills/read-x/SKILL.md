@@ -1,13 +1,13 @@
 ---
 name: read-x
-description: Read public X or Twitter posts, threads, articles, profiles, and search results through the mdfromx HTTP API, and search Japanese X posts through Yahoo! JAPAN realtime search in a visible Chrome, when the user provides an X link or asks to find public X content. No MCP server, service CLI, or X login is required.
+description: Read public X or Twitter posts, threads, articles, profiles, and search results through the mdfromx HTTP API, and search Japanese X posts through Yahoo! JAPAN realtime search and other languages through DuckDuckGo in a visible Chrome, when the user provides an X link or asks to find public X content. No MCP server, service CLI, or X login is required.
 ---
 
 # Read public X content
 
 Use the [mdfromx API](https://mdfromx.com/docs) for public X content. Send HTTP GET requests directly. Do not install or run its MCP server, CLI, SDK, or skill helper. The service is a third party, not X. It and its providers receive the URLs and search terms submitted to it. Do not send credentials, private content, or sensitive queries. Ask before sending a query if its sensitivity or the user's authorization to share it is unclear.
 
-For keyword search in Japanese, use Yahoo! JAPAN realtime search first, as [Japanese search](#yahoo-realtime) describes. Yahoo receives those queries, and the same rules for sensitive queries apply.
+For keyword search in Japanese, use Yahoo! JAPAN realtime search first, as [Japanese search](#yahoo-realtime) describes. For Korean, English, and other languages, use [DuckDuckGo](#duckduckgo). Yahoo and DuckDuckGo receive those queries, and the same rules for sensitive queries apply.
 
 ## Fetch a post {:#posts}
 
@@ -37,7 +37,7 @@ mdfromx search can return zero posts, with no `degraded` flag and no warning, fo
 
 ## Japanese search {:#yahoo-realtime}
 
-[Yahoo! JAPAN realtime search](https://search.yahoo.co.jp/realtime) searches public X posts without a login. It indexes Japanese posts nearly completely, but posts in other languages only sparsely and unpredictably. An English or Korean keyword finds mostly Japanese posts that mention it. Use it for Japanese keywords and Japanese accounts. Do not use it to search Korean or English topics, and do not read a small or empty result for a non-Japanese query or account as absence.
+[Yahoo! JAPAN realtime search](https://search.yahoo.co.jp/realtime) searches public X posts without a login. It indexes Japanese posts nearly completely, but posts in other languages only sparsely and unpredictably. An English or Korean keyword finds mostly Japanese posts that mention it. Use it for Japanese keywords and Japanese accounts. Do not use it to search Korean or English topics, which [DuckDuckGo](#duckduckgo) covers, and do not read a small or empty result for a non-Japanese query or account as absence.
 
 Run it in a real browser, never with curl or headless Chrome, so the traffic looks like one person browsing. Open one Chrome with the `visible-chrome` skill in corner placement and reuse it for every query in the task. Each Chrome launch leaves a WindowServer port name, as the `windowserver-ports` skill explains. From this skill's directory:
 
@@ -59,6 +59,12 @@ Query syntax:
 - `--sort popular` selects the site's popular order, which is not sorted by likes.
 
 Keyword results reach back about 30 days. `ID:` results can reach older posts. The site does not list replies or quotes of a post, so use mdfromx for a post's thread and replies. Yahoo also filters posts it classifies as spam or impression farming. This page is not a public API and can change without notice.
+
+## Other languages {:#duckduckgo}
+
+For Korean, English, and other non-Japanese keywords, search DuckDuckGo's web index of x.com in the same Chrome. Open `https://duckduckgo.com/?q=site%3Ax.com+<URL-encoded query>&df=m`, where `df` is `d`, `w`, or `m` for the past day, week, or month. Each result `article` holds an `x.com/<handle>/status/<id>` link and a snippet. Read them with CDP `Runtime.evaluate` after the page renders, then pass the status URLs to the post endpoint for the full text.
+
+A page shows about 10 posts. The index lags and misses most of an account's recent posts, so use it to find posts, not to list an account's posts or claim coverage. Use the root `/?q=` path, because robots.txt disallows `/html` and `/lite`. Open one page at a time and pause a few seconds between pages.
 
 ## Interpret and report {:#reliability}
 
