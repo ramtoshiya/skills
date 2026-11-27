@@ -18,7 +18,6 @@ import store  # noqa: E402
 
 PLUGIN_NAME = "hermes-skills"
 CLI = Path(__file__).with_name("hermes-learning")
-REVIEW_PROMPT = Path(__file__).with_name("review.md")
 RECORD = ("Hermes learning store: memory holds the USER.md and MEMORY.md notes above, and the skills are the "
           "hermes-skills plugin. When this session confirms a lesson a later session would reuse, such as a user "
           "preference or correction, a fact about the machine or a project, or a procedure that worked, record "
@@ -28,17 +27,12 @@ RECORD = ("Hermes learning store: memory holds the USER.md and MEMORY.md notes a
           "whatever its task. Record only what a person or an agent in the conversation stated, or a tool result showed. Run "
           f"these tools with Bash. `{CLI} schema <tool>` prints a tool's arguments, and `{CLI} <tool> <<'JSON'` "
           "followed by the JSON arguments and a closing `JSON` line runs it.")
-FORK = (f" When the conversation as a whole is worth reviewing for lessons, for example after a long task with "
-        f"several corrections, start a review fork instead of recording piece by piece: run "
-        f"`bb thread fork \"$BB_THREAD_ID\" --lifecycle-owner-thread \"$BB_THREAD_ID\" --title \"{store.REVIEW_TITLE}\" "
-        f"--prompt-file {REVIEW_PROMPT}` and go on with your work. The fork mails you its summary.")
 CHILD = ("You are a child agent that another agent started. Read Hermes skills, but do not record memory or "
          "skills. End your final answer with a `Learning proposals` section of at most five bullets. Each "
          "bullet is something your own tool runs in this task showed that a later session could reuse, such "
          "as a command that works, a path, or a project rule, followed by the command or file that shows it. "
          "Write `Learning proposals: none` when nothing qualifies.")
-# A fork resumes its source's conversation and gets no session-start context, so review has no entry.
-INSTRUCTIONS = {"top": RECORD + FORK, "solo": RECORD, "child": CHILD}
+INSTRUCTIONS = {"top": RECORD, "solo": RECORD, "child": CHILD}
 
 
 def learned_skills(home: Path) -> dict[str, Path]:

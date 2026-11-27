@@ -16,16 +16,10 @@ DEFAULT_HERMES = "~/.hermes/hermes-agent/.hermes/bin/hermes"
 SENTINEL = "hermes_learning_entry"
 ENTRY = f"runpy.run_module({SENTINEL!r}, run_name='__main__', alter_sys=True)"
 TOOLS = ("memory", "skill_manage", "skill_view")
-# Lists, approves, or rejects memory writes that review forks staged. Only a foreground session decides them.
-PENDING = "pending"
-REVIEW_TITLE = "Hermes review"
-# Each role's tools and the Hermes write origin its writes carry. background_review adds Hermes's review-only
-# checks and marks created skills as agent-created for the curator.
 ROLES = {
-    "top": {"tools": (*TOOLS, PENDING), "origin": "foreground"},
-    "solo": {"tools": (*TOOLS, PENDING), "origin": "foreground"},
-    "review": {"tools": TOOLS, "origin": "background_review"},
-    "child": {"tools": ("skill_view",), "origin": "foreground"},
+    "top": TOOLS,
+    "solo": TOOLS,
+    "child": ("skill_view",),
 }
 
 
@@ -34,18 +28,14 @@ class Unavailable(Exception):
 
 
 def role() -> str:
-    """solo outside bb, child for a thread another thread started, review for a fork titled Hermes review, and
-    top for any other bb thread."""
+    """solo outside bb, child for a thread another thread started, and top for any other bb thread."""
     thread_id = os.environ.get("BB_THREAD_ID")
     if not thread_id:
         return "solo"
     shown = subprocess.run([os.environ.get("BB_CLI", "bb"), "thread", "show", thread_id, "--json"],
                            capture_output=True, text=True, timeout=8)
     thread = json.loads(shown.stdout or "{}").get("thread") or {}
-    if thread.get("parentThreadId"):
-        return "child"
-    is_review = thread.get("originKind") == "fork" and (thread.get("title") or "").startswith(REVIEW_TITLE)
-    return "review" if is_review else "top"
+    return "child" if thread.get("parentThreadId") else "top"
 
 
 def store() -> Path:

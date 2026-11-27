@@ -55,11 +55,9 @@ class HermesLearningTests(unittest.TestCase):
         (fake_root / "tools/__init__.py").write_text("")
         (fake_root / "tools/skill_usage.py").write_text(FAKE_USAGE)
         (fake_root / "tools/registry.py").write_text("registry = None\n")
-        (fake_root / "tools/skill_provenance.py").write_text(
-            "import os\ndef set_current_write_origin(origin):\n    os.environ['ORIGIN'] = origin\n")
         (fake_root / "model_tools.py").write_text(
-            "import json, os\ndef handle_function_call(name, args, **_):\n"
-            "    return json.dumps({'tool': name, 'args': args, 'origin': os.environ['ORIGIN']})\n")
+            "import json\ndef handle_function_call(name, args, **_):\n"
+            "    return json.dumps({'tool': name, 'args': args})\n")
         code = f"import runpy, sys; sys.path.insert(0, {str(fake_root)!r}); {ENTRY}"
         printed = json.dumps([sys.executable, "-I", "-c", code])
         bin_dir = self.tmp / "bin"
@@ -89,8 +87,7 @@ class HermesLearningTests(unittest.TestCase):
         return subprocess.run([sys.executable, str(CLI), *args], input=stdin, capture_output=True, text=True,
                               env=env or self.env)
 
-    def test_only_a_titled_review_fork_writes_as_a_review(self):
-        self.assertEqual(self.role_of({"originKind": "fork", "title": "Hermes review"}), "review")
+    def test_only_a_thread_another_thread_started_is_a_child(self):
         self.assertEqual(self.role_of({"originKind": "fork", "title": "(1) feature work"}), "top")
         self.assertEqual(self.role_of({"parentThreadId": "thr_parent"}), "child")
         self.assertEqual(self.role_of({}), "top")
@@ -141,15 +138,13 @@ class HermesLearningTests(unittest.TestCase):
         no_hermes = {**self.env, "PATH": "/usr/bin:/bin", "HOME": str(self.tmp)}
         self.assertIn("Hermes is not installed", self.cli("skill_view", env=no_hermes).stderr)
 
-    def test_cli_runs_the_tool_with_the_role_origin_and_unprefixed_skill_name(self):
+    def test_cli_runs_the_tool_with_the_unprefixed_skill_name(self):
         """Claude Code lists the skills as hermes-skills:<name>, and agents pass that name to the tools."""
-        arguments = json.dumps({"name": "hermes-skills:flaky-checks"})
-        for thread, origin in (({}, "foreground"), ({"originKind": "fork", "title": "Hermes review"},
-                                                    "background_review")):
-            result = self.cli("skill_view", stdin=arguments, env=self.in_thread(thread))
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(json.loads(result.stdout.splitlines()[-1]),
-                             {"tool": "skill_view", "args": {"name": "flaky-checks"}, "origin": origin})
+        result = self.cli("skill_view", stdin=json.dumps({"name": "hermes-skills:flaky-checks"}),
+                          env=self.in_thread({}))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout.splitlines()[-1]),
+                         {"tool": "skill_view", "args": {"name": "flaky-checks"}})
 
     def test_cli_refuses_writes_to_child_threads(self):
         entry = json.dumps({"action": "add", "target": "memory", "content": "x"})
@@ -158,20 +153,26 @@ class HermesLearningTests(unittest.TestCase):
         self.assertIn("Learning proposals", child.stderr)
         self.assertFalse(self.calls.exists())
 
-    def test_cli_leaves_staged_writes_to_foreground_sessions(self):
-        review = self.cli("pending", "approve", "abc", env=self.in_thread({"originKind": "fork",
-                                                                          "title": "Hermes review"}))
-        self.assertEqual(review.returncode, 1)
-        self.assertIn("cannot decide them itself", review.stderr)
-
-    def consolidation_check(self, *args):
+    def consolidation_check(self, *args, threads=(), logs=None):
+        """Run check.py with a fake bb that lists *threads*, prints *logs* by thread id, and records spawns."""
+        (self.tmp / "threads.json").write_text(json.dumps(list(threads)))
+        (self.tmp / "logs.json").write_text(json.dumps(logs or {}))
         spawns = self.tmp / "spawns.jsonl"
         spawns.unlink(missing_ok=True)
-        bb = self.tmp / "bb-spawn"
-        bb.write_text("#!/bin/sh\n"
-                      f"python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' \"$@\" >> {spawns}\n"
-                      "for arg; do case $prev in --prompt-file) cp \"$arg\" " f"{self.tmp}/prompt.md;; esac; prev=$arg; done\n"
-                      "echo '{\"id\": \"thr_new\"}'\n")
+        bb = self.tmp / "bb-fake"
+        bb.write_text(f"""#!{sys.executable}
+import json, shutil, sys
+args = sys.argv[1:]
+if args[:2] == ["thread", "list"]:
+    print(open({str(self.tmp / "threads.json")!r}).read())
+elif args[:2] == ["thread", "log"]:
+    print(json.dumps(json.load(open({str(self.tmp / "logs.json")!r})).get(args[2], [])))
+elif args[:2] == ["thread", "spawn"]:
+    with open({str(spawns)!r}, "a") as out:
+        out.write(json.dumps(args) + "\\n")
+    shutil.copy(args[args.index("--prompt-file") + 1], {str(self.tmp / "prompt.md")!r})
+    print(json.dumps({{"id": "thr_new"}}))
+""")
         bb.chmod(0o755)
         result = subprocess.run([sys.executable, str(CHECK), *args], capture_output=True, text=True, check=True,
                                 env={**self.env, "BB_CLI": str(bb), "BB_PROJECT_ID": "proj_test"})
@@ -181,40 +182,69 @@ class HermesLearningTests(unittest.TestCase):
     def test_consolidation_check_is_silent_when_nothing_changed_since_the_last_consolidation(self):
         (self.store / "memories/USER.md").write_text("Prefers tables.")
         skill(self.store / "skills/dev/ui-review", "ui-review")
-        self.consolidation_check("--mark")
+        self.consolidation_check("--mark", "1000")
         (self.store / "skills/.usage.json").write_text("{}")
-        self.assertEqual(self.consolidation_check(), ("", []))
+        old = {"id": "thr_old", "title": "Old", "updatedAt": 900, "createdAt": 800}
+        self.assertEqual(self.consolidation_check(threads=[old]), ("", []))
 
     def test_consolidation_check_starts_one_full_access_thread_for_each_kind_of_change(self):
         def change_memory():
             (self.store / "memories/USER.md").write_text("Prefers tables.\n\u00a7\nPrefers lists.")
+            return {}
 
         def change_skill():
             (self.store / "skills/dev/ui-review/SKILL.md").write_text("---\nname: ui-review\n---\nChanged\n")
+            return {}
 
-        def stage_write():
-            (self.store / "pending/memory").mkdir(parents=True, exist_ok=True)
-            (self.store / "pending/memory/b281298d.json").write_text("{}")
+        def user_wrote():
+            thread = {"id": "thr_a", "title": "Feature", "updatedAt": 3000, "createdAt": 500}
+            told = {"initiator": "user", "senderThreadId": None, "source": "tell",
+                    "input": [{"type": "text", "text": "Use tables"}]}
+            return {"threads": [thread], "logs": {"thr_a": [
+                {"seq": 4, "type": "client/turn/requested", "createdAt": 2000, "data": told}]}}
 
         for change, expected in ((change_memory, '"user"'), (change_skill, '"ui-review"'),
-                                 (stage_write, '"b281298d"')):
+                                 (user_wrote, '"Use tables"')):
             with self.subTest(change=change.__name__):
                 (self.store / "memories/USER.md").write_text("Prefers tables.")
                 skill(self.store / "skills/dev/ui-review", "ui-review")
-                for pending in (self.store / "pending/memory").glob("*.json"):
-                    pending.unlink()
-                self.consolidation_check("--mark")
-                change()
-                output, calls = self.consolidation_check()
+                self.consolidation_check("--mark", "1000")
+                output, calls = self.consolidation_check(**change())
                 self.assertIn("Started thr_new", output)
                 self.assertEqual(len(calls), 1)
                 self.assertEqual(calls[0][calls[0].index("--permission-mode") + 1], "full")
                 self.assertEqual(calls[0][calls[0].index("--environment") + 1], str(ROOT.parents[2]))
                 prompt = (self.tmp / "prompt.md").read_text()
                 self.assertIn(f"HERMES_LEARNING_HOME={self.store} {ROOT / 'hermes-learning'}", prompt)
-                self.assertIn(f"{CHECK} --mark", prompt)
+                self.assertRegex(prompt, rf"{CHECK} --mark \d+")
                 self.assertNotIn("{{", prompt)
                 self.assertIn(expected, prompt.split("## State")[1])
+
+    def test_consolidation_reads_only_what_the_user_typed_after_the_last_consolidation(self):
+        """A thread's first message can be an agent's brief, so only the user's later messages count."""
+        self.consolidation_check("--mark", "1000")
+
+        def request(seq, at, text, **data):
+            return {"seq": seq, "type": "client/turn/requested", "createdAt": at,
+                    "data": {"initiator": "user", "senderThreadId": None, "source": "tell",
+                             "input": [{"type": "text", "text": text}], **data}}
+
+        reply = {"seq": 5, "type": "item/completed", "createdAt": 1500,
+                 "data": {"item": {"type": "agentMessage", "text": "I used a list."}}}
+        threads = [{"id": "thr_a", "title": "Feature", "updatedAt": 3000, "createdAt": 500},
+                   {"id": "thr_child", "parentThreadId": "thr_a", "updatedAt": 3000, "createdAt": 600},
+                   {"id": "thr_c", "title": "Hermes memory consolidation 2026-11-27", "updatedAt": 3000,
+                    "createdAt": 700}]
+        logs = {"thr_a": [request(1, 600, "Before the mark"), request(2, 1200, "A brief", source="spawn"), reply,
+                          request(6, 2000, "Use tables instead"),
+                          request(7, 2100, "From another thread", senderThreadId="thr_b", initiator="agent")],
+                "thr_child": [request(1, 2000, "Child brief")],
+                "thr_c": [request(1, 2000, "Consolidation note")]}
+        self.consolidation_check(threads=threads, logs=logs)
+        messages = json.loads((self.tmp / "prompt.md").read_text().split("## The user's messages")[1]
+                              .split("```json\n")[1].split("\n```")[0])
+        self.assertEqual([(m["thread"], m["msg"], m["user"], m["agent_before"]) for m in messages],
+                         [("thr_a", 6, "Use tables instead", "I used a list.")])
 
     def test_session_start_tells_each_role_how_to_learn(self):
         def context(thread):
@@ -223,7 +253,7 @@ class HermesLearningTests(unittest.TestCase):
 
         top = context({})
         self.assertIn(f"{ROOT / 'hermes-learning'} schema <tool>", top)
-        self.assertIn("--title \"Hermes review\"", top)
+        self.assertNotIn("bb thread fork", top)
         self.assertIn("Learning proposals", context({"parentThreadId": "thr_parent"}))
 
 

@@ -1,7 +1,6 @@
 """Run one Hermes learning tool for cli.py. Runs under the Hermes interpreter with HERMES_HOME set to the store.
 
-Usage: tool.py <write origin> <tool> (JSON arguments on stdin), tool.py <write origin> schema <tool>, or
-tool.py <write origin> pending [approve|reject <id>]
+Usage: tool.py <tool> (JSON arguments on stdin), or tool.py schema <tool>
 Hermes's handlers do their own validation, char limits, security scan, write-approval gate, ledger and
 .usage.json telemetry. skill_manage and skill_view go through model_tools.handle_function_call, the dispatcher
 Hermes's agent uses. memory is an agent-loop tool that handle_function_call refuses, so it goes through
@@ -39,13 +38,6 @@ def call(name, args, session_id):
     return result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
 
 
-def pending(args):
-    """Hermes's own /memory pending, approve and reject, which show each pinned entry a write would change."""
-    from hermes_cli.write_approval_commands import handle_pending_subcommand
-    from tools.memory_tool import load_on_disk_store
-    return handle_pending_subcommand("memory", args or ["pending"], memory_store=load_on_disk_store())
-
-
 def failed(text):
     try:
         payload = json.loads(text)
@@ -55,19 +47,14 @@ def failed(text):
 
 
 def main():
-    origin, *args = sys.argv[1:]
+    args = sys.argv[1:]
     if args[0] == "schema":
         print(schema(args[1]))
-        return
-    if args[0] == "pending":
-        print(pending(args[1:]))
         return
     try:
         arguments = json.loads(sys.stdin.read())
     except ValueError as bad:
         sys.exit(f"hermes-learning: the arguments on stdin are not JSON: {bad}")
-    from tools.skill_provenance import set_current_write_origin
-    set_current_write_origin(origin)
     text = call(args[0], arguments, os.environ.get("CLAUDE_CODE_SESSION_ID") or os.environ.get("BB_THREAD_ID"))
     print(text)
     sys.exit(1 if failed(text) else 0)

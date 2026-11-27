@@ -198,33 +198,35 @@ Only the store is used. No Hermes agent runs in it.
   stale and then to the archive.
 - The agent decides when to learn. The instructions tell it to record a lesson
   that a person or an agent in the conversation stated, or a tool result
-  showed. In bb, when a whole conversation is worth reviewing, it starts a
-  review with `bb thread fork "$BB_THREAD_ID" --lifecycle-owner-thread
-  "$BB_THREAD_ID" --title "Hermes review" --prompt-file
-  <plugin>/hermes-learning/review.md`. The fork appears in bb as a thread and
-  reuses the source's prompt cache. It records lessons, sends changes to files
-  in the working checkout as proposals, and mails a summary to the source with
-  `bb mail send` without waking it. Outside bb the agent records directly.
+  showed. Agents rarely stop a task to do this, so a daily pass also reads
+  what the user wrote, as the consolidation bullet below describes.
 - The instructions place a lesson by its scope. A lesson that matters only
   for one class of task, including your preferences for that kind of work,
   goes into the skill that governs that class, because every session loads
   memory whatever its task. Memory keeps short facts that every session needs.
-- Sessions and review forks only add memory entries when they can. Hermes
-  stages a review fork's removal or rewrite of an entry, and refuses an entry
+- Sessions only add memory entries when they can, and Hermes refuses an entry
   that does not fit. A bb automation in this repository's project runs
   `dev/automation/memory-consolidation/check.py` every day at 05:30 Asia/Seoul.
   When `MEMORY.md`, `USER.md`, or a learned skill changed since the last
-  consolidation, or a write is staged, it starts a Full Access thread titled
-  `Hermes memory consolidation <date>`. Otherwise it prints nothing and no
-  model runs. The thread decides each staged write with `hermes-learning
-  pending`, keeps each memory entry that every session needs, moves each
-  entry that serves one class of task into that class's skill, drops entries
-  that `~/.claude/CLAUDE.md` or a skill already says, and shortens a target
-  still at 80% of its limit or more down to 60%. It then runs `check.py
-  --mark`, which records the store's state in `consolidated.json` in the
-  profile, so the next check counts only later changes. Its reply lists every
-  changed entry in full with the reason and every skill change, so a person
-  can ask for any of them back. Nobody approves its changes first.
+  consolidation, or the user wrote to a bb thread since then, it starts a Full
+  Access thread titled `Hermes memory consolidation <date>`. Otherwise it
+  prints nothing and no model runs. The user corrects agents only in threads,
+  so the check gives the thread each message the user typed after a thread's
+  first message, with the end of the agent reply it answers. It leaves out a
+  thread's first message, which bb cannot tell apart from an agent's brief,
+  messages from other threads, and threads that another thread started. The
+  thread records the lessons those messages carry, each with the date of the
+  user's words. It leaves a decision about one repository to that
+  repository's `docs/decisions/` and lists one with no record there. It then
+  keeps each memory entry that every session needs, moves each entry that
+  serves one class of task into that class's skill, drops entries that
+  `~/.claude/CLAUDE.md` or a skill already says, and shortens a target still
+  at 80% of its limit or more down to 60%. Last it runs `check.py --mark`,
+  which records the store's state and the time up to which it read messages
+  in `consolidated.json` in the profile, so the next check counts only later
+  changes and messages. Its reply lists every changed entry in full with the
+  reason and every skill change, so a person can ask for any of them back.
+  Nobody approves its changes first.
 
 The command and the session start hook read the session's bb thread and pick a
 role:
@@ -232,14 +234,13 @@ role:
 | Session | Instructions | Tools | Writes as |
 | --- | --- | --- | --- |
 | A bb thread that another thread started (it has a parent) | End the final answer with `Learning proposals` | `skill_view` only | Nothing |
-| A bb fork titled `Hermes review` | The fork's prompt | All three | Hermes's `background_review` origin, which adds its review-only checks and marks new skills as agent-created for the curator |
-| Any other session, in or outside bb, including a fork made for other work | Record lessons. In bb, also start review forks | All three, and `pending` for staged writes | `foreground` |
+| Any other session, in or outside bb, including a fork | Record lessons | All three | `foreground` |
 
 The command needs Hermes's `hermes` command, on `PATH` or at
 `~/.hermes/hermes-agent/.hermes/bin/hermes`, and the profile directory, and it
 names whichever is missing. It writes outside the workspace, so in bb it needs
 the Full Access permission mode. bb's other modes run Bash in Claude Code's
-sandbox, which refuses those writes. A review fork and a child thread inherit
+sandbox, which refuses those writes. A child thread inherits
 the mode of the thread that started them.
 
 ## Requirements
