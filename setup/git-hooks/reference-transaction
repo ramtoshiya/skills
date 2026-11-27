@@ -10,7 +10,17 @@ case "$refs" in
 "*) ;;
   *) exit 0 ;;
 esac
+pushed=$(printf '%s\n' "$refs" | while read -r old new ref; do
+  [ "$ref" = refs/remotes/origin/main ] || continue
+  action=$(LC_ALL=C git reflog show -1 --format='%H %gs' "$ref")
+  if [ "$action" = "$new update by push" ]; then
+    printf '%s\n' "$new"
+    break
+  fi
+done)
+set -- sync
+[ -z "$pushed" ] || set -- "$@" --pushed "$pushed"
 level="$(dirname "$0")/../agents/level.py"
 uv run --offline --no-project --managed-python --python '>=3.11' --no-config --exclude-newer '3 days' \
-  python -I "$level" sync >&2 || echo "main:sync failed. Run \`mise run main:status\` to see what is out of step" >&2
+  python -I "$level" "$@" >&2 || printf '%s\n' 'main:sync: see the verification result above' >&2
 exit 0

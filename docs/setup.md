@@ -111,6 +111,17 @@ for each bb plugin described below. The command that moved the ref waits for
 the installers and shows their output. A failed install never fails that command, and its
 output names the failed step.
 
+After a local push to GitHub, the publishing command also reports Actions
+results for the exact commit it pushed. It waits up to three minutes for
+`Tests` and `Actions checks` outside the installer lock. A fetch does not wait
+for CI. Git cannot undo a completed push or commit if CI fails, so read the
+`main:ci` result in the command output separately from Git's exit status.
+A direct `mise run main:sync` exits nonzero if it pushed a commit whose CI did
+not pass. The check needs `gh` with access to the GitHub repository. If a run
+is pending or the command was interrupted, run `mise run main:ci <commit>`
+to check the same commit again. This command exits `0` for success, `1` for
+failure, and `2` for pending or unavailable results.
+
 `main:sync` changes nothing and prints `STOPPED` with the reason in these
 cases:
 

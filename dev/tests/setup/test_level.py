@@ -200,6 +200,56 @@ class LevelFixture:
 
 
 class LevelTests(LevelFixture, unittest.TestCase):
+    def github_runs(self, commit, runs):
+        url = "https://github.com/example/fixture.git"
+        self.git(self.shared, "remote", "set-url", "origin", url)
+        self.git(self.shared, "config", f"url.{self.remote}.insteadOf", url)
+        gh = self.tmp / "bin/gh"
+        gh.write_text(f"""#!{sys.executable}
+import sys
+if sys.argv[1:3] != ['run', 'list'] or {commit!r} not in sys.argv or 'example/fixture' not in sys.argv:
+    sys.exit('Unexpected GitHub lookup')
+print({json.dumps(runs)!r})
+""")
+        gh.chmod(0o755)
+
+    def test_main_pushes_report_the_failed_workflow_for_the_published_commit(self):
+        for checkout, role in ((self.worktree, "worktree"), (self.shared, "shared")):
+            with self.subTest(role=role):
+                self.git(checkout, "reset", "--hard", "origin/main", env=self.without_hook())
+                result = self.commit(checkout, PREFERENCES, f"change from {role}\n", env=self.without_hook())
+                self.assertEqual(result.returncode, 0, result.stderr)
+                commit = self.git(checkout, "rev-parse", "HEAD")
+                url = "https://github.com/example/fixture/actions/runs/42"
+                self.github_runs(commit, [
+                    {"workflowName": "Actions checks", "status": "completed", "conclusion": "success", "url": url},
+                    {"workflowName": "Tests", "status": "completed", "conclusion": "failure", "url": url},
+                ])
+
+                if checkout == self.worktree:
+                    published = self.run_git(checkout, "push", "-q", "origin", "HEAD:main")
+                    self.assertEqual(published.returncode, 0, published.stderr)
+                else:
+                    published = self.level("sync")
+                    self.assertEqual(published.returncode, 1, published.stderr)
+                self.assertEqual(self.remote_main(), commit)
+                self.assertIn(f"Tests: failure {url}", published.stderr)
+                self.assertIn(commit[:12], published.stderr)
+                status = self.level("ci", commit)
+                self.assertEqual(status.returncode, 1, status.stderr)
+                self.assertIn(f"Tests: failure {url}", status.stderr)
+
+    def test_a_successful_workflow_does_not_pass_ci_while_the_other_is_missing(self):
+        commit = self.remote_main()
+        url = "https://github.com/example/fixture/actions/runs/42"
+        self.github_runs(commit, [
+            {"workflowName": "Actions checks", "status": "completed", "conclusion": "success", "url": url},
+        ])
+        result = self.level("ci", commit)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("Tests: pending", result.stderr)
+        self.assertIn(commit[:12], result.stderr)
+
     def test_ignored_file_in_the_shared_checkout_stops_a_fast_forward_that_would_replace_it(self):
         before = self.git(self.shared, "rev-parse", "HEAD")
         (self.shared / ".env").write_text("local secret\n")

@@ -110,7 +110,9 @@ need Python 3.11 or newer and the system `python3` can be older.
 Push finished work that passes the checks above to `origin/main` of this
 repository without asking first. That push is the standing workflow, and the
 hook in `setup/git-hooks` then brings the shared checkout and the local
-installs level with it.
+installs level with it. Read the `main:ci` result after publishing. If the
+command times out or reports a pending result, check the pushed commit with
+`mise run main:ci <commit>`. A successful Git command does not mean CI passed.
 
 ## Claims and checks {:#claims}
 

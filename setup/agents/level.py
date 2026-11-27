@@ -7,9 +7,11 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
+import time
 
 BRANCH = "main"
 REMOTE = "origin"
@@ -420,6 +422,64 @@ def activate_hooks(shared):
     print(f"main:sync: Git now runs the hooks in {wanted} for every worktree of this repository", file=sys.stderr)
 
 
+def check_published_ci(shared, commit, wait_seconds=0):
+    remote = git(shared, "config", "--get", f"remote.{REMOTE}.pushurl", check=False).stdout.strip()
+    if not remote:
+        remote = git(shared, "config", "--get", f"remote.{REMOTE}.url")
+    repo = re.fullmatch(r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)"
+                        r"([\w.-]+/[\w.-]+?)(?:\.git)?/?", remote)
+    if not repo:
+        if wait_seconds:
+            return 0
+        print(f"main:ci: {REMOTE} is not a GitHub remote", file=sys.stderr)
+        return 2
+
+    name = repo[1]
+    checks_url = f"https://github.com/{name}/commit/{commit}/checks"
+    expected = ("Actions checks", "Tests")
+    deadline = time.monotonic() + wait_seconds
+    if wait_seconds:
+        print(f"main:ci: waiting for {commit[:12]} {checks_url}\n"
+              f"main:ci: resume with `mise run main:ci {commit}`", file=sys.stderr)
+    while True:
+        try:
+            result = subprocess.run(
+                ["gh", "run", "list", "--repo", name, "--branch", BRANCH, "--event", "push",
+                 "--commit", commit, "--limit", "50", "--json", "workflowName,status,conclusion,url"],
+                stdin=subprocess.DEVNULL, capture_output=True, env=environment(), text=True, timeout=15,
+            )
+            result.check_returncode()
+            latest = {}
+            for run in json.loads(result.stdout):
+                latest.setdefault(run["workflowName"], run)
+        except (OSError, subprocess.SubprocessError, ValueError) as error:
+            detail = getattr(error, "stderr", None) or str(error)
+            print(f"main:ci: could not verify {commit[:12]}: {detail.strip()}\n{checks_url}", file=sys.stderr)
+            return 2
+
+        pending = [workflow for workflow in expected if latest.get(workflow, {}).get("status") != "completed"]
+        failed = any(latest[workflow]["conclusion"] != "success" for workflow in expected if workflow not in pending)
+        remaining = deadline - time.monotonic()
+        if failed or not pending or remaining <= 0:
+            for workflow in expected:
+                run = latest.get(workflow)
+                if run is None:
+                    print(f"main:ci: {workflow}: pending (no run yet)", file=sys.stderr)
+                else:
+                    status = run["conclusion"] if workflow not in pending else f"pending ({run['status']})"
+                    print(f"main:ci: {workflow}: {status} {run['url']}", file=sys.stderr)
+            if failed:
+                print(f"main:ci: failed for {commit[:12]} (already pushed)", file=sys.stderr)
+                return 1
+            if pending:
+                print(f"main:ci: pending for {commit[:12]}. Check again with `mise run main:ci {commit}`",
+                      file=sys.stderr)
+                return 2
+            print(f"main:ci: passed for {commit[:12]}", file=sys.stderr)
+            return 0
+        time.sleep(min(10, remaining))
+
+
 def level_main_and_return_target(shared):
     git(shared, "fetch", "--quiet", "--no-prune", "--no-tags", REMOTE, f"+refs/heads/{BRANCH}:refs/remotes/{REMOTE}/{BRANCH}", timeout=300)
     origin = git(shared, "rev-parse", f"refs/remotes/{REMOTE}/{BRANCH}")
@@ -429,23 +489,20 @@ def level_main_and_return_target(shared):
         raise Rebasing()
     if checkout.branch != BRANCH or (checkout.ahead and checkout.behind):
         raise Stop(checkout.why_not_install_source())
+    published = None
     if checkout.behind:
         if checkout.changes:
             raise Stop(checkout.why_not_install_source())
         git(shared, "merge", "--ff-only", "--no-overwrite-ignore", "--quiet", origin)
         print(f"main:sync: fast-forwarded {shared} to {origin[:12]}", file=sys.stderr)
     elif checkout.ahead:
-        result = git(shared, "push", "--quiet", "--no-follow-tags", REMOTE, f"refs/heads/{BRANCH}:refs/heads/{BRANCH}",
+        result = git(shared, "push", "--quiet", "--no-follow-tags", REMOTE, f"{checkout.head}:refs/heads/{BRANCH}",
                      check=False, timeout=300)
         if result.returncode:
             raise Stop(f"pushing {BRANCH} from {shared} failed: {(result.stderr or result.stdout).strip()}")
+        published = checkout.head
         print(f"main:sync: pushed {checkout.ahead} commits from {shared} to {REMOTE}/{BRANCH}", file=sys.stderr)
-    checkout = read_checkout(shared, git(shared, "rev-parse", f"refs/remotes/{REMOTE}/{BRANCH}"))
-    problem = checkout.why_not_install_source()
-    if problem:
-        raise Stop(f"{problem}. Installs wait until it is committed. If you discard it instead, "
-                   f"run `mise run main:sync` in {shared}")
-    return checkout.head
+    return (origin if checkout.behind else checkout.head), published
 
 
 def stop_unless_still_at_target(shared, target, previous):
@@ -459,33 +516,56 @@ def stop_unless_still_at_target(shared, target, previous):
                    f"Commit it, or discard it and run `mise run main:sync`")
 
 
-def sync(shared):
-    with locked():
-        activate_hooks(shared)
-        target = level_main_and_return_target(shared)
-        installers = Installers(shared)
-        failed = []
-        previous = None
-        for name, command in installers.steps():
-            stop_unless_still_at_target(shared, target, previous)
-            print(f"main:sync: {name}", file=sys.stderr)
-            if not (command() if callable(command) else installers.run(command, capture=False).returncode == 0):
-                failed.append(name)
-            previous = name
+def install_at_target(shared, target):
+    checkout = read_checkout(shared, git(shared, "rev-parse", f"refs/remotes/{REMOTE}/{BRANCH}"))
+    problem = checkout.why_not_install_source()
+    if problem:
+        raise Stop(f"{problem}. Installs wait until it is committed. If you discard it instead, "
+                   f"run `mise run main:sync` in {shared}")
+    installers = Installers(shared)
+    failed = []
+    previous = None
+    for name, command in installers.steps():
         stop_unless_still_at_target(shared, target, previous)
-        if failed:
-            raise Stop(f"{', '.join(failed)} failed. {REMOTE}/{BRANCH} and the shared checkout are at "
-                       f"{target[:12]}, and those installs are not. Fix the error above, then run `mise run main:sync`")
-        print(f"main:sync: {REMOTE}/{BRANCH}, {shared}, and the installs are level at {target[:12]}", file=sys.stderr)
+        print(f"main:sync: {name}", file=sys.stderr)
+        if not (command() if callable(command) else installers.run(command, capture=False).returncode == 0):
+            failed.append(name)
+        previous = name
+    stop_unless_still_at_target(shared, target, previous)
+    if failed:
+        raise Stop(f"{', '.join(failed)} failed. {REMOTE}/{BRANCH} and the shared checkout are at "
+                   f"{target[:12]}, and those installs are not. Fix the error above, then run `mise run main:sync`")
+    print(f"main:sync: {REMOTE}/{BRANCH}, {shared}, and the installs are level at {target[:12]}", file=sys.stderr)
+
+
+def sync(shared, pushed=None):
+    published = [pushed] if pushed else []
+    try:
+        with locked():
+            activate_hooks(shared)
+            target, local_push = level_main_and_return_target(shared)
+            if local_push and local_push not in published:
+                published.append(local_push)
+            install_at_target(shared, target)
+    finally:
+        results = [check_published_ci(shared, commit, wait_seconds=180) for commit in published]
+    return 1 if 1 in results else max(results, default=0)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("command", choices=["status", "sync"])
+    parser.add_argument("command", choices=["status", "sync", "ci"])
+    parser.add_argument("commit", nargs="?", help="commit to verify with ci")
+    parser.add_argument("--pushed", help=argparse.SUPPRESS)
     parser.add_argument("--json", action="store_true", help="print status rows as JSON")
     args = parser.parse_args()
+    if (args.command == "ci") != (args.commit is not None):
+        parser.error("pass a commit only with ci")
     try:
         shared = shared_checkout(Path(__file__).resolve().parent)
+        if args.command == "ci":
+            commit = git(shared, "rev-parse", "--verify", "--end-of-options", f"{args.commit}^{{commit}}")
+            return check_published_ci(shared, commit)
         if args.command == "status":
             rows = status(shared)
             if args.json:
@@ -494,8 +574,7 @@ def main():
                 for item in rows:
                     print(f"{item['host']:8} {item['component']:25} {item['status']:9} {item['detail']}")
             return int(any(item["status"] in {"drift", "conflict"} for item in rows))
-        sync(shared)
-        return 0
+        return sync(shared, args.pushed)
     except Rebasing:
         print("main:sync: a rebase of main is in progress. Its last step runs this again", file=sys.stderr)
         return 0
