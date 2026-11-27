@@ -67,6 +67,14 @@ class OwnerDecisionsTest(unittest.TestCase):
         self.assertIn("Today only  (inactive)", listed)
         self.assertNotIn("Until later  (inactive)", listed)
 
+    def test_a_copy_outside_git_is_checked_by_walking_its_files(self):
+        self.write("docs/decisions/2026-01-02-use-tabs.md", "# Use tabs\n")
+        with tempfile.TemporaryDirectory() as plain:
+            subprocess.run(["cp", "-R", f"{self.root}/docs", f"{self.root}/.claude", plain], check=True)
+            result = run(plain, "check")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("decisions/uncited", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

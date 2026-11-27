@@ -75,9 +75,15 @@ def active(decision, superseded, now):
 def repository_files(root):
     listed = subprocess.run(
         ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
-        cwd=root, capture_output=True, text=True, check=True,
-    ).stdout.splitlines()
-    return [file for file in listed if (root / file).is_file()]
+        cwd=root, capture_output=True, text=True,
+    )
+    if listed.returncode == 0:
+        return [file for file in listed.stdout.splitlines() if (root / file).is_file()]
+    found = []
+    for folder, dirs, names in os.walk(root):
+        dirs[:] = [name for name in dirs if name not in (".git", "node_modules")]
+        found.extend(os.path.relpath(os.path.join(folder, name), root).replace(os.sep, "/") for name in names)
+    return found
 
 
 def locate(text, offset):
