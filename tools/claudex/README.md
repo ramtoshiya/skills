@@ -49,6 +49,16 @@ shell that launches `claudex` to override its default independently. These value
 are passed through the environment, without being added to command arguments or
 generated settings files.
 
+## Models your plan rejects
+
+CLIProxyAPI can list models that your ChatGPT plan does not include. A request
+for one fails with `model is not supported when using Codex with a ChatGPT
+account`, and claudex can still pick it as a default. Hide those models with
+CLIProxyAPI's `oauth-excluded-models` setting for the `codex` channel. claudex
+selects from what is left, so each role needs no separate setting. Programs that
+cache the model list, such as bb, show the change after their next refresh.
+Remove the exclusions when your plan includes the models again.
+
 ## Use
 
 ```sh

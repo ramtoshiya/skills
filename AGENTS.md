@@ -69,7 +69,8 @@ Agent-facing docs are this file and the `SKILL.md` files.
   same exact-pin and release-age rules as `tools/`.
 - `tools/` contains independently installed commands and their tests. `dev/`
   contains repository tests, automation, evals, desktop verification scripts, and disabled skills. `docs/`
-  contains human-facing repository documentation.
+  contains human-facing repository documentation, and `docs/decisions/` the owner's decision records,
+  which `tools/decisions/` checks. That folder is a repository check, not a standalone CLI.
 
 ## Standalone CLIs {:#cli-tools}
 
@@ -122,3 +123,13 @@ its claims section if your session did not load those preferences. Cite each
 check above that you ran, with its result. Mark each agent, hook path, or host
 you did not exercise as unchecked. When a reviewer challenges a change, rerun
 the checks the challenge touches before you edit anything.
+
+## Owner decisions
+
+`docs/decisions/` holds one record per decision that the owner made, with the owner's words and the situation they were said in. `docs/decisions/README.md` says how to record one. Only the owner makes or changes a decision. Never cite your own or another agent's ruling as the owner's.
+
+The current rules are in topic pages under `.claude/rules/`. Each rule links to the records it comes from. Claude Code loads `process.md` in every session and a topic page when you work on the files its `paths:` names. Other agents read the pages of their work's topics. When a page and a record disagree, the record wins, and the page needs fixing. `python3 tools/decisions/decisions.py list` lists the active decisions, and `python3 tools/decisions/decisions.py check` checks records, links and citations.
+
+Topic pages:
+
+- [process](.claude/rules/process.md): rules for all work.

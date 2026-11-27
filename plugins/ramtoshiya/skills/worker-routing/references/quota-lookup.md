@@ -27,6 +27,12 @@ that Claude stopped accepting work. Do not combine accounts from other machines.
 be callable even when `bb plugin rpc list` does not advertise it. Do not enable or install a
 plugin just for this lookup.
 
+A Codex plan without a weekly window, such as one with only a 30-day window, gives the `codex` side no
+reading, so flexible work stays on Claude. The report's `notes` name the plan and its windows. That is
+the plan's shape, not a lookup failure, and the side returns once the account has a weekly window. A
+`codex`-only role can still get `route.side` `codex`. It runs only if `newest-model` finds its family,
+as [Newest model](../SKILL.md#newest-model) describes.
+
 For a Claude reading that the piped output lacks, or when `codex app-server` returns no weekly window,
 the script runs `quotio-cli usage --provider <side> --no-saved-accounts --format json` itself. It joins
 `usage[].account_id` to `accounts[].id`, reads the `Weekly` metric, and never prints the output.

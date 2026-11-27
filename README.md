@@ -77,7 +77,7 @@ tools/                            Independently installed commands and their tes
 bb-plugins/                       Plugins for the bb app, installed separately
 setup/                            Machine configuration copied or merged by mise
 dev/                              Repository tests, automation, evals, desktop verification, and disabled skills
-docs/                             Human-facing documentation
+docs/                             Human-facing documentation, and decision records in docs/decisions/
 mise.toml, mise.lock              Machine setup and pinned development tools
 package.json                      Aggregate repository test command
 ```

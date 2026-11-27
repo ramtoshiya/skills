@@ -403,6 +403,8 @@ class QuotaPaceTests(unittest.TestCase):
         self.codex_limits(5, duration_mins=300)
         report = self.run_pace(bb_usage(claude=(42, later(50))), "--eligible", "claude,codex")
         self.assertEqual(report["sides"]["codex"]["status"], "no-reading")
+        self.assertIn("no weekly window, only 300-minute windows, so codex takes no workers",
+                      " ".join(report["notes"]))
 
     def test_quotio_supplies_the_gpt_reading_when_app_server_has_none(self):
         self.quotio_response.write_text(json.dumps({

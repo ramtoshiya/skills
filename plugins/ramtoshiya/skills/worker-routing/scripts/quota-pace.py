@@ -545,6 +545,18 @@ def read_codex(now) -> Reading | None:
     return None
 
 
+def codex_window_note() -> str | None:
+    result, _ = codex_rate_limits()
+    limits = (result or {}).get("rateLimits") or {}
+    minutes = [w["windowDurationMins"] for w in (limits.get("primary"), limits.get("secondary"))
+               if w and w.get("windowDurationMins")]
+    if not minutes or WEEK.total_seconds() / 60 in minutes:
+        return None
+    plan = limits.get("planType") or "unknown"
+    return (f"The Codex plan ({plan}) reports no weekly window, only {', '.join(map(str, minutes))}-minute "
+            "windows, so codex takes no workers")
+
+
 def read_codex_credits() -> tuple[list[dict], str | None]:
     result, error = codex_rate_limits()
     if result is None:
@@ -646,6 +658,8 @@ def main(argv=None) -> int:
         readings.update(found)
         if quotio_note:
             notes.append(quotio_note)
+    if "codex" in eligible and "codex" not in readings and (window_note := codex_window_note()):
+        notes.append(window_note)
     history, history_note = history_samples(
         Path.home() / "Library/Application Support/quotio/accounts.history/quota.sqlite", now
     )
