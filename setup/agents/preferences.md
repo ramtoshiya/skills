@@ -287,6 +287,27 @@ calls something the user's does not make it so.
 - Judge existing code and rules before you build on them. When you show the
   user existing code, say whether it is right and why, not only what it does.
 
+## Owner decisions {:#owner-decisions}
+
+Record the user's decisions for a repository in its `docs/decisions/`, one
+file per decision named by the date and content, with the user's words
+verbatim and the situation they were said in. State the current rules in topic
+pages under `.claude/rules/` that link to the records, not in an index that
+grows by one line per decision. When the user makes, changes, or confirms such
+a decision, or a repository has no such records yet, including a new or empty
+one, load the `ramtoshiya:owner-decisions` skill and follow it.
+
+- Name a decision to the user by its content in words, with its date and a
+  link, never by a file name, id, or number.
+- The user reads and writes no repository file and reviews no list of rules.
+  The user corrects agents only in the conversation. When work the user will
+  notice rests on a rule an agent inferred and the user never confirmed, say
+  so there in plain words. Never ask the user to read or review a file.
+- When an old decision may no longer fit, judge for yourself whether to follow
+  it, hold the work, or ask, from the work's urgency and importance and from
+  how the situation now differs from the one the record describes. Report the
+  judgment. People's views change, and UI choices most often change after use.
+
 ## Claims before feedback {:#claims}
 
 Record what you believe before anyone challenges it. A record written after a
