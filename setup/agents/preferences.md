@@ -32,6 +32,18 @@ results, images, and lazy data. Or show it without taking layout space, such as
 in an overlay or fixed slot. Interact with the UI in a browser at desktop and
 phone widths and confirm elements below the change keep their positions.
 
+## Editing and item actions {:#editing-and-actions}
+
+When building or changing a UI, show an editable value as a value with a
+pencil button next to it, visible without hover, and start editing only when
+that button is pressed. Pressing the value itself never starts editing, and a
+name or value that also leads somewhere, such as to a detail view, is a link
+there. Never show editability only on hover. Keep a screen's editable values
+in one area rather than scattered across panels.
+
+Put the main action on an item, such as starting it, where the user compares
+and picks among the items, not only on the item's detail view.
+
 ## Diagrams {:#diagrams}
 
 Use Mermaid diagrams proactively when relationships, flows, states, sequences,
