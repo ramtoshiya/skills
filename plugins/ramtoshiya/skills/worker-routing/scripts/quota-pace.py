@@ -368,13 +368,10 @@ def roomiest(eligible: list[str], sides: dict[str, Side]):
         return sides[side].used if projected is None else projected
 
     target = min(observed, key=expected)
-    readings = ", ".join(f"{s} {'reads' if sides[s].projected_at_reset is None else 'projects'} {expected(s)}%"
-                         for s in observed)
-    return target, f"{target} has the most room at its reset: {readings}"
+    return target, f"{target} has the most room at its reset"
 
 
 def claude_use(root: Path, since: datetime) -> list[Use]:
-    """Weighted Claude token use from Claude Code transcripts, roughly in proportion to API price."""
     uses, seen = [], set()
     for path in root.rglob("*.jsonl"):
         try:
@@ -409,7 +406,6 @@ def claude_use(root: Path, since: datetime) -> list[Use]:
 
 
 def points_used(samples: list[Sample]) -> float:
-    """Weekly percent-points consumed across the samples, counting each new window from zero."""
     total, peak = 0.0, None
     for before, sample in zip([None, *samples], samples):
         if before is None:
@@ -455,7 +451,6 @@ def claude_demand(uses: list[Use], series: list[Sample], side: Side, now) -> Dem
 
 
 def usable_codex_credits(by: datetime) -> int:
-    """Available full Codex reset credits that can still be claimed at the given time."""
     result, _ = codex_rate_limits()
     return sum(
         1 for c in ((result or {}).get("rateLimitResetCredits") or {}).get("credits") or []
@@ -479,20 +474,14 @@ def route_flexible(sides: dict[str, Side], demand: Demand, now):
         target, why = roomiest(list(SIDES), sides)
         return target, f"Claude's spare room after Opus and Fable demand is unknown. {why}"
     if claude.status != "limited" and demand.spare > 0:
-        return "claude", (f"Claude has {demand.spare} points that Opus and Fable demand will not use "
-                          f"before its reset, so flexible work uses them")
-    pinned = (f"Opus and Fable demand at {demand.pinned_pace_per_hour} points an hour needs "
-              f"{abs(demand.spare)} points more than Claude has left before its reset")
+        return "claude", "Claude has room that Opus and Fable demand will leave unused at its reset"
+    pinned = "Opus and Fable demand is expected to use Claude's room before its reset"
     if claude.status == "limited":
         pinned = "Claude is limited"
     if codex_room(codex, now):
-        detail = (f"reads {codex.used}%" if codex.projected_at_reset is None
-                  else f"projects {codex.projected_at_reset}%")
-        if codex.credits_counted:
-            detail += f" with {codex.credits_counted} unclaimed reset credits counted as room"
-        return "codex", f"{pinned}, so flexible work goes to codex, which {detail}"
+        return "codex", f"{pinned}, so flexible work goes to codex, which has room at its reset"
     target, why = roomiest(list(SIDES), sides)
-    return target, f"{pinned} and codex has no room either. {why}"
+    return target, f"{pinned} and codex has no room at its reset either. {why}"
 
 
 def choose(prefer: str, eligible: list[str], sides: dict[str, Side]):
@@ -580,11 +569,11 @@ def read_codex_credits() -> tuple[list[dict], str | None]:
     return options, None
 
 
-def reset_options(eligible, sides, readings, offers, now) -> dict:
+def reset_options(eligible, sides, readings, offers, now, shown) -> dict:
     report: dict = {"note": "Only a person redeems a reset. Never redeem one for them."}
     for side in eligible:
         f = sides[side]
-        if f.status not in ("limited", "runs-out"):
+        if f.status not in shown:
             continue
         weekly_reset = parse_time(f.resets_at) if f.resets_at else None
         scheduled = f.limit_resets_at or f.resets_at
@@ -631,6 +620,8 @@ def main(argv=None) -> int:
     parser.add_argument("--eligible", required=True)
     parser.add_argument("--limited", action="append", default=[], metavar="SIDE=TIME[/RESET]")
     parser.add_argument("--offer", action="append", default=[], metavar="KIND=CLAIM_BY")
+    parser.add_argument("--detail", action="store_true",
+                        help="print readings, forecasts, demand, and reset options for every side")
     args = parser.parse_args(argv)
     eligible = [s for s in args.eligible.split(",") if s]
     if not eligible or any(s not in SIDES for s in eligible):
@@ -698,11 +689,14 @@ def main(argv=None) -> int:
         target, why = route_flexible(sides, demand, now)
     else:
         target, why = roomiest(eligible, sides)
-    report = {"route": {"side": target, "why": why}, "sides": {k: asdict(v) for k, v in sides.items()}}
-    if demand is not None:
-        report["claude_demand"] = asdict(demand)
-    if target is None or any(sides[s].status in ("limited", "runs-out") for s in eligible):
-        report["reset_options"] = reset_options(eligible, sides, readings, offers, now)
+    report = {"route": {"side": target, "why": why}}
+    if args.detail:
+        report["sides"] = {k: asdict(v) for k, v in sides.items()}
+        if demand is not None:
+            report["claude_demand"] = asdict(demand)
+    shown = ("limited", "runs-out") if args.detail else ("limited",)
+    if target is None or any(sides[s].status in shown for s in eligible):
+        report["reset_options"] = reset_options(eligible, sides, readings, offers, now, shown)
     if notes:
         report["notes"] = notes
     print(json.dumps(report, indent=1))

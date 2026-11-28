@@ -3,6 +3,11 @@
 Read the weekly quota before each batch of new workers, and pipe it into `quota-pace.py`, as
 [Route and quota](../SKILL.md) describes. Do not print the lookup output. It names the account.
 
+The script prints `route`, any `notes`, and `reset_options` when an eligible side has an active
+usage limit or no side takes the work. `--detail` adds each side's reading and forecast, the
+`claude_demand` figures, and reset options for sides projected to run out. Pass it only when the
+user asks about quota or when you change the script.
+
 ## Current reading {:#current-reading}
 
 In BB, prefer the enabled Provider usage plugin. Its read-only RPC runs collection on the selected
@@ -69,7 +74,7 @@ The script reads samples from two places, and writes only the second:
 
 ## Pinned demand {:#pinned-demand}
 
-For flexible work, `--eligible claude,codex` without `--prefer`, the report adds `claude_demand`.
+For flexible work, `--eligible claude,codex` without `--prefer`, the `--detail` report adds `claude_demand`.
 It splits Claude's demand into work pinned to Claude and flexible work, because pinned demand alone
 can use up Claude's week.
 
@@ -100,7 +105,7 @@ whether Codex has room. The script only counts them. A person decides whether to
 
 ## Reset options {:#reset-options}
 
-When an eligible side is limited or projected to run out, the report adds `reset_options` for it:
+When an eligible side is limited, or with `--detail` projected to run out, the report adds `reset_options` for it:
 the scheduled reset, the hours of outage before it, and the use expected in those hours at the
 recent pace. The credits come from these sources:
 

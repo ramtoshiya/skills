@@ -117,6 +117,11 @@ The `worker-routing` skill is the one policy for choosing a worker's model.
   reading of 100% marks Codex limited. A side that hit a limit comes back when
   a reading shows its quota renewed, or after the reset time that a shorter
   limit's error named. Urgent work stays on Claude and moves only on a limit.
+- A projection that a side will run out before its reset only picks the
+  side. It never makes an agent hold, shrink, or slow down work. Agents
+  mention quota to you only when a side hit a usage limit or no side can
+  take a worker. `quota-pace.py --detail` prints the full readings and
+  forecasts.
 - When no eligible side can take a worker, including when the other side
   has no current reading after a limit, the agent reports the blocked
   role, each side's scheduled reset, and the reset credits it can see: Codex

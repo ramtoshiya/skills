@@ -69,7 +69,7 @@
         "source": "git-subdir",
         "url": "ramtoshiya/pstack-mode",
         "path": "plugins/pstack-mode",
-        "sha": "c9f81aefeeb3a989dd4afe30c42eb96c7bc6db8e"
+        "sha": "dbca8f46712f984638e80f00f0720c7e218186ae"
       },
       "author": { "name": "Lauren Tan" },
       "repository": "https://github.com/ramtoshiya/pstack-mode",

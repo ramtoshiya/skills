@@ -134,11 +134,19 @@ pool, the Codex account. In BB it runs the GPT column on `claudex`, whose proxy 
 in with that same account, so the side's weekly reading covers those workers.
 
 The user keeps judgment on Claude: the judgment row, Fable, and the user's own main
-threads never move to GPT. That demand is pinned to Claude and often needs more than
-Claude's weekly quota on its own, so every flexible job on Claude takes room from
-Opus later. Flexible work, a row with both columns, therefore runs on Claude only in
-room that pinned demand will leave unused at Claude's reset, and otherwise on
-`codex`.
+threads never move to GPT. Flexible work, a row with both columns, runs on Claude when
+Claude has room that this pinned demand will leave unused at its reset, and otherwise
+on `codex`.
+
+### Quota picks the side, never the amount of work {:#quota-never-holds-work}
+
+The quota reading and its projections only choose which side a worker starts on. A
+projection that a side runs out before its reset never changes what work happens or
+when. Do not defer, shrink, split, or serialize work for it, start fewer workers,
+tell a worker to save tokens, or end your own turn early. Only an actual usage-limit
+error stops a request, and only a `null` `route.side` leaves a worker unstarted.
+Mention the quota to the user only when a side has an active usage limit or
+`route.side` is `null`.
 
 Before you start a batch of new workers, read the quota and pipe it into
 `scripts/quota-pace.py`, as [Quota lookup](references/quota-lookup.md) describes.
@@ -190,10 +198,8 @@ own fallback for a seat that cannot run still applies.
 A worker stopped by a usage-limit error moves now. Add the error with `--limited`,
 run the script for the worker's row, and hand the worker off to `route.side` as
 [BB workers](references/bb-workers.md#move) describes, without asking the user or
-waiting for a reset credit. The work was approved when it started. `route.side`
-already weighs each side's projection, so a projection that the new side runs out
-before its reset does not hold the work. Only a `null` `route.side` leaves the role
-waiting, as the paragraph above describes.
+waiting for a reset credit. The work was approved when it started. Only a `null`
+`route.side` leaves the role waiting, as the paragraph above describes.
 
 Only a person redeems a reset credit. Never redeem one, call a redemption endpoint,
 or route work into a limit to make a credit usable, even when every side is limited.
@@ -201,9 +207,9 @@ When the report has `reset_options`, show them to the user with your report: eac
 credit's scope, claim deadline, how long its quota lasts once claimed, and the use
 the outage would cost. A reset that the user performs shows in the next reading.
 
-Quote the script's `why` in your report. If the script itself fails, report the
-specific failure once and start new work on `claude`, unless Claude has an active
-usage-limit error. Then report the role as blocked. When you compact, write each
-side's status and figures from the last report, each `--limited` flag, and which
-work is urgent into the handoff note. Include `claude_demand.spare` and
-`claude_demand.pinned_pace_per_hour` when the report has them.
+When a side has an active usage limit or `route.side` is `null`, quote the script's
+`why` in your report. If the script itself fails, report the specific failure once and
+start new work on `claude`, unless Claude has an active usage-limit error. Then
+report the role as blocked. When you compact, write each `--limited` flag and which
+work is urgent into the handoff note, and leave readings and projections out. The
+next batch reads the quota again.

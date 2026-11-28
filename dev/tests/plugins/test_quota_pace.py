@@ -112,9 +112,9 @@ class QuotaPaceTests(unittest.TestCase):
         connection.commit()
         connection.close()
 
-    def run_pace(self, usage, *args):
+    def run_pace(self, usage, *args, detail=True):
         result = subprocess.run(
-            [sys.executable, str(SCRIPT), *args], input=usage, env=self.env,
+            [sys.executable, str(SCRIPT), *args, *(["--detail"] if detail else [])], input=usage, env=self.env,
             capture_output=True, text=True, timeout=60,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -149,6 +149,23 @@ class QuotaPaceTests(unittest.TestCase):
         report = self.run_pace(bb_usage(claude=(64, later(48)), codex=(75, later(48))), "--eligible", "claude,codex")
         self.assertEqual([report["sides"][s]["status"] for s in ("claude", "codex")], ["runs-out", "runs-out"])
         self.assertEqual(report["route"]["side"], "claude")
+
+    def test_default_report_names_the_side_without_forecasts_when_both_sides_run_out(self):
+        self.history("claude", later(48), {23.5: 40, 0.1: 64})
+        self.history("codex", later(48), {23.5: 27, 0.1: 75})
+        report = self.run_pace(bb_usage(claude=(64, later(48)), codex=(75, later(48))),
+                               "--eligible", "claude,codex", detail=False)
+        self.assertEqual([key for key in report if key != "notes"], ["route"])
+        self.assertEqual(report["route"]["side"], "claude")
+        self.assertNotRegex(report["route"]["why"], r"[0-9]")
+
+    def test_default_report_lists_reset_options_only_for_a_limited_side(self):
+        self.history("claude", later(90), {23.5: 10, 0.1: 50})
+        report = self.run_pace(bb_usage(codex=(100, later(30)), claude=(50, later(90))),
+                               "--eligible", "claude,codex", detail=False)
+        self.assertEqual(report["route"]["side"], "claude")
+        self.assertNotIn("sides", report)
+        self.assertEqual(list(report["reset_options"]), ["note", "codex"])
 
     def test_urgent_work_stays_on_claude_while_codex_has_more_room(self):
         report = self.run_pace(bb_usage(codex=(5, later(50)), claude=(90, later(50))),
@@ -495,9 +512,6 @@ class QuotaPaceTests(unittest.TestCase):
                                        "message": {"id": message_id, "model": model, "usage": usage}}) + "\n")
 
     def pinned_demand_above_a_week(self):
-        # 160 points in the last week, one weekly reset bought mid-window, and 10.6M weighted units:
-        # two Opus answers of 1M output tokens (5M each), a Sonnet prompt of 1M input tokens (0.6M), a
-        # repeated Opus record, and a GPT record that is not Claude quota. No Opus use in the last 24 hours.
         self.history("claude", ago(1), {160: 0, 100: 100, 99: 0, 1.5: 60})
         opus = ("msg-a", "claude-opus-5-5", 120, {"output_tokens": 1_000_000})
         self.transcript(opus, opus, ("msg-b", "claude-fable-5-2", 60, {"output_tokens": 1_000_000}),

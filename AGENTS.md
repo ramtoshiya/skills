@@ -133,3 +133,4 @@ The current rules are in topic pages under `.claude/rules/`. Each rule links to 
 Topic pages:
 
 - [process](.claude/rules/process.md): rules for all work.
+- [worker-routing](.claude/rules/worker-routing.md): how quota readings may affect work.
